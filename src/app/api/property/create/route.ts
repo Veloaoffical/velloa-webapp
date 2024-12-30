@@ -43,6 +43,7 @@ export async function POST(request: Request) {
 
     const {
       category,
+      description,
       propertyType,
       address,
       selectedAmenities,
@@ -172,6 +173,7 @@ export async function POST(request: Request) {
       type: propertyType,
       value: JSON.stringify({
         category,
+        description: description || "",
         petPolicy,
         bankAccount,
         reserveFund,

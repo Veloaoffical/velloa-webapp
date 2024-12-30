@@ -1,6 +1,5 @@
 'use server';
 
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { PropertyTable } from './property-table';
 import { createClient } from '@/utils/supabase/server';
@@ -34,28 +33,30 @@ interface PropertyRecord {
 
 async function getProperties(): Promise<Property[]> {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session');
+    console.log('Starting getProperties function');
+    const supabase = await createClient();
+    console.log('Supabase client created');
+    
+    // Get the session using Supabase's auth
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    console.log('Session check:', { hasSession: !!session, error: sessionError?.message });
 
-    if (!sessionCookie?.value) {
+    if (!session) {
+      console.log('No session found, redirecting to login');
       redirect('/login');
     }
 
-    const supabase = await createClient();
+    // Get the authenticated user from the session
+    const user = session.user;
+    console.log('Auth user:', { id: user.id });
     
-    // Get the authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      console.error('Authentication error:', userError);
-      return [];
-    }
-
     // First get the user's profile
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('id')
       .eq('id', user.id)
       .single();
+    console.log('Profile query result:', { profile: profile?.id, error: profileError?.message });
 
     if (profileError || !profile) {
       console.error('Error fetching profile:', profileError);
@@ -68,6 +69,7 @@ async function getProperties(): Promise<Property[]> {
       .select('company_id')
       .eq('id', profile.id)
       .single();
+    console.log('Company member query result:', { companyId: companyMember?.company_id, error: companyError?.message });
 
     if (companyError || !companyMember) {
       console.error('Error fetching company member:', companyError);
@@ -75,6 +77,7 @@ async function getProperties(): Promise<Property[]> {
     }
 
     // Fetch properties with their settings and units
+    console.log('Fetching properties for company:', companyMember.company_id);
     const { data: properties, error: propertiesError } = await supabase
       .from('properties')
       .select(`
@@ -97,15 +100,19 @@ async function getProperties(): Promise<Property[]> {
       .eq('company_id', companyMember.company_id)
       .order('id')
       .returns<PropertyRecord[]>();
+    console.log('Properties query result:', { count: properties?.length, error: propertiesError?.message });
 
     if (propertiesError) {
       console.error('Error fetching properties:', propertiesError);
       return [];
     }
 
+    console.log('Raw properties data:', properties);
     return (properties || []).map(property => {
+      console.log('Processing property:', property.id);
       // Get the first property setting if it exists
       const settings = property.property_settings?.[0];
+      console.log('Property settings:', settings);
       
       // Property type is directly stored in the type field
       const propertyType = settings?.type || 'Unknown';
@@ -115,6 +122,7 @@ async function getProperties(): Promise<Property[]> {
       if (settings?.value) {
         try {
           const parsedValue = JSON.parse(settings.value);
+          console.log('Parsed settings value:', parsedValue);
           if (parsedValue && typeof parsedValue === 'object' && 'category' in parsedValue) {
             propertyKind = parsedValue.category;
           }
@@ -123,11 +131,11 @@ async function getProperties(): Promise<Property[]> {
         }
       }
 
-      return {
+      const result = {
         id: property.id.toString(),
         propertyName: property.name || `Property ${property.id}`,
-        propertyType: propertyType, // Use the type directly from the database
-        propertyKind: propertyKind.charAt(0).toUpperCase() + propertyKind.slice(1), // Capitalize first letter
+        propertyType: propertyType,
+        propertyKind: propertyKind.charAt(0).toUpperCase() + propertyKind.slice(1),
         address: [
           property.address_line_1,
           property.address_line_2,
@@ -137,10 +145,12 @@ async function getProperties(): Promise<Property[]> {
         ].filter(Boolean).join(', ') || 'No address provided',
         numberOfUnits: property.units?.length || 0
       };
+      console.log('Transformed property:', result);
+      return result;
     });
 
   } catch (error) {
-    console.error('Error fetching properties:', error);
+    console.error('Error in getProperties:', error);
     return [];
   }
 }

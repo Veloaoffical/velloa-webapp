@@ -1,7 +1,7 @@
 "use client"
 
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster"
+import { Toaster } from "sonner"
 import { AppSidebar } from '@/components/navbar/app-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { usePathname } from 'next/navigation';

@@ -29,7 +29,7 @@ interface PropertyDetails {
   state: string;
   zip: string;
   property_settings: PropertySetting[];
-  units: { unit_id: string }[] | null;
+  units: { id: number }[] | null;
   created_at: string;
   company_id: number;
 }
@@ -106,9 +106,12 @@ async function getPropertyDetails(propertyId: string): Promise<PropertyDetails> 
   return property;
 }
 
-export default async function PropertyDetails({ params }: PageParams) {
-  const { id } = params;
-  const propertyDetails = await getPropertyDetails(id);
+export default async function PropertyDetails({
+  params,
+}: {
+  params: { id: string }
+}) {
+  const propertyDetails = await getPropertyDetails(params.id);
   
   return (
     <div className="h-screen flex flex-col">
@@ -203,13 +206,13 @@ export default async function PropertyDetails({ params }: PageParams) {
         {/* Scrollable content section */}
         <div className="flex-1 overflow-y-auto bg-transparent px-6 pt-6">
           <TabsContent value="overview" className="mt-0">
-            <PropertyOverview propertyDetails={propertyDetails} propertyId={id} />
+            <PropertyOverview propertyDetails={propertyDetails} propertyId={params.id} />
           </TabsContent>
           <TabsContent value="reports" className="mt-0">
             Reports content
           </TabsContent>
           <TabsContent value="units" className="mt-0">
-            <PropertyUnit propertyId={id} />
+            <PropertyUnit propertyId={params.id} />
           </TabsContent>
           <TabsContent value="leases" className="mt-0">
             Leases content
@@ -227,7 +230,7 @@ export default async function PropertyDetails({ params }: PageParams) {
             Notes content
           </TabsContent>
           <TabsContent value="settings" className="mt-0">
-            <PropertySettings propertyDetails={propertyDetails} propertyId={id} />
+            <PropertySettings propertyDetails={propertyDetails} propertyId={params.id} />
           </TabsContent>
         </div>
       </Tabs>

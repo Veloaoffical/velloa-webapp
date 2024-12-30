@@ -20,7 +20,12 @@ import {
   Building,
   Info,
 } from "lucide-react"
-import GeneralInfo from "./settings/general-info/page"
+import GeneralInfo from "@/app/property/[id]/components/settings/general-info/page"
+import PropertyType from "@/app/property/[id]/components/settings/property-type/page"
+import Amenities from "@/app/property/[id]/components/settings/amenities/page"
+import PetPolicy from "@/app/property/[id]/components/settings/pet-policy/page"
+import BankAccount from "@/app/property/[id]/components/settings/bank-account/page"
+import Photos from "@/app/property/[id]/components/settings/photos/page"
 
 interface SettingButtonProps {
   icon: React.ReactNode
@@ -50,7 +55,11 @@ const SettingButton = ({ icon, label, description, onClick }: SettingButtonProps
 
 export function PropertySettings() {
   const [showGeneralInfo, setShowGeneralInfo] = React.useState(false)
-  
+  const [showPropertyType, setShowPropertyType] = React.useState(false)
+  const [showAmenities, setShowAmenities] = React.useState(false)
+  const [showPetPolicy, setShowPetPolicy] = React.useState(false)
+  const [showBankAccount, setShowBankAccount] = React.useState(false)
+  const [showPhotos, setShowPhotos] = React.useState(false)
   const settings = [
     {
       icon: <Info className="w-5 h-5 text-green-600" />,
@@ -61,22 +70,26 @@ export function PropertySettings() {
     {
       icon: <Camera className="w-5 h-5 text-green-600" />,
       label: "Photos",
-      description: "Update the photos for this property."
+      description: "Update the photos for this property.",
+      onClick: () => setShowPhotos(true)
     },
     {
       icon: <Building className="w-5 h-5 text-green-600" />,
       label: "Property Type",
-      description: "Update the property type for this property."
+      description: "Update the property type for this property.",
+      onClick: () => setShowPropertyType(true)
     },
     {
       icon: <HousePlug className="w-5 h-5 text-green-600" />,
       label: "Amenities",
-      description: "Update the amenities for this property."
+      description: "Update the amenities for this property.",
+      onClick: () => setShowAmenities(true)
     },
     {
       icon: <Dog className="w-5 h-5 text-green-600" />,
       label: "Pet Policy",
-      description: "Update the pet policy for this property."
+      description: "Update the pet policy for this property.",
+      onClick: () => setShowPetPolicy(true)
     },
     {
       icon: <Users className="w-5 h-5 text-green-600" />,
@@ -86,7 +99,8 @@ export function PropertySettings() {
     {
       icon: <Landmark className="w-5 h-5 text-green-600" />,
       label: "Bank Accounts",
-      description: "Update the bank accounts for this property."
+      description: "Update the bank accounts for this property.",
+      onClick: () => setShowBankAccount(true)
     },
     {
       icon: <PiggyBank className="w-5 h-5 text-green-600" />,
@@ -155,6 +169,11 @@ export function PropertySettings() {
       </div>
 
       <GeneralInfo open={showGeneralInfo} onOpenChange={setShowGeneralInfo} />
+      <PropertyType open={showPropertyType} onOpenChange={setShowPropertyType} />
+      <Amenities open={showAmenities} onOpenChange={setShowAmenities} />
+      <PetPolicy open={showPetPolicy} onOpenChange={setShowPetPolicy} />
+      <BankAccount open={showBankAccount} onOpenChange={setShowBankAccount} />
+      <Photos open={showPhotos} onOpenChange={setShowPhotos} />
     </div>
   )
 } 

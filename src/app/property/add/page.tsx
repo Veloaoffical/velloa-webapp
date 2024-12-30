@@ -81,7 +81,7 @@ interface UploadedFile {
 interface PetPolicy {
   petsAllowed: boolean | null;
   allowedPets: string[];
-  description: string;
+  description?: string;
 }
 
 interface Unit {
@@ -123,8 +123,7 @@ export default function AddPropertyPage() {
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [petPolicy, setPetPolicy] = useState<PetPolicy>({
     petsAllowed: null,
-    allowedPets: [],
-    description: ''
+    allowedPets: []
   });
   const [units, setUnits] = useState<Unit[]>([{
     unitName: '',
@@ -334,7 +333,11 @@ export default function AddPropertyPage() {
           description,
           uploadedFiles,
           selectedAmenities,
-          petPolicy,
+          petPolicy: {
+            petsAllowed: petPolicy.petsAllowed,
+            allowedPets: petPolicy.allowedPets,
+            description: petDescription
+          },
           units,
           bankAccount,
           reserveFund,
@@ -347,13 +350,9 @@ export default function AddPropertyPage() {
       } else {
         const errorData = await response.text();
         console.error('Failed to create property:', errorData);
-        // Here you would typically show an error message to the user
-        // using your preferred notification system
       }
     } catch (error) {
       console.error('Error creating property:', error);
-      // Here you would typically show an error message to the user
-      // using your preferred notification system
     }
   };
 
@@ -1913,11 +1912,11 @@ export default function AddPropertyPage() {
                             </div>
                           </div>
 
-                          {petDescription && (
+                          {petPolicy.description && (
                             <div className="space-y-2">
                               <p className="text-sm font-medium text-gray-700">Pet Policy Description</p>
                               <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
-                                <p className="text-sm text-gray-600">{petDescription}</p>
+                                <p className="text-sm text-gray-600">{petPolicy.description}</p>
                               </div>
                             </div>
                           )}

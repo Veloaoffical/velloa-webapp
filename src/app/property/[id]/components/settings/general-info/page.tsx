@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
+import { useCharacterLimit } from "@/hooks/use-character-limit"
 
 interface GeneralInfoProps {
   open: boolean
@@ -21,15 +22,21 @@ interface GeneralInfoForm {
   city: string
   state: string
   zip: string
-  country: string
   description: string
 }
 
 export default function GeneralInfo({ open, onOpenChange }: GeneralInfoProps) {
   const params = useParams()
   const propertyId = params.id as string
-  const { toast } = useToast()
   const [isLoading, setIsLoading] = React.useState(false)
+  const maxDescriptionLength = 1000
+  const {
+    value: description,
+    characterCount,
+    handleChange: handleDescriptionChange,
+    maxLength: limit,
+    setValue: setDescription
+  } = useCharacterLimit({ maxLength: maxDescriptionLength })
   const [formData, setFormData] = React.useState<GeneralInfoForm>({
     name: "",
     address_line_1: "",
@@ -37,26 +44,40 @@ export default function GeneralInfo({ open, onOpenChange }: GeneralInfoProps) {
     city: "",
     state: "",
     zip: "",
-    country: "",
     description: ""
   })
 
   React.useEffect(() => {
     async function fetchPropertyData() {
-      if (!open) return
-      
       try {
         setIsLoading(true)
-        console.log("Fetching property data for ID:", propertyId)
-        const response = await fetch(`/api/property/${propertyId}/generalinfo`)
-        console.log("Response status:", response.status)
+        console.log("Starting to fetch property data for ID:", propertyId)
+        
+        const response = await fetch(`/api/property/${propertyId}/propertySettings`)
+        console.log("Response received:", {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries())
+        })
+
         if (!response.ok) {
-          const errorText = await response.text()
-          console.error("Error response:", errorText)
-          throw new Error("Failed to fetch property data")
+          const errorData = await response.json().catch(() => null)
+          console.error("Error response:", {
+            status: response.status,
+            statusText: response.statusText,
+            data: errorData
+          })
+          throw new Error(errorData?.error || "Failed to fetch property data")
         }
+
         const data = await response.json()
-        console.log("Received data:", data)
+        console.log("Successfully received property data:", data)
+        
+        if (!data) {
+          console.error("No data received from API")
+          throw new Error("No data received from API")
+        }
+
         setFormData({
           name: data.name || "",
           address_line_1: data.address_line_1 || "",
@@ -64,58 +85,57 @@ export default function GeneralInfo({ open, onOpenChange }: GeneralInfoProps) {
           city: data.city || "",
           state: data.state || "",
           zip: data.zip || "",
-          country: data.country || "",
-          description: data.description || "",
+          description: ""
         })
+        setDescription(data.description || "")
       } catch (error) {
-        console.error("Fetch error:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load property information",
-          variant: "destructive",
-        })
+        console.error("Error in fetchPropertyData:", error instanceof Error ? error.message : "Unknown error")
+        toast.error(error instanceof Error ? error.message : "Failed to load property information")
       } finally {
         setIsLoading(false)
       }
     }
 
-    fetchPropertyData()
-  }, [open, propertyId, toast])
+    if (propertyId) {
+      fetchPropertyData()
+    }
+  }, [propertyId, setDescription])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       setIsLoading(true)
       console.log("Updating property data for ID:", propertyId)
-      console.log("Update data:", formData)
-      const response = await fetch(`/api/property/${propertyId}/generalinfo`, {
+      const updateData = {
+        ...formData,
+        description
+      }
+      console.log("Update data:", updateData)
+      const response = await fetch(`/api/property/${propertyId}/propertySettings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(updateData),
       })
       
       console.log("Response status:", response.status)
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error("Error response:", errorText)
-        throw new Error("Failed to update property")
+        const errorData = await response.json().catch(() => null)
+        console.error("Error response:", {
+          status: response.status,
+          statusText: response.statusText,
+          data: errorData
+        })
+        throw new Error(errorData?.error || "Failed to update property")
       }
       
       const data = await response.json()
       console.log("Update response:", data)
       
-      toast({
-        title: "Success",
-        description: "Property information updated successfully",
-      })
+      toast.success("Property information updated successfully")
       onOpenChange(false)
     } catch (error) {
       console.error("Update error:", error)
-      toast({
-        title: "Error",
-        description: "Failed to update property information",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : "Failed to update property information")
     } finally {
       setIsLoading(false)
     }
@@ -147,7 +167,7 @@ export default function GeneralInfo({ open, onOpenChange }: GeneralInfoProps) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="address_line_2">Apartment, suite, etc.</Label>
+            <Label htmlFor="address_line_2">Street Address Line 2</Label>
             <Input
               id="address_line_2"
               value={formData.address_line_2}
@@ -166,7 +186,7 @@ export default function GeneralInfo({ open, onOpenChange }: GeneralInfoProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="state">State</Label>
+              <Label htmlFor="state">Province/State</Label>
               <Input
                 id="state"
                 value={formData.state}
@@ -175,35 +195,34 @@ export default function GeneralInfo({ open, onOpenChange }: GeneralInfoProps) {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="zip">ZIP Code</Label>
-              <Input
-                id="zip"
-                value={formData.zip}
-                onChange={(e) => setFormData({ ...formData, zip: e.target.value })}
-                disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="country">Country</Label>
-              <Input
-                id="country"
-                value={formData.country}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                disabled={isLoading}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="zip">Postal/Zip Code</Label>
+            <Input
+              id="zip"
+              value={formData.zip}
+              onChange={(e) => setFormData({ ...formData, zip: e.target.value })}
+              disabled={isLoading}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              value={description}
+              onChange={handleDescriptionChange}
               disabled={isLoading}
               rows={4}
+              maxLength={maxDescriptionLength}
+              aria-describedby="description-character-count"
             />
+            <p
+              id="description-character-count"
+              className="text-right text-xs text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="tabular-nums">{limit - characterCount}</span> characters left
+            </p>
           </div>
           <div className="flex justify-end gap-4">
             <Button

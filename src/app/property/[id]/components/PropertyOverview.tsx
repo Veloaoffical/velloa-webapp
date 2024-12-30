@@ -75,7 +75,7 @@ export function PropertyOverview({ propertyDetails, propertyId }: PropertyOvervi
 
     const fetchPhotos = async () => {
       try {
-        const response = await fetch(`/api/properties/${propertyId}/photos`);
+        const response = await fetch(`/api/property/${propertyId}/photos`);
         if (!response.ok) throw new Error('Failed to fetch photos');
         const data = await response.json();
         
@@ -107,7 +107,7 @@ export function PropertyOverview({ propertyDetails, propertyId }: PropertyOvervi
 
     const fetchOwners = async () => {
       try {
-        const response = await fetch(`/api/properties/${propertyId}/owners`);
+        const response = await fetch(`/api/property/${propertyId}/owners`);
         if (!response.ok) throw new Error('Failed to fetch owners');
         const data = await response.json();
         

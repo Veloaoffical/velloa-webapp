@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table"
 import { Home, Plus } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
+import { useRouter } from "next/navigation"
 
 interface PropertyUnitProps {
   propertyId: string;
@@ -41,62 +42,6 @@ interface Unit {
   status: "occupied" | "vacant"
 }
 
-export const columns: ColumnDef<Unit>[] = [
-  {
-    accessorKey: "unit_name",
-    header: "Unit Name",
-    cell: ({ row }) => (
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-          <Home className="w-5 h-5 text-green-600" />
-        </div>
-        <div>
-          {row.getValue("unit_name")}
-        </div>
-      </div>
-    ),
-  },
-  {
-    accessorKey: "tenant",
-    header: "Tenant",
-    cell: ({ row }) => <div>{row.getValue("tenant")}</div>,
-  },
-  {
-    accessorKey: "beds",
-    header: "Beds",
-    cell: ({ row }) => <div>{row.getValue("beds")}</div>,
-  },
-  {
-    accessorKey: "baths",
-    header: "Baths",
-    cell: ({ row }) => <div>{row.getValue("baths")}</div>,
-  },
-  {
-    accessorKey: "marketRent",
-    header: "Market Rent ($)",
-    cell: ({ row }) => <div>${row.getValue("marketRent")}</div>,
-  },
-  {
-    accessorKey: "size",
-    header: "Size (sq ft)",
-    cell: ({ row }) => <div>{row.getValue("size")}</div>,
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => {
-      const status = row.getValue("status") as "occupied" | "vacant"
-      return (
-        <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-          status === "occupied" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-        }`}>
-          {status.charAt(0).toUpperCase() + status.slice(1)}
-        </div>
-      )
-    },
-  },
-]
-
 export function PropertyUnit({ propertyId }: PropertyUnitProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -105,6 +50,66 @@ export function PropertyUnit({ propertyId }: PropertyUnitProps) {
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [units, setUnits] = React.useState<Unit[]>([])
+  const router = useRouter()
+
+  const columns: ColumnDef<Unit>[] = [
+    {
+      accessorKey: "unit_name",
+      header: "Unit Name",
+      cell: ({ row }) => (
+        <div 
+          className="flex items-center gap-3 cursor-pointer hover:text-primary transition-colors"
+          onClick={() => router.push(`/unit/${row.original.id}`)}
+        >
+          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+            <Home className="w-5 h-5 text-green-600" />
+          </div>
+          <div>
+            {row.getValue("unit_name")}
+          </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "tenant",
+      header: "Tenant",
+      cell: ({ row }) => <div>{row.getValue("tenant")}</div>,
+    },
+    {
+      accessorKey: "beds",
+      header: "Beds",
+      cell: ({ row }) => <div>{row.getValue("beds")}</div>,
+    },
+    {
+      accessorKey: "baths",
+      header: "Baths",
+      cell: ({ row }) => <div>{row.getValue("baths")}</div>,
+    },
+    {
+      accessorKey: "marketRent",
+      header: "Market Rent ($)",
+      cell: ({ row }) => <div>${row.getValue("marketRent")}</div>,
+    },
+    {
+      accessorKey: "size",
+      header: "Size (sq ft)",
+      cell: ({ row }) => <div>{row.getValue("size")}</div>,
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const status = row.getValue("status") as "occupied" | "vacant"
+        return (
+          <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+            status === "occupied" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+          }`}>
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </div>
+        )
+      },
+    },
+  ]
 
   React.useEffect(() => {
     const fetchUnits = async () => {
@@ -230,6 +235,8 @@ export function PropertyUnit({ propertyId }: PropertyUnitProps) {
                     <TableRow
                       key={row.id}
                       data-state={row.getIsSelected() && "selected"}
+                      className="cursor-pointer hover:bg-accent transition-colors"
+                      onClick={() => router.push(`/unit/${row.original.id}`)}
                     >
                       {row.getVisibleCells().map((cell) => (
                         <TableCell key={cell.id}>

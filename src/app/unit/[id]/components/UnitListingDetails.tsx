@@ -810,9 +810,6 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold">Property</h2>
-                <Button variant="ghost" size="icon">
-                  <Edit2 className="h-4 w-4" />
-                </Button>
               </div>
 
               {/* Property Details */}

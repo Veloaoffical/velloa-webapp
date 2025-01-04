@@ -123,11 +123,11 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => window.open('https://velloa.tawk.help/', '_blank')}>
                 <CircleHelp />
                 Help
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => window.open('https://velloaapp.com/', '_blank')}>
                 <BookText />
                 Forms
               </DropdownMenuItem>

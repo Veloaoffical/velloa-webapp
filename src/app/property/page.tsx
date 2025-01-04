@@ -37,19 +37,15 @@ async function getProperties(): Promise<Property[]> {
     const supabase = await createClient();
     console.log('Supabase client created');
     
-    // Get the session using Supabase's auth
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    console.log('Session check:', { hasSession: !!session, error: sessionError?.message });
+    // Get the authenticated user using the secure method
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    console.log('Auth user:', { id: user?.id, error: userError?.message });
 
-    if (!session) {
-      console.log('No session found, redirecting to login');
+    if (!user || userError) {
+      console.log('No authenticated user found, redirecting to login');
       redirect('/login');
     }
 
-    // Get the authenticated user from the session
-    const user = session.user;
-    console.log('Auth user:', { id: user.id });
-    
     // First get the user's profile
     const { data: profile, error: profileError } = await supabase
       .from('profiles')

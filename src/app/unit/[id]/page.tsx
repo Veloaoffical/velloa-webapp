@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Home, NotebookPen, NotepadText, PencilRuler, File, Image } from "lucide-react";
+import { ArrowLeft, Home, NotebookPen, NotepadText, PencilRuler, File, Image, Settings } from "lucide-react";
 import Link from 'next/link';
 import { UnitOverview } from './components/UnitOverview';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -9,6 +9,8 @@ import { cookies } from 'next/headers';
 import { UnitNotes } from './components/UnitNotes';
 import { UnitListingDetails } from '@/app/unit/[id]/components/UnitListingDetails';
 import { UnitPhotos } from './components/UnitPhotos';
+import { UnitFiles } from "./components/UnitFiles";
+import { UnitSettings } from "./components/UnitSettings";
 interface PageParams {
   params: { id: string };
 }
@@ -141,6 +143,13 @@ export default async function UnitDetails({ params }: PageParams) {
                     <File className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
                     Files
                   </TabsTrigger>
+                  <TabsTrigger
+                    value="settings"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                  >
+                    <Settings className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Settings
+                  </TabsTrigger>
                 </div>
               </TabsList>
               <ScrollBar orientation="horizontal" />
@@ -162,6 +171,14 @@ export default async function UnitDetails({ params }: PageParams) {
 
         <TabsContent value="images" className="flex-1 p-6">
           <UnitPhotos />
+        </TabsContent>
+
+        <TabsContent value="files" className="flex-1 p-6">
+          <UnitFiles />
+        </TabsContent>
+
+        <TabsContent value="settings" className="flex-1 p-6">
+          <UnitSettings unitId={id} />
         </TabsContent>
 
       </Tabs>

@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
+import { Send } from 'lucide-react';
 
 type AnimationData = Record<string, unknown>;
 
@@ -85,15 +86,18 @@ export function PersonRentalApplication() {
               Application Sent
             </h1>
             
-            <p className="text-muted-foreground">
-              The prospect has received a rental application, we&apos;re waiting for the application to be filled out.
-            </p>
+            <div className="flex flex-col items-center space-y-2">
+              <p className="text-muted-foreground">
+                The prospect has received a rental application, we&apos;re waiting for the application to be filled out.
+              </p>
+            </div>
 
             <Button 
-              className="w-full max-w-md bg-primary hover:bg-primary/90"
+              className="w-[200px] bg-primary hover:bg-primary/90"
               onClick={handleResend}
               disabled={isResending}
             >
+              <Send className="w-4 h-4 mr-2" />
               {isResending ? 'Resending...' : 'Resend Application'}
             </Button>
           </div>

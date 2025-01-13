@@ -24,6 +24,14 @@ interface PersonFromDB {
   role: string;
   status: string | null;
   units: Unit | null;
+  move_in_date: string | null;
+  insurance: {
+    coverage: string;
+    provider: string;
+    policy_number: string;
+    effective_date: string;
+    expiration_date: string;
+  } | null;
 }
 
 async function getPeople() {
@@ -81,7 +89,10 @@ async function getPeople() {
         phone,
         created_at,
         company_id,
+        move_in_date,
         property_id,
+        assignee_id,
+        insurance,
         unit_id,
         role,
         status,

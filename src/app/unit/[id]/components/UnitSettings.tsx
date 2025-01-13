@@ -15,7 +15,7 @@ interface SettingButtonProps {
 const SettingButton = ({ icon, label, description, onClick, variant = 'default' }: SettingButtonProps) => (
   <button
     onClick={onClick}
-    className={`relative flex w-full items-center gap-3 rounded-lg border border-input p-4 shadow-sm shadow-black/5 hover:border-ring transition-colors bg-white ${
+    className={`relative flex w-full items-center gap-3 rounded-lg border border-input p-4 shadow-sm shadow-black/5 hover:border-ring transition-colors bg-card ${
       variant === 'danger' ? 'hover:border-red-500' : ''
     }`}
   >

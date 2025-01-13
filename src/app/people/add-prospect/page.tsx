@@ -805,7 +805,7 @@ export default function AddProspectPage() {
 
   return (
     <div className="mx-auto p-6">
-      <div className="bg-white rounded-xl p-16 min-h-[calc(100vh-3rem)] flex flex-col shadow-sm border">
+      <div className="bg-card rounded-xl p-16 min-h-[calc(100vh-3rem)] flex flex-col shadow-sm border">
         <div className="space-y-12">
           <div>
             <div className="flex justify-between items-center mb-4">
@@ -1015,17 +1015,17 @@ export default function AddProspectPage() {
                   </p>
                 </div>
 
-                <div className="bg-green-50 p-6 rounded-lg border border-green-200 text-left">
-                  <h3 className="text-lg font-semibold text-green-800 mb-3">Required Information</h3>
-                  <p className="text-green-700 mb-4">
+                <div className="bg-[hsl(var(--success-light))] text-[hsl(var(--success-light-foreground))] border-[hsl(var(--success-light-border))] p-6 rounded-lg border text-left">
+                  <h3 className="text-lg font-semibold mb-3">Required Information</h3>
+                  <p className="mb-4">
                     Only three fields are mandatory to create a prospect:
                   </p>
-                  <ul className="list-disc list-inside space-y-2 text-green-700">
+                  <ul className="list-disc list-inside space-y-2">
                     <li>First Name</li>
                     <li>Last Name</li>
                     <li>Email Address</li>
                   </ul>
-                  <p className="text-green-700 mt-4">
+                  <p className="mt-4">
                     Once created, the prospect will receive an email to complete their profile with additional information.
                   </p>
                 </div>
@@ -1033,13 +1033,13 @@ export default function AddProspectPage() {
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold">Optional Sections for Prospects</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="p-4 bg-muted rounded-lg">
                       <p className="font-medium">Pets</p>
                     </div>
-                    <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="p-4 bg-muted rounded-lg">
                       <p className="font-medium">Vehicles</p>
                     </div>
-                    <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="p-4 bg-muted rounded-lg">
                       <p className="font-medium">Dependents</p>
                     </div>
                   </div>

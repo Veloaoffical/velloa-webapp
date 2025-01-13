@@ -85,7 +85,7 @@ export default async function UnitDetails({ params }: PageParams) {
     <div className="h-screen flex flex-col">
       <Tabs defaultValue="overview" className="flex flex-col h-full">
         {/* Top section with white background */}
-        <div className="bg-white flex-shrink-0">
+        <div className="bg-card flex-shrink-0">
           <div className="flex flex-col p-6 pb-6">
             <Link href={`/property/${unitDetails.property_id}`} className="mb-12">
               <Button variant="outline" size="sm" className="gap-2 w-fit">

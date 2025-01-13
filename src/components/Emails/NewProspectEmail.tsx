@@ -21,7 +21,7 @@ import {
   }
   
   export const ApplicationSubmittedEmail = ({
-    name = "Armin Aghayan",
+    name = "No Name",
     CompanyName = "Velloa",
     confirmationNumber = "#123456",
   }: ApplicationSubmittedEmailProps) => {

@@ -28,7 +28,7 @@ export async function GET() {
     // Get company settings with company ID filter
     const { data: settings, error: settingsError } = await supabase
       .from('company_settings')
-      .select('lead_source')
+      .select('lead_source, vendor_category, vendor_classification')
       .eq('companyid', companyMember.company_id)
       .single();
 
@@ -39,14 +39,42 @@ export async function GET() {
 
     console.log('Retrieved settings:', settings);
 
-    // Get the lead sources array directly from the lead_source field
+    // Get the settings values
     const leadSources = settings?.lead_source?.lead_source || [];
+    const vendorCategories = settings?.vendor_category?.vendor_categories || {
+      custom: [],
+      default: [
+        "plumbing",
+        "Electrical",
+        "HVAC",
+        "Carpentry",
+        "Painting",
+        "Cleaning",
+        "Landscaping",
+        "General Maintenance"
+      ]
+    };
+    const vendorClassifications = settings?.vendor_classification?.vendor_classifications || {
+      custom: [],
+      default: [
+        "contractor",
+        "supplier",
+        "consultant",
+        "service_provider",
+        "manufacturer",
+        "distributor"
+      ]
+    };
 
     console.log('Lead sources:', leadSources);
+    console.log('Vendor categories:', vendorCategories);
+    console.log('Vendor classifications:', vendorClassifications);
 
-    // Return the lead sources array
+    // Return all settings
     return NextResponse.json({
-      leadsource: leadSources
+      leadsource: leadSources,
+      vendor_categories: vendorCategories,
+      vendor_classifications: vendorClassifications
     });
   } catch (error) {
     console.error('Error in company settings route:', error);

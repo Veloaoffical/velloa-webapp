@@ -9,7 +9,7 @@ body {
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 0 0% 98%;
     --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
     --card-foreground: 240 10% 3.9%;
@@ -50,6 +50,15 @@ body {
     --chart-1: 217 91% 60%;
     --chart-2: 271 91% 65%;
     --chart-3: 142 76% 36%;
+    /* New success/info variables for light mode */
+    --success-light: 142 76% 97%;
+    --success-light-foreground: 142 76% 24%;
+    --success-light-border: 142 76% 84%;
+    /* New error variables for light mode */
+    --error: 0 84% 60%;
+    --error-light: 0 76% 97%;
+    --error-light-foreground: 0 76% 24%;
+    --error-light-border: 0 76% 84%;
   }
 
   .dark {
@@ -85,6 +94,16 @@ body {
     --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-border: 142.1 76.2% 30%;
     --sidebar-ring: 142.1 76.2% 36.3%;
+    /* New success/info variables for dark mode */
+    --success-light: 142 30% 15%;
+    --success-light-foreground: 142 70% 55%;
+    --success-light-border: 142 30% 25%;
+    /* New error variables for dark mode */
+    --error: 0 84% 60%;
+    --error-light: 0 84% 95%;
+    --error-light-foreground: 142 70% 24%;
+    --error-light-border: 142 70% 84%;
+
   }
 }
 

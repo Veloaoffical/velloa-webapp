@@ -2,7 +2,6 @@ import { createClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { ApplicationSubmittedEmail } from '@/components/Emails/NewProspectEmail';
-import crypto from 'crypto';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -141,6 +140,9 @@ export async function POST(request: Request) {
       console.error('Error fetching company name:', companyNameError);
     }
 
+    // Generate a unique ID for the application
+    const applicationId = crypto.randomUUID();
+
     // Send welcome email
     try {
       await resend.emails.send({
@@ -149,11 +151,11 @@ export async function POST(request: Request) {
         subject: 'Welcome to Velloa - Complete Your Application',
         react: ApplicationSubmittedEmail({
           name: `${contact.firstName} ${contact.lastName}`,
-          confirmationNumber: prospectData.id,
+          confirmationNumber: applicationId,
           CompanyName: companyData?.name || 'Velloa'
         }) as React.ReactElement,
         headers: {
-          'X-Entity-Ref-ID': crypto.randomUUID(),
+          'X-Entity-Ref-ID': applicationId,
         }
       });
     } catch (emailError) {

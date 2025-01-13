@@ -37,7 +37,7 @@ interface SettingButtonProps {
 const SettingButton = ({ icon, label, description, onClick }: SettingButtonProps) => (
   <button
     onClick={onClick}
-    className="relative flex w-full items-center gap-3 rounded-lg border border-input p-4 shadow-sm shadow-black/5 hover:border-ring transition-colors bg-white"
+    className="relative flex w-full items-center gap-3 rounded-lg border border-input p-4 shadow-sm shadow-black/5 hover:border-ring transition-colors bg-card"
   >
     <div className="shrink-0 w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
       {icon}

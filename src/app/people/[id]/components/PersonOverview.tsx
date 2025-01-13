@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Mail, Phone, CircleUserRound, FileText, ClipboardList, FileSignature, ContactRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PersonProperties } from "./Overview/PersonProperties";
+import { PersonInterests } from "./Overview/PersonInterests";
+import { VendorProperties } from "./Overview/VendorProperties";
 
 interface PersonDetails {
   id: string;
@@ -22,6 +23,54 @@ interface PersonDetails {
   status: string | null;
   assignee_id: string | null;
   lead_source: string | null;
+  agreement_start: string | null;
+  agreement_end: string | null;
+  portal_status: boolean;
+  service_address?: string | {
+    type: 'all' | 'specific';
+    property_ids?: string[];
+  };
+  insurance?: {
+    coverage: string;
+    provider: string;
+    policy_number: string;
+    effective_date: string;
+    expiration_date: string;
+  };
+  services?: {
+    categories: string[];
+    classifications: string[];
+  };
+}
+
+interface VendorServiceAddress {
+  type: 'all' | 'specific';
+  property_ids?: string[];
+}
+
+interface PropertyDetails {
+  id: string;
+  name: string;
+  address_line_1: string;
+  city: string;
+  state: string;
+  zip: string;
+  created_at: string;
+  property_images?: {
+    id: string;
+    fileUrl: string;
+    fileName: string;
+    createdAt: string;
+    favorite: boolean;
+    isFavorite: boolean;
+    listing_favorite_image: boolean;
+  }[];
+}
+
+interface AssigneeDetails {
+  id: string;
+  first_name: string;
+  last_name: string;
 }
 
 interface UnitDetails {
@@ -51,12 +100,6 @@ interface UnitDetails {
   }[];
 }
 
-interface AssigneeDetails {
-  id: string;
-  first_name: string;
-  last_name: string;
-}
-
 interface PersonOverviewProps {
   personDetails: PersonDetails;
 }
@@ -73,75 +116,199 @@ function formatPhoneNumber(phone: string) {
 }
 
 export function PersonOverview({ personDetails }: PersonOverviewProps) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [unitDetails, setUnitDetails] = useState<UnitDetails | null>(null);
+  const [isLoadingAssignee, setIsLoadingAssignee] = useState(true);
+  const [isLoadingProperties, setIsLoadingProperties] = useState(personDetails.role === 'owner' || personDetails.role === 'vendor');
+  const [isLoadingUnit, setIsLoadingUnit] = useState(personDetails.role === 'prospect' && !!personDetails.unit_id);
   const [assigneeDetails, setAssigneeDetails] = useState<AssigneeDetails | null>(null);
-  const router = useRouter();
+  const [properties, setProperties] = useState<PropertyDetails[] | null>(null);
+  const [unitDetails, setUnitDetails] = useState<UnitDetails | null>(null);
+  const [serviceAddress, setServiceAddress] = useState<VendorServiceAddress | null>(null);
 
+  // Fetch assignee details
   useEffect(() => {
     let mounted = true;
 
-    const fetchData = async () => {
+    const fetchAssigneeData = async () => {
+      if (!personDetails.assignee_id) {
+        setIsLoadingAssignee(false);
+        return;
+      }
+
       try {
-        // Fetch unit details if exists
-        if (personDetails.unit_id) {
-          const unitResponse = await fetch(`/api/unit/${personDetails.unit_id}`);
-          if (!unitResponse.ok) throw new Error('Failed to fetch unit details');
-          const unitData = await unitResponse.json();
-
-          const propertyResponse = await fetch(`/api/property/${unitData.property_id}/propertySettings`);
-          if (!propertyResponse.ok) throw new Error('Failed to fetch property details');
-          const propertyData = await propertyResponse.json();
-
-          const photosResponse = await fetch(`/api/unit/${personDetails.unit_id}/photos`);
-          if (!photosResponse.ok) throw new Error('Failed to fetch unit photos');
-          const photosData = await photosResponse.json();
-
-          if (mounted) {
-            setUnitDetails({
-              ...unitData,
-              property: {
-                name: propertyData.name,
-                address_line_1: propertyData.address_line_1,
-                city: propertyData.city,
-                state: propertyData.state,
-                zip: propertyData.zip,
-              },
-              unit_images: photosData,
-            });
-          }
+        const assigneeResponse = await fetch(`/api/people/${personDetails.assignee_id}`);
+        if (!assigneeResponse.ok) {
+          const errorData = await assigneeResponse.json();
+          console.error('Assignee fetch failed:', {
+            status: assigneeResponse.status,
+            statusText: assigneeResponse.statusText,
+            error: errorData
+          });
+          throw new Error(`Failed to fetch assignee details: ${assigneeResponse.status} ${assigneeResponse.statusText}`);
         }
-
-        // Fetch assignee details if exists
-        if (personDetails.assignee_id) {
-          const assigneeResponse = await fetch(`/api/people/${personDetails.assignee_id}`);
-          if (!assigneeResponse.ok) throw new Error('Failed to fetch assignee details');
-          const assigneeData = await assigneeResponse.json();
-          
-          if (mounted) {
-            setAssigneeDetails(assigneeData);
-          }
-        }
-
+        const assigneeData = await assigneeResponse.json();
+        
         if (mounted) {
-          setIsLoading(false);
+          setAssigneeDetails(assigneeData);
         }
       } catch (err) {
-        console.error('Error fetching data:', err);
+        console.error('Error fetching assignee:', err);
+      } finally {
         if (mounted) {
-          setIsLoading(false);
+          setIsLoadingAssignee(false);
         }
       }
     };
 
-    fetchData();
-
+    fetchAssigneeData();
     return () => {
       mounted = false;
     };
-  }, [personDetails.unit_id, personDetails.assignee_id]);
+  }, [personDetails.assignee_id]);
 
-  if (isLoading) {
+  // Fetch properties for owners and vendors
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchProperties = async () => {
+      if (personDetails.role !== 'owner' && personDetails.role !== 'vendor') {
+        setIsLoadingProperties(false);
+        return;
+      }
+
+      try {
+        const propertiesResponse = await fetch(`/api/people/${personDetails.id}/properties`);
+        if (!propertiesResponse.ok) throw new Error('Failed to fetch properties');
+        const propertiesData = await propertiesResponse.json();
+
+        // For vendors, we need to fetch the full property details for each property ID
+        if (personDetails.role === 'vendor') {
+          // Parse service_address from person details
+          const serviceAddressData = personDetails.service_address ? 
+            (typeof personDetails.service_address === 'string' ? 
+              JSON.parse(personDetails.service_address) : 
+              personDetails.service_address) : 
+            { type: 'specific', property_ids: [] };
+          
+          setServiceAddress(serviceAddressData);
+
+          // If type is 'all' or no property_ids, don't fetch property details
+          if (serviceAddressData.type === 'all' || !serviceAddressData.property_ids?.length) {
+            if (mounted) {
+              setProperties(null);
+              setIsLoadingProperties(false);
+            }
+            return;
+          }
+
+          // Fetch details for each property
+          const propertyDetailsPromises = serviceAddressData.property_ids.map(async (id: string) => {
+            const response = await fetch(`/api/property/${id}/propertySettings`);
+            if (!response.ok) return null;
+            const propertyData = await response.json();
+
+            // Fetch images for the property
+            try {
+              const photosResponse = await fetch(`/api/property/${id}/photos`);
+              if (!photosResponse.ok) throw new Error('Failed to fetch property photos');
+              const photosData = await photosResponse.json();
+              return { ...propertyData, property_images: photosData };
+            } catch (err) {
+              console.error(`Error fetching photos for property ${id}:`, err);
+              return propertyData;
+            }
+          });
+
+          const propertyDetails = (await Promise.all(propertyDetailsPromises)).filter(Boolean);
+          if (mounted) {
+            setProperties(propertyDetails);
+          }
+        } else {
+          // For owners, fetch images for each property
+          const propertiesWithImages = await Promise.all(
+            propertiesData.map(async (property: PropertyDetails) => {
+              try {
+                const photosResponse = await fetch(`/api/property/${property.id}/photos`);
+                if (!photosResponse.ok) throw new Error('Failed to fetch property photos');
+                const photosData = await photosResponse.json();
+                return { ...property, property_images: photosData };
+              } catch (err) {
+                console.error(`Error fetching photos for property ${property.id}:`, err);
+                return property;
+              }
+            })
+          );
+
+          if (mounted) {
+            setProperties(propertiesWithImages);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching properties:', err);
+      } finally {
+        if (mounted) {
+          setIsLoadingProperties(false);
+        }
+      }
+    };
+
+    fetchProperties();
+    return () => {
+      mounted = false;
+    };
+  }, [personDetails.id, personDetails.role, personDetails.service_address]);
+
+  // Fetch unit details for prospects
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchUnitData = async () => {
+      if (personDetails.role !== 'prospect' || !personDetails.unit_id) {
+        setIsLoadingUnit(false);
+        return;
+      }
+
+      try {
+        const unitResponse = await fetch(`/api/unit/${personDetails.unit_id}`);
+        if (!unitResponse.ok) throw new Error('Failed to fetch unit details');
+        const unitData = await unitResponse.json();
+
+        const propertyResponse = await fetch(`/api/property/${unitData.property_id}/propertySettings`);
+        if (!propertyResponse.ok) throw new Error('Failed to fetch property details');
+        const propertyData = await propertyResponse.json();
+
+        const photosResponse = await fetch(`/api/unit/${personDetails.unit_id}/photos`);
+        if (!photosResponse.ok) throw new Error('Failed to fetch unit photos');
+        const photosData = await photosResponse.json();
+
+        if (mounted) {
+          setUnitDetails({
+            ...unitData,
+            property: {
+              name: propertyData.name,
+              address_line_1: propertyData.address_line_1,
+              city: propertyData.city,
+              state: propertyData.state,
+              zip: propertyData.zip,
+            },
+            unit_images: photosData,
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching unit data:', err);
+      } finally {
+        if (mounted) {
+          setIsLoadingUnit(false);
+        }
+      }
+    };
+
+    fetchUnitData();
+    return () => {
+      mounted = false;
+    };
+  }, [personDetails.unit_id, personDetails.role]);
+
+  if (isLoadingAssignee) {
     return (
       <div className="space-y-6">
         {/* Quick Actions Skeleton */}
@@ -170,9 +337,8 @@ export function PersonOverview({ personDetails }: PersonOverviewProps) {
           ))}
         </div>
 
-        {/* Additional Information Skeleton */}
+        {/* Contact Information Skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Contact Information Skeleton */}
           <Card>
             <CardContent className="p-6">
               <Skeleton className="h-6 w-40 mb-4" />
@@ -183,25 +349,6 @@ export function PersonOverview({ personDetails }: PersonOverviewProps) {
                     <div>
                       <Skeleton className="h-5 w-32 mb-1" />
                       <Skeleton className="h-4 w-24" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Interests Skeleton */}
-          <Card>
-            <CardContent className="p-6">
-              <Skeleton className="h-6 w-24 mb-4" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="rounded-lg border overflow-hidden">
-                    <Skeleton className="w-full h-28" />
-                    <div className="p-2">
-                      <Skeleton className="h-4 w-full mb-2" />
-                      <Skeleton className="h-3 w-4/5 mb-1" />
-                      <Skeleton className="h-3 w-3/5" />
                     </div>
                   </div>
                 ))}
@@ -221,18 +368,54 @@ export function PersonOverview({ personDetails }: PersonOverviewProps) {
           <h2 className="font-semibold">Quick Actions</h2>
           <p className="text-sm text-muted-foreground">What would you like to do next?</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <Button className="w-full gap-2">
-              <FileText className="w-4 h-4" />
-              View Rental Application
-            </Button>
-            <Button className="w-full gap-2">
-              <ClipboardList className="w-4 h-4" />
-              New Task
-            </Button>
-            <Button className="w-full gap-2">
-              <FileSignature className="w-4 h-4" />
-              New Lease
-            </Button>
+            {personDetails.role === 'prospect' && (
+              <Button className="w-full gap-2">
+                <FileText className="w-4 h-4" />
+                View Rental Application
+              </Button>
+            )}
+            {personDetails.role === 'owner' ? (
+              <>
+                <Button className="w-full gap-2">
+                  <FileSignature className="w-4 h-4" />
+                  New Contribution
+                </Button>
+                <Button className="w-full gap-2">
+                  <FileText className="w-4 h-4" />
+                  New Distribution
+                </Button>
+                <Button className="w-full gap-2">
+                  <ClipboardList className="w-4 h-4" />
+                  New Owner Request
+                </Button>
+              </>
+            ) : personDetails.role === 'vendor' ? (
+              <>
+                <Button className="w-full gap-2">
+                  <FileText className="w-4 h-4" />
+                  New Work Order
+                </Button>
+                <Button className="w-full gap-2">
+                  <ClipboardList className="w-4 h-4" />
+                  New Task
+                </Button>
+                <Button className="w-full gap-2">
+                  <FileSignature className="w-4 h-4" />
+                  New Note
+                </Button>
+              </>
+            ) : personDetails.role === 'prospect' && (
+              <>
+                <Button className="w-full gap-2">
+                  <ClipboardList className="w-4 h-4" />
+                  New Task
+                </Button>
+                <Button className="w-full gap-2">
+                  <FileSignature className="w-4 h-4" />
+                  New Lease
+                </Button>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -251,28 +434,79 @@ export function PersonOverview({ personDetails }: PersonOverviewProps) {
         <Card>
           <CardContent className="p-6 flex flex-col items-center justify-center text-center">
             <Mail className="h-6 w-6 mb-2 text-blue-600" />
-            <p className="text-sm text-muted-foreground">Status</p>
+            <p className="text-sm text-muted-foreground">{personDetails.role === 'vendor' ? 'Insurance Status' : 'Status'}</p>
             <p className="font-medium capitalize">
-              {personDetails.status || 'Not Set'}
+              {personDetails.role === 'vendor' 
+                ? (personDetails.insurance
+                    ? (new Date() <= new Date(personDetails.insurance.expiration_date)
+                        ? 'Active'
+                        : 'Expired')
+                    : 'Not Set')
+                : (personDetails.status || 'Not Set')
+              }
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <FileText className={`h-6 w-6 mb-2 ${personDetails.lead_source ? 'text-green-600' : 'text-muted-foreground'}`} />
-            <p className="text-sm text-muted-foreground">Lead Source</p>
+            <FileText className={`h-6 w-6 mb-2 ${
+              personDetails.role === 'owner' 
+                ? (personDetails.agreement_start && personDetails.agreement_end 
+                  ? 'text-green-600' 
+                  : 'text-muted-foreground')
+                : personDetails.role === 'vendor'
+                  ? (personDetails.services?.classifications?.length ? 'text-green-600' : 'text-muted-foreground')
+                  : (personDetails.lead_source 
+                    ? 'text-green-600' 
+                    : 'text-muted-foreground')
+            }`} />
+            <p className="text-sm text-muted-foreground">
+              {personDetails.role === 'owner' ? 'Agreement Status' : personDetails.role === 'vendor' ? 'Classification' : 'Lead Source'}
+            </p>
             <p className="font-medium capitalize">
-              {personDetails.lead_source || 'Not Set'}
+              {personDetails.role === 'owner' 
+                ? (personDetails.agreement_start && personDetails.agreement_end
+                    ? (new Date() >= new Date(personDetails.agreement_start) && 
+                       new Date() <= new Date(personDetails.agreement_end)
+                        ? 'Active'
+                        : new Date() < new Date(personDetails.agreement_start)
+                          ? 'Pending'
+                          : 'Expired')
+                    : 'Not Set')
+                : personDetails.role === 'vendor'
+                  ? (personDetails.services?.classifications?.[0] || 'Not Set')
+                  : (personDetails.lead_source || 'Not Set')
+              }
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <ContactRound className={`h-6 w-6 mb-2 ${assigneeDetails ? 'text-green-600' : 'text-yellow-500'}`} />
-            <p className="text-sm text-muted-foreground">Assigned To</p>
-            <p className="font-medium">
-              {assigneeDetails ? `${assigneeDetails.first_name} ${assigneeDetails.last_name}` : "Not Assigned"}
-            </p>
+            {personDetails.role === 'owner' && (
+              <>
+                <ContactRound className={`h-6 w-6 mb-2 ${personDetails.portal_status ? 'text-green-600' : 'text-red-500'}`} />
+                <p className="text-sm text-muted-foreground">Owner Portal</p>
+                <p className="font-medium">
+                  {personDetails.portal_status ? 'Active' : 'Inactive'}
+                </p>
+              </>
+            )}
+            {personDetails.role === 'vendor' && (
+              <>
+                <ContactRound className="h-6 w-6 mb-2 text-blue-600" />
+                <p className="text-sm text-muted-foreground">Active Tasks</p>
+                <p className="font-medium">0</p>
+              </>
+            )}
+            {personDetails.role !== 'owner' && personDetails.role !== 'vendor' && (
+              <>
+                <ContactRound className={`h-6 w-6 mb-2 ${assigneeDetails ? 'text-green-600' : 'text-yellow-500'}`} />
+                <p className="text-sm text-muted-foreground">Assigned To</p>
+                <p className="font-medium">
+                  {assigneeDetails ? `${assigneeDetails.first_name} ${assigneeDetails.last_name}` : "Not Assigned"}
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -315,47 +549,17 @@ export function PersonOverview({ personDetails }: PersonOverviewProps) {
           </CardContent>
         </Card>
 
-        {/* Interests */}
-        <Card>
-          <CardContent className="p-6">
-            <h2 className="font-semibold mb-4">Interests</h2>
-            {unitDetails ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                <div 
-                  className="rounded-lg border overflow-hidden flex flex-col cursor-pointer hover:border-green-500 hover:bg-green-50 transition-all"
-                  onClick={() => router.push(`/unit/${unitDetails.id}`)}
-                >
-                  <div className="relative w-full h-28">
-                    {unitDetails.unit_images && unitDetails.unit_images.length > 0 ? (
-                      <Image
-                        src={unitDetails.unit_images[0]?.fileUrl || '/placeholder-property.jpg'}
-                        alt={`Unit ${unitDetails.unit_name}`}
-                        fill
-                        sizes="(max-width: 768px) 100vw, 33vw"
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gray-100 flex items-center justify-center">
-                        <span className="text-gray-400">No image</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-2 flex flex-col">
-                    <h3 className="font-medium text-sm">
-                      {unitDetails.property?.name ? `${unitDetails.property.name} - Unit ${unitDetails.unit_name}` : `Unit ${unitDetails.unit_name}`}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-0.5">{unitDetails.property?.address_line_1}</p>
-                    <p className="text-xs text-gray-500">{unitDetails.property?.city}, {unitDetails.property?.state} {unitDetails.property?.zip}</p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center p-6 border border-dashed rounded-lg">
-                <p className="text-gray-500">No unit assigned</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {personDetails.role === 'owner' ? (
+          <PersonProperties properties={properties} isLoading={isLoadingProperties} />
+        ) : personDetails.role === 'vendor' ? (
+          <VendorProperties 
+            serviceAddress={serviceAddress}
+            properties={properties}
+            isLoading={isLoadingProperties}
+          />
+        ) : personDetails.role === 'prospect' ? (
+          <PersonInterests unitDetails={unitDetails} isLoading={isLoadingUnit} />
+        ) : null}
       </div>
     </div>
   );

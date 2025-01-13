@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, User, FileText, ClipboardList, StickyNote, FolderOpen, Settings } from "lucide-react";
+import { ArrowLeft, User, FileText, ClipboardList, StickyNote, FolderOpen, Settings, Building2 } from "lucide-react";
 import Link from 'next/link';
 import { PersonOverview } from '@/app/people/[id]/components/PersonOverview';
 import { PersonSettings } from '@/app/people/[id]/components/PersonSettings';
@@ -29,6 +29,30 @@ interface PersonDetails {
   status: string | null;
   assignee_id: string | null;
   lead_source: string | null;
+  agreement_start: string | null;
+  agreement_end: string | null;
+  portal_status: boolean;
+  address_info?: {
+    primary?: {
+      street?: string;
+      city?: string;
+      province?: string;
+      postalCode?: string;
+      country?: string;
+    };
+    secondary?: {
+      street?: string;
+      city?: string;
+      province?: string;
+      postalCode?: string;
+      country?: string;
+    } | null;
+  };
+  payments_settings?: {
+    enabled: boolean;
+    method?: 'email' | 'mail_check';
+    billing_email?: string;
+  };
 }
 
 async function getPersonDetails(id: string): Promise<PersonDetails> {
@@ -91,6 +115,35 @@ async function getPersonDetails(id: string): Promise<PersonDetails> {
   }
 }
 
+async function getUserRole(): Promise<string> {
+  try {
+    const supabase = await createClient();
+    
+    // Get the authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return '';
+    }
+
+    // Get the user's role from company_members
+    const { data: companyMember, error: companyError } = await supabase
+      .from('company_members')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (companyError || !companyMember) {
+      console.error('Error fetching company member:', companyError);
+      return '';
+    }
+
+    return companyMember.role || '';
+  } catch (error) {
+    console.error('Error getting user role:', error);
+    return '';
+  }
+}
+
 export default async function PersonDetails({
   params,
 }: {
@@ -104,12 +157,13 @@ export default async function PersonDetails({
   }
   
   const personDetails = await getPersonDetails(id);
+  const userRole = await getUserRole();
   
   return (
     <div className="h-screen flex flex-col">
       <Tabs defaultValue="overview" className="flex flex-col h-full">
         {/* Top section with white background */}
-        <div className="bg-white flex-shrink-0">
+        <div className="bg-card flex-shrink-0">
           <div className="flex flex-col p-6 pb-6">
             <Link href="/people" className="mb-12">
               <Button variant="outline" size="sm" className="gap-2 w-fit">
@@ -132,13 +186,42 @@ export default async function PersonDetails({
                     <User className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
                     Overview
                   </TabsTrigger>
-                  <TabsTrigger
-                    value="rental-application"
-                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                  >
-                    <FileText className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Rental Application
-                  </TabsTrigger>
+                  {personDetails.role === 'vendor' && (
+                    <TabsTrigger
+                      value="billing"
+                      className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                    >
+                      <FileText className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                      Billing
+                    </TabsTrigger>
+                  )}
+                  {personDetails.role !== 'owner' && personDetails.role !== 'vendor' && (
+                    <TabsTrigger
+                      value="rental-application"
+                      className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                    >
+                      <FileText className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                      Rental Application
+                    </TabsTrigger>
+                  )}
+                  {personDetails.role === 'owner' && (
+                    <>
+                      <TabsTrigger
+                        value="properties"
+                        className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                      >
+                        <Building2 className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                        Properties
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="transactions"
+                        className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                      >
+                        <FileText className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                        Transactions
+                      </TabsTrigger>
+                    </>
+                  )}
                   <TabsTrigger
                     value="tasks"
                     className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
@@ -180,14 +263,37 @@ export default async function PersonDetails({
             <TabsContent value="overview" className="m-0">
               <PersonOverview personDetails={personDetails} />
             </TabsContent>
-            <TabsContent value="rental-application" className="m-0">
-              <PersonRentalApplication />
-            </TabsContent>
+            {personDetails.role === 'vendor' && (
+              <TabsContent value="billing" className="m-0">
+                <div className="text-muted-foreground text-center py-8">
+                  Billing content coming soon
+                </div>
+              </TabsContent>
+            )}
+            {personDetails.role !== 'owner' && personDetails.role !== 'vendor' && (
+              <TabsContent value="rental-application" className="m-0">
+                <PersonRentalApplication />
+              </TabsContent>
+            )}
             <TabsContent value="tasks" className="m-0">
               <div className="text-muted-foreground text-center py-8">
                 Tasks content coming soon
               </div>
             </TabsContent>
+            {personDetails.role === 'owner' && (
+              <>
+                <TabsContent value="properties" className="m-0">
+                  <div className="text-muted-foreground text-center py-8">
+                    Properties content coming soon
+                  </div>
+                </TabsContent>
+                <TabsContent value="transactions" className="m-0">
+                  <div className="text-muted-foreground text-center py-8">
+                    Transactions content coming soon
+                  </div>
+                </TabsContent>
+              </>
+            )}
             <TabsContent value="notes" className="m-0">
               <PersonNotes personId={params.id} />
             </TabsContent>
@@ -195,7 +301,7 @@ export default async function PersonDetails({
               <PersonFiles />
             </TabsContent>
             <TabsContent value="settings" className="m-0">
-              <PersonSettings personDetails={personDetails} personId={params.id} />
+              <PersonSettings personDetails={personDetails} userRole={userRole} />
             </TabsContent>
           </div>
         </div>

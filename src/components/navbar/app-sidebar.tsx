@@ -8,8 +8,8 @@ import {
   ChartArea,
   MapPinHouse,
   PencilRuler,
-  AlarmClockCheck,
-  LayoutGrid,
+  ListTodo,
+  LayoutTemplate,
   Calendar,
 } from "lucide-react"
 
@@ -31,7 +31,7 @@ const data = {
     {
       title: "Home",
       url: "/home",
-      icon: LayoutGrid
+      icon: LayoutTemplate
     },
     {
         title: "Calendar",
@@ -61,7 +61,7 @@ const data = {
     {
       title: "Tasks & Maintenance",
       url: "/tasks",
-      icon: AlarmClockCheck
+      icon: ListTodo
     },
     {
       title: "Accounting",

@@ -179,7 +179,6 @@ export function NavUser({
       <NotificationDialog 
         open={showNotifications} 
         onOpenChange={setShowNotifications}
-        notifications={[]} // You can pass your notifications data here
       />
     </>
   )

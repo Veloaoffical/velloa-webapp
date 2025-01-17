@@ -11,6 +11,8 @@ import { UnitListingDetails } from '@/app/unit/[id]/components/UnitListingDetail
 import { UnitPhotos } from './components/UnitPhotos';
 import { UnitFiles } from "./components/UnitFiles";
 import { UnitSettings } from "./components/UnitSettings";
+import { UnitTasks } from "./components/UnitTasks";
+
 interface PageParams {
   params: { id: string };
 }
@@ -159,6 +161,10 @@ export default async function UnitDetails({ params }: PageParams) {
 
         <TabsContent value="overview" className="flex-1 p-6">
           <UnitOverview unitDetails={unitDetails} unitId={id} />
+        </TabsContent>
+
+        <TabsContent value="tasks" className="flex-1 p-6">
+          <UnitTasks unitId={id} propertyId={unitDetails.property_id} />
         </TabsContent>
 
         <TabsContent value="listing_details" className="flex-1 p-6">

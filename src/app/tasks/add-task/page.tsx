@@ -166,7 +166,7 @@ export default function AddTaskPage() {
         role: 'task'
       };
 
-      const response = await fetch('/api/tasks', {
+      const response = await fetch('/api/tasks/tasks', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

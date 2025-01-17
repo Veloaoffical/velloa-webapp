@@ -5,23 +5,14 @@ import { createClient } from '@/utils/supabase/server';
 import { TaskTable } from './components/TaskTable';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import TaskHeader from './components/TaskHeader';
 import { 
-  ChevronDown, 
-  ListTodo, 
-  Home, 
-  Wrench, 
-  UserCircle,
   LayoutGrid,
+  ListTodo,
+  Home,
+  Wrench,
+  UserCircle,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
 
 interface Task {
   id: string;
@@ -33,6 +24,7 @@ interface Task {
   created_at: string;
   assignees: string | null;
   created_by: string;
+  tenant_id: string | null;
   nano_id: string | null;
   property_id: string | null;
   unit_id: string | null;
@@ -106,7 +98,7 @@ async function getTasks() {
         unit_id,
         request_type,
         task_type,
-        tenant,
+        tenant_id,
         role,
         nano_id,
         property:properties!property_id (
@@ -146,44 +138,7 @@ export default async function TasksPage() {
       <h1 className="text-4xl font-semibold mb-6">Tasks & Maintenance</h1>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <Input
-            placeholder="Search tasks..."
-            className="max-w-sm"
-          />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button>
-                Add Task
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[180px]">
-              <DropdownMenuItem asChild className="focus:bg-gray-100">
-                <Link href="/tasks/add-task" className="flex items-center py-1.5 px-2 w-full">
-                  <ListTodo className="mr-2 h-4 w-4" />
-                  <span>Task</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="focus:bg-gray-100">
-                <Link href="/tasks/new?type=tenant-request" className="flex items-center py-1.5 px-2 w-full">
-                  <Home className="mr-2 h-4 w-4" />
-                  <span>Tenant Request</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="focus:bg-gray-100">
-                <Link href="/tasks/new?type=work-order" className="flex items-center py-1.5 px-2 w-full">
-                  <Wrench className="mr-2 h-4 w-4" />
-                  <span>Work Order</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild className="focus:bg-gray-100">
-                <Link href="/tasks/new?type=owner-request" className="flex items-center py-1.5 px-2 w-full">
-                  <UserCircle className="mr-2 h-4 w-4" />
-                  <span>Owner Request</span>
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <TaskHeader />
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="all" className="w-full">

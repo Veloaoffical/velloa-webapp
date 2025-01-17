@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, ClipboardList, Building2, Users, FileText, Inbox, StickyNote, Settings } from "lucide-react";
+import { ArrowLeft, ClipboardList, Building2, Users, FileText, Inbox, StickyNote, Settings, ListTodo } from "lucide-react";
 import Link from 'next/link';
 import { PropertyOverview } from './components/PropertyOverview';
 import { PropertyUnit } from './components/PropertyUnit';
@@ -9,6 +9,7 @@ import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { notFound } from 'next/navigation';
 import { PropertySettings } from "./components/PropertySettings";
+import { PropertyTasks } from "./components/PropertyTasks";
 
 interface PageParams {
   params: { id: string };
@@ -183,6 +184,13 @@ export default async function PropertyDetails({
                     Listings
                   </TabsTrigger>
                   <TabsTrigger
+                    value="tasks"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                  >
+                    <ListTodo className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Tasks
+                  </TabsTrigger>
+                  <TabsTrigger
                     value="notes"
                     className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
                   >
@@ -225,6 +233,9 @@ export default async function PropertyDetails({
           </TabsContent>
           <TabsContent value="listings" className="mt-0">
             Listings content
+          </TabsContent>
+          <TabsContent value="tasks" className="mt-0">
+            <PropertyTasks propertyId={params.id} />
           </TabsContent>
           <TabsContent value="notes" className="mt-0">
             Notes content

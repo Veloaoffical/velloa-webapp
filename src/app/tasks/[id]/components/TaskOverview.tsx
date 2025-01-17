@@ -8,7 +8,9 @@ import {
   AlarmClock,
   AlarmClockCheck,
   Users,
-  CheckSquare
+  CheckSquare,
+  Wrench,
+  Repeat
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -42,6 +44,9 @@ interface Task {
     };
   } | null;
   role: string;
+  Recurring_frequency?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
 }
 
 interface TaskOverviewProps {
@@ -84,6 +89,11 @@ export function TaskOverview({ taskDetails }: TaskOverviewProps) {
     return `${assignee.profile.first_name} ${assignee.profile.last_name}`;
   };
 
+  const formatFrequency = (frequency: string | null | undefined) => {
+    if (!frequency) return null;
+    return frequency.charAt(0).toUpperCase() + frequency.slice(1);
+  };
+
   return (
     <div className="space-y-6">
       {/* Quick Actions */}
@@ -92,18 +102,37 @@ export function TaskOverview({ taskDetails }: TaskOverviewProps) {
           <h2 className="font-semibold">Quick Actions</h2>
           <p className="text-sm text-muted-foreground">What would you like to do next?</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <Button className="w-full gap-2">
-              <FileSignature className="w-4 h-4" />
-              Update Status
-            </Button>
-            <Button className="w-full gap-2">
-              <StickyNote className="w-4 h-4" />
-              Add Note
-            </Button>
-            <Button className="w-full gap-2">
-              <ClipboardList className="w-4 h-4" />
-              Add Subtask
-            </Button>
+            {taskDetails.role === 'task' ? (
+              <>
+                <Button className="w-full gap-2">
+                  <CheckSquare className="w-4 h-4" />
+                  Complete Task
+                </Button>
+                <Button className="w-full gap-2">
+                  <FileSignature className="w-4 h-4" />
+                  Update Status
+                </Button>
+                <Button className="w-full gap-2">
+                  <Wrench className="w-4 h-4" />
+                  New Work Order
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button className="w-full gap-2">
+                  <FileSignature className="w-4 h-4" />
+                  Update Status
+                </Button>
+                <Button className="w-full gap-2">
+                  <StickyNote className="w-4 h-4" />
+                  Add Note
+                </Button>
+                <Button className="w-full gap-2">
+                  <ClipboardList className="w-4 h-4" />
+                  Add Subtask
+                </Button>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -136,10 +165,25 @@ export function TaskOverview({ taskDetails }: TaskOverviewProps) {
 
         <Card>
           <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <FileSignature className="h-6 w-6 mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Due Date</p>
+            {taskDetails.task_type === 'recurring' ? (
+              <Repeat className="h-6 w-6 mb-2 text-muted-foreground" />
+            ) : (
+              <FileSignature className="h-6 w-6 mb-2 text-muted-foreground" />
+            )}
+            <p className="text-sm text-muted-foreground">
+              {taskDetails.task_type === 'recurring' ? 'Frequency' : 'Due Date'}
+            </p>
             <p className="font-medium">
-              {taskDetails.due_date ? format(new Date(taskDetails.due_date), 'MMM d, yyyy') : 'Not Set'}
+              {taskDetails.task_type === 'recurring' ? (
+                <span className="flex flex-col gap-1">
+                  <span>{formatFrequency(taskDetails.Recurring_frequency)}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {taskDetails.start_date && format(new Date(taskDetails.start_date), 'MMM d')} - {taskDetails.end_date && format(new Date(taskDetails.end_date), 'MMM d, yyyy')}
+                  </span>
+                </span>
+              ) : (
+                taskDetails.due_date ? format(new Date(taskDetails.due_date), 'MMM d, yyyy') : 'Not Set'
+              )}
             </p>
           </CardContent>
         </Card>

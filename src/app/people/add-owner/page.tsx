@@ -270,7 +270,7 @@ export default function AddOwnerPage() {
           first_name: owner.firstName,
           last_name: owner.lastName,
           middle_name: owner.middleName,
-          Company: owner.company,
+          company: owner.company,
           portal_email: owner.email,
           email: owner.contactEmail,
           phone: owner.phone,

@@ -222,13 +222,15 @@ export default async function PersonDetails({
                       </TabsTrigger>
                     </>
                   )}
-                  <TabsTrigger
-                    value="tasks"
-                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                  >
-                    <ClipboardList className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Tasks
-                  </TabsTrigger>
+                  {(personDetails.role === 'owner' || personDetails.role === 'vendor' || personDetails.role === 'tenant') && (
+                    <TabsTrigger
+                      value="tasks"
+                      className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                    >
+                      <ClipboardList className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                      Tasks
+                    </TabsTrigger>
+                  )}
                   <TabsTrigger
                     value="notes"
                     className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
@@ -275,11 +277,13 @@ export default async function PersonDetails({
                 <PersonRentalApplication />
               </TabsContent>
             )}
-            <TabsContent value="tasks" className="m-0">
-              <div className="text-muted-foreground text-center py-8">
-                Tasks content coming soon
-              </div>
-            </TabsContent>
+            {(personDetails.role === 'owner' || personDetails.role === 'vendor' || personDetails.role === 'tenant') && (
+              <TabsContent value="tasks" className="m-0">
+                <div className="text-muted-foreground text-center py-8">
+                  Tasks content coming soon
+                </div>
+              </TabsContent>
+            )}
             {personDetails.role === 'owner' && (
               <>
                 <TabsContent value="properties" className="m-0">

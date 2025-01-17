@@ -43,6 +43,21 @@ interface Task {
     };
   } | null;
   role: string;
+  Recurring_frequency?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
+interface ProcessedNote {
+  id: string;
+  note_title: string;
+  note: string;
+  created_at: string;
+  created_by: {
+    first_name: string;
+    middle_name: string;
+    last_name: string;
+  };
 }
 
 async function getTaskDetails(id: string): Promise<Task> {
@@ -65,6 +80,12 @@ async function getTaskDetails(id: string): Promise<Task> {
           first_name,
           last_name
         )
+      ),
+      property:properties!maintenance_requests_property_id_fkey (
+        name
+      ),
+      unit:units!maintenance_requests_unit_id_fkey (
+        unit_name
       )
     `)
     .eq('id', id)
@@ -77,38 +98,6 @@ async function getTaskDetails(id: string): Promise<Task> {
 
   if (!task) {
     throw new Error('Task not found');
-  }
-
-  // If we have a property_id, fetch the property details
-  let propertyData = null;
-  if (task.property_id) {
-    const { data: property } = await supabase
-      .from('properties')
-      .select('name')
-      .eq('id', task.property_id)
-      .single();
-    
-    if (property) {
-      propertyData = {
-        name: property.name
-      };
-    }
-  }
-
-  // If we have a unit_id, fetch the unit details
-  let unitData = null;
-  if (task.unit_id) {
-    const { data: unit } = await supabase
-      .from('units')
-      .select('unit_name')
-      .eq('unit_id', task.unit_id)
-      .single();
-    
-    if (unit) {
-      unitData = {
-        unit_name: unit.unit_name
-      };
-    }
   }
 
   // Transform the response to match the Task interface
@@ -129,36 +118,42 @@ async function getTaskDetails(id: string): Promise<Task> {
     task_type: task.task_type,
     tenant: task.tenant,
     role: task.role,
-    property: propertyData,
-    unit: unitData,
-    assignee: task.company_members?.[0]?.profile ? {
-      id: task.company_members[0].id,
+    property: task.property,
+    unit: task.unit,
+    assignee: task.company_members ? {
+      id: task.company_members.id,
       profile: {
-        first_name: task.company_members[0].profile[0].first_name,
-        last_name: task.company_members[0].profile[0].last_name
+        first_name: task.company_members.profile.first_name,
+        last_name: task.company_members.profile.last_name
       }
-    } : null
+    } : null,
+    Recurring_frequency: task.Recurring_frequency,
+    start_date: task.start_date,
+    end_date: task.end_date
   };
 
   return transformedTask;
 }
 
-async function getNotes(taskId: string) {
+async function getNotes(taskId: string): Promise<ProcessedNote[]> {
   try {
     const supabase = await createClient();
     
     const { data: notes, error } = await supabase
-      .from('task_notes')
+      .from('maintenance_notes')
       .select(`
         id,
-        content,
+        note_title,
+        note,
         created_at,
-        created_by:profiles!task_notes_created_by_fkey (
+        maintenance_id,
+        created_by:profiles!maintenance_notes_created_by_fkey (
           first_name,
+          middle_name,
           last_name
         )
       `)
-      .eq('task_id', taskId)
+      .eq('maintenance_id', taskId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -166,17 +161,37 @@ async function getNotes(taskId: string) {
       return [];
     }
 
-    return notes.map(note => ({
+    if (!notes) return [];
+
+    console.log('Raw notes from DB:', notes); // Debug log
+
+    // First cast to unknown, then to our expected type
+    const typedNotes = notes as unknown as Array<{
+      id: string;
+      note_title: string | null;
+      note: string | null;
+      created_at: string;
+      maintenance_id: string;
+      created_by: {
+        first_name: string | null;
+        middle_name: string | null;
+        last_name: string | null;
+      };
+    }>;
+
+    return typedNotes.map(note => ({
       id: note.id,
-      content: note.content,
+      note_title: note.note_title || '',
+      note: note.note || '',
       created_at: note.created_at,
       created_by: {
-        first_name: note.created_by[0].first_name,
-        last_name: note.created_by[0].last_name
+        first_name: note.created_by?.first_name || '',
+        middle_name: note.created_by?.middle_name || '',
+        last_name: note.created_by?.last_name || ''
       }
     }));
   } catch (error) {
-    console.error('Error in getNotes:', error);
+    console.error('Error:', error);
     return [];
   }
 }
@@ -187,8 +202,10 @@ export default async function TaskDetails({
   params: { id: string }
 }) {
   try {
-    const taskDetails = await getTaskDetails(params.id);
-    const notes = await getNotes(params.id);
+    // Properly await and destructure params
+    const { id } = await params;
+    const taskDetails = await getTaskDetails(id);
+    const notes = await getNotes(id);
     
     return (
       <div className="h-screen flex flex-col">
@@ -239,13 +256,13 @@ export default async function TaskDetails({
                   </div>
                   <span 
                     className={`
-                      inline-flex items-center rounded-md px-2 py-0.5 text-[9px] font-medium
-                      ${taskDetails.priority === 'high' ? 'bg-[hsl(var(--high-light))] text-[hsl(var(--high-light-foreground))]' : 
-                        taskDetails.priority === 'medium' ? 'bg-[hsl(var(--medium-light))] text-[hsl(var(--medium-light-foreground))]' : 
-                        'bg-[hsl(var(--low-light))] text-[hsl(var(--low-light-foreground))]'}
+                      inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-normal
+                      ${taskDetails.priority === 'high' ? 'bg-[hsl(var(--high-light))] text-[hsl(var(--high-light-foreground))] border border-[hsl(var(--high-light-border))]' : 
+                        taskDetails.priority === 'medium' ? 'bg-[hsl(var(--medium-light))] text-[hsl(var(--medium-light-foreground))] border border-[hsl(var(--medium-light-border))]' : 
+                        'bg-[hsl(var(--low-light))] text-[hsl(var(--low-light-foreground))] border border-[hsl(var(--low-light-border))]'}
                     `}
                   >
-                    {taskDetails.priority ? taskDetails.priority.charAt(0).toUpperCase() + taskDetails.priority.slice(1) : 'Low'}
+                    Priority: {taskDetails.priority ? taskDetails.priority.charAt(0).toUpperCase() + taskDetails.priority.slice(1) : 'Low'}
                   </span>
                 </div>
                 {taskDetails.nano_id && (
@@ -304,7 +321,7 @@ export default async function TaskDetails({
               <TaskOverview taskDetails={taskDetails} />
             </TabsContent>
             <TabsContent value="notes" className="mt-0">
-              <TaskNotes taskId={params.id} initialNotes={notes} />
+              <TaskNotes taskId={taskDetails.id} initialNotes={notes} />
             </TabsContent>
             <TabsContent value="files" className="mt-0">
               <TaskFiles />

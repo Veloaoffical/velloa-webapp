@@ -49,7 +49,7 @@ import {
                 Your property management dashboard is ready! Access real-time insights about your properties, including revenue tracking, expense management, and occupancy rates. Our platform helps you make data-driven decisions to maximize your investment returns.
               </Text>
   
-              <Button style={button} href="https://www.velloaapp.com">
+              <Button style={button} href="https://www.velloa.ca">
                 Access Dashboard
               </Button>
   
@@ -101,8 +101,8 @@ import {
   
             <Text style={footer}>
               © {new Date().getFullYear()} Velloa Inc., Toronto, ON | {' '}
-              <Link href="https://www.velloaapp.com" style={link}>
-                www.velloaapp.com
+              <Link href="https://www.velloa.ca" style={link}>
+                www.velloa.ca
               </Link>
             </Text>
   

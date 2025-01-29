@@ -45,6 +45,13 @@ interface Task {
     };
   } | null;
   role: string;
+  vendor_id: string | null;
+  vendor: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    company: string;
+  } | null;
 }
 
 async function getTasks() {
@@ -101,6 +108,7 @@ async function getTasks() {
         tenant_id,
         role,
         nano_id,
+        vendor_id,
         property:properties!property_id (
           name
         ),
@@ -114,6 +122,12 @@ async function getTasks() {
             middle_name,
             last_name
           )
+        ),
+        vendor:people!maintenance_requests_vendor_id_fkey (
+          id,
+          first_name,
+          last_name,
+          company
         )
       `)
       .returns<Task[]>();

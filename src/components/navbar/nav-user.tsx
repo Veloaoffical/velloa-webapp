@@ -140,7 +140,7 @@ export function NavUser({
                   <CircleHelp className="h-4 w-4 mr-2" />
                   Help
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => window.open('https://velloaapp.com/', '_blank')}>
+                <DropdownMenuItem onClick={() => window.open('https://velloa.ca/', '_blank')}>
                   <BookText className="h-4 w-4 mr-2" />
                   Forms
                 </DropdownMenuItem>

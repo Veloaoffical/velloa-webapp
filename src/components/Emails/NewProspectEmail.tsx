@@ -51,7 +51,7 @@ import {
                 We&apos;re excited about your interest in our properties. Your next step is to complete the application process, which will help us get to know you better as a potential resident.
               </Text>
   
-              <Button style={button} href="https://www.velloaapp.com">
+              <Button style={button} href="https://www.velloa.ca">
                 Start Application
               </Button>
   
@@ -105,8 +105,8 @@ import {
   
             <Text style={footer}>
               © {new Date().getFullYear()} Velloa Inc., Toronto, ON | {' '}
-              <Link href="https://www.velloaapp.com" style={link}>
-                www.velloaapp.com
+              <Link href="https://www.velloa.ca" style={link}>
+                www.velloa.ca
               </Link>
             </Text>
   

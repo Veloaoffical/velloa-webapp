@@ -52,7 +52,7 @@ import {
                 Welcome to our vendor network! We&apos;re excited to have you join our platform. As a trusted service provider, you&apos;ll have access to a streamlined system for managing work orders, communicating with property managers, and growing your business.
               </Text>
   
-              <Button style={button} href="https://www.velloaapp.com">
+              <Button style={button} href="https://www.velloa.ca">
                 Access Vendor Portal
               </Button>
   
@@ -106,8 +106,8 @@ import {
   
             <Text style={footer}>
               © {new Date().getFullYear()} Velloa Inc., Toronto, ON | {' '}
-              <Link href="https://www.velloaapp.com" style={link}>
-                www.velloaapp.com
+              <Link href="https://www.velloa.ca" style={link}>
+                www.velloa.ca
               </Link>
             </Text>
   

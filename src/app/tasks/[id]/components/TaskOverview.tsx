@@ -10,7 +10,9 @@ import {
   Users,
   CheckSquare,
   Wrench,
-  Repeat
+  Repeat,
+  DoorOpen,
+  Boxes
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -47,6 +49,9 @@ interface Task {
   Recurring_frequency?: string | null;
   start_date?: string | null;
   end_date?: string | null;
+  permit_owner: boolean | null;
+  permit_enter: boolean | null;
+  parts_labour: string | null;
 }
 
 interface TaskOverviewProps {
@@ -188,6 +193,41 @@ export function TaskOverview({ taskDetails }: TaskOverviewProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Work Order Details */}
+      {taskDetails.role === 'work_order' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="p-6 flex flex-col items-center justify-center text-center">
+              <FileSignature className="h-6 w-6 mb-2 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Owner Approval</p>
+              <p className="font-medium">
+                {taskDetails.permit_owner === true ? 'Granted' : 'Not Granted'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6 flex flex-col items-center justify-center text-center">
+              <Boxes className="h-6 w-6 mb-2 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Parts and Labour</p>
+              <p className="font-medium">
+                {taskDetails.parts_labour ? 'Required' : 'Not Required'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6 flex flex-col items-center justify-center text-center">
+              <DoorOpen className="h-6 w-6 mb-2 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Permit to Enter</p>
+              <p className="font-medium">
+                {taskDetails.permit_enter === true ? 'Granted' : 'Not Granted'}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Task Description */}
       <Card>

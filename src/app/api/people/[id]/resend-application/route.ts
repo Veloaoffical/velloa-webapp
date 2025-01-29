@@ -111,7 +111,7 @@ export async function POST(
     ].filter(Boolean).join(' ').trim() || 'Valued Prospect';
 
     const emailData = {
-      from: 'Velloa <onboarding@velloaapp.com>',
+      from: 'Velloa <onboarding@velloa.ca>',
       to: [emailAddress],
       subject: 'Welcome to Velloa - Complete Your Application',
       react: ApplicationSubmittedEmail({

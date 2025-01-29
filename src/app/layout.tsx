@@ -38,7 +38,7 @@ function RootLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </SidebarProvider>
-          <Toaster />
+          <Toaster position="top-right" />
         </ThemeProvider>
       </body>
     </html>

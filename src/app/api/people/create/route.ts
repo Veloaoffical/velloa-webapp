@@ -146,7 +146,7 @@ export async function POST(request: Request) {
     // Send welcome email
     try {
       await resend.emails.send({
-        from: 'Velloa <onboarding@velloaapp.com>',
+        from: 'Velloa <onboarding@velloa.ca>',
         to: [contact.email],
         subject: 'Welcome to Velloa - Complete Your Application',
         react: ApplicationSubmittedEmail({

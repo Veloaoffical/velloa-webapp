@@ -257,7 +257,7 @@ export async function POST(request: Request) {
     // Send welcome email
     try {
       await resend.emails.send({
-        from: 'Velloa <onboarding@velloaapp.com>',
+        from: 'Velloa <onboarding@velloa.ca>',
         to: [body.portal_email],
         subject: 'Welcome to Velloa - Owner Portal Access',
         react: ApplicationSubmittedEmail({

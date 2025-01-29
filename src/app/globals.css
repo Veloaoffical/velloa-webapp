@@ -29,11 +29,7 @@ body {
     --input: 240 5.9% 90%;
     --ring: 142.1 76.2% 36.3%;
     --radius: 0.5rem;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+
     --sidebar-background: 142.1 76.2% 36.3%;
     --sidebar-foreground: 355.7 100% 97.3%;
     --sidebar-primary: 142.1 70% 45%;
@@ -47,9 +43,14 @@ body {
     --color-in-progress: hsl(271, 91%, 65%)
     --color-completed: hsl(142, 76%, 36%);
     --color-overdue: hsl(142, 76%, 36%);
-    --chart-1: 217 91% 60%;
-    --chart-2: 271 91% 65%;
-    --chart-3: 142 76% 36%;
+    
+    --chart-1: 139 65% 20%;
+    --chart-2: 140 74% 44%;
+    --chart-3: 142 88% 28%;
+    --chart-4: 137 55% 15%;
+    --chart-5: 141 40% 9%;
+
+
     /* New success/info variables for light mode */
     --success-light: 142 70% 85%;
     --success-light-foreground: 142 84% 36%;

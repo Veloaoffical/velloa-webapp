@@ -5,12 +5,13 @@ import { createClient } from '@/utils/supabase/server';
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, ClipboardList, StickyNote, FolderOpen, Settings } from "lucide-react";
+import { ArrowLeft, ClipboardList, StickyNote, FolderOpen, Settings, Boxes } from "lucide-react";
 import Link from 'next/link';
 import { TaskOverview } from './components/TaskOverview';
 import { TaskNotes } from './components/TaskNotes';
 import { TaskFiles } from './components/TaskFiles';
 import { TaskSettings } from './components/TaskSettings';
+import { TaskPartsLabour } from './components/TaskPartsLabour';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Task {
@@ -43,9 +44,23 @@ interface Task {
     };
   } | null;
   role: string;
+  permit_enter: boolean | null;
+  permit_owner: boolean | null;
   Recurring_frequency?: string | null;
   start_date?: string | null;
   end_date?: string | null;
+  parts_labour: string | null;
+  parts_labour_items?: PartsLabourItem[];
+}
+
+interface PartsLabourItem {
+  id: string;
+  description: string;
+  category: string;
+  billDate: Date | undefined;
+  quantity: number | string;
+  unitPrice: number | string;
+  total: number;
 }
 
 interface ProcessedNote {
@@ -60,6 +75,38 @@ interface ProcessedNote {
   };
 }
 
+interface BillExpenseData {
+  description: string;
+  category: string;
+  bill_date: string | null;
+  quantity: string;
+  unit_price: string;
+  total: string;
+}
+
+async function getTaskSettings(id: string) {
+  const supabase = await createClient();
+  
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (!user || userError) {
+    throw new Error('Unauthorized');
+  }
+
+  const { data: settings, error: settingsError } = await supabase
+    .from('maintenance_requests')
+    .select('status, priority, permit_owner, permit_enter')
+    .eq('id', id)
+    .single();
+
+  if (settingsError) {
+    console.error('Error fetching task settings:', settingsError);
+    throw new Error('Failed to fetch task settings');
+  }
+
+  return settings;
+}
+
 async function getTaskDetails(id: string): Promise<Task> {
   const supabase = await createClient();
   
@@ -69,27 +116,30 @@ async function getTaskDetails(id: string): Promise<Task> {
     throw new Error('Unauthorized');
   }
 
-  // First, get the task details
-  const { data: task, error: taskError } = await supabase
-    .from('maintenance_requests')
-    .select(`
-      *,
-      company_members!maintenance_requests_assignees_fkey (
-        id,
-        profile:profiles (
-          first_name,
-          last_name
+  // First, get the task details and settings
+  const [{ data: task, error: taskError }, settings] = await Promise.all([
+    supabase
+      .from('maintenance_requests')
+      .select(`
+        *,
+        company_members!maintenance_requests_assignees_fkey (
+          id,
+          profile:profiles (
+            first_name,
+            last_name
+          )
+        ),
+        property:properties!maintenance_requests_property_id_fkey (
+          name
+        ),
+        unit:units!maintenance_requests_unit_id_fkey (
+          unit_name
         )
-      ),
-      property:properties!maintenance_requests_property_id_fkey (
-        name
-      ),
-      unit:units!maintenance_requests_unit_id_fkey (
-        unit_name
-      )
-    `)
-    .eq('id', id)
-    .single();
+      `)
+      .eq('id', id)
+      .single(),
+    getTaskSettings(id)
+  ]);
 
   if (taskError) {
     console.error('Error fetching task:', taskError);
@@ -98,6 +148,22 @@ async function getTaskDetails(id: string): Promise<Task> {
 
   if (!task) {
     throw new Error('Task not found');
+  }
+
+  // If there's a parts_labour ID, fetch the bill expenses
+  let billExpenses = null;
+  if (task.parts_labour) {
+    const { data: billExpensesData, error: billExpensesError } = await supabase
+      .from('bill_expenses')
+      .select('*')
+      .eq('id', task.parts_labour)
+      .single();
+
+    if (billExpensesError) {
+      console.error('Error fetching bill expenses:', billExpensesError);
+    } else if (billExpensesData) {
+      billExpenses = billExpensesData;
+    }
   }
 
   // Transform the response to match the Task interface
@@ -127,9 +193,21 @@ async function getTaskDetails(id: string): Promise<Task> {
         last_name: task.company_members.profile.last_name
       }
     } : null,
+    permit_enter: settings?.permit_enter || false,
+    permit_owner: settings?.permit_owner || false,
     Recurring_frequency: task.Recurring_frequency,
     start_date: task.start_date,
-    end_date: task.end_date
+    end_date: task.end_date,
+    parts_labour: task.parts_labour,
+    parts_labour_items: billExpenses?.data ? billExpenses.data.map((item: BillExpenseData) => ({
+      id: crypto.randomUUID(),
+      description: item.description,
+      category: item.category,
+      billDate: item.bill_date ? new Date(item.bill_date) : undefined,
+      quantity: item.quantity || '',
+      unitPrice: item.unit_price || '',
+      total: parseFloat(item.total) || 0
+    })) : undefined
   };
 
   return transformedTask;
@@ -287,6 +365,15 @@ export default async function TaskDetails({
                       <ClipboardList className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
                       Overview
                     </TabsTrigger>
+                    {taskDetails.role === 'work_order' && (
+                      <TabsTrigger
+                        value="parts-labour"
+                        className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                      >
+                        <Boxes className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                        Parts & Labour
+                      </TabsTrigger>
+                    )}
                     <TabsTrigger
                       value="notes"
                       className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
@@ -320,6 +407,11 @@ export default async function TaskDetails({
             <TabsContent value="overview" className="mt-0">
               <TaskOverview taskDetails={taskDetails} />
             </TabsContent>
+            {taskDetails.role === 'work_order' && (
+              <TabsContent value="parts-labour" className="mt-0">
+                <TaskPartsLabour taskDetails={taskDetails} />
+              </TabsContent>
+            )}
             <TabsContent value="notes" className="mt-0">
               <TaskNotes taskId={taskDetails.id} initialNotes={notes} />
             </TabsContent>

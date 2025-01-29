@@ -12,7 +12,7 @@ function RootLayoutContent({ children }: { children: React.ReactNode }) {
   const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname === '/forgot-password' || pathname === '/reset-password';
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning={true}>
       <head>
         <title>Velloa - Property Management</title>
         <link rel="icon" href="/favicon.ico" sizes="any" />

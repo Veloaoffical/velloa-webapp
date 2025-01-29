@@ -6,13 +6,11 @@ import crypto from 'crypto';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   console.log('Starting resend application process for ID:', params.id);
   console.log('RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY);
-  
+
   try {
     const supabase = await createClient();
     

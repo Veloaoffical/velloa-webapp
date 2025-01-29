@@ -5,8 +5,9 @@ export const dynamic = 'force-dynamic'
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string; fileId: string } }
+  props: { params: Promise<{ id: string; fileId: string }> }
 ) {
+  const params = await props.params;
   try {
     const supabase = await createClient()
 

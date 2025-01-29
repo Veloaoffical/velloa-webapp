@@ -1,3 +1,5 @@
+"use client";
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -12,9 +14,20 @@ import {
   Wrench,
   Repeat,
   DoorOpen,
-  Boxes
+  Boxes,
+  Check
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useForm } from "react-hook-form";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
+import { toast } from "sonner";
+import Link from "next/link";
 
 interface Task {
   id: string;
@@ -56,9 +69,81 @@ interface Task {
 
 interface TaskOverviewProps {
   taskDetails: Task;
+  setActiveTab?: (value: string) => void;
+  onAddNote?: () => void;
 }
 
-export function TaskOverview({ taskDetails }: TaskOverviewProps) {
+interface UpdateStatusForm {
+  status: string;
+  note: string;
+}
+
+export function TaskOverview({ taskDetails, setActiveTab, onAddNote }: TaskOverviewProps) {
+  const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [showSuccessPage, setShowSuccessPage] = useState(false);
+  const router = useRouter();
+  const form = useForm<UpdateStatusForm>({
+    defaultValues: {
+      status: taskDetails.status,
+      note: ""
+    }
+  });
+
+  const handleNavigateToNotes = () => {
+    if (onAddNote) {
+      onAddNote();
+    } else if (setActiveTab) {
+      setActiveTab("notes");
+    }
+  };
+
+  const handleUpdateStatus = async (data: UpdateStatusForm) => {
+    try {
+      const supabase = createClient();
+      
+      // Update task status
+      const { error: statusError } = await supabase
+        .from("maintenance_requests")
+        .update({ status: data.status })
+        .eq("id", taskDetails.id);
+
+      if (statusError) throw statusError;
+
+      // Add note if provided
+      if (data.note.trim()) {
+        const { error: noteError } = await supabase
+          .from("maintenance_notes")
+          .insert([{
+            maintenance_id: taskDetails.id,
+            note: data.note,
+            note_title: `Status updated to ${formatStatus(data.status)}`
+          }]);
+
+        if (noteError) throw noteError;
+      }
+
+      // Show success page if status is complete
+      if (data.status === "complete") {
+        setShowStatusDialog(false);
+        setShowSuccessPage(true);
+        setTimeout(() => {
+          setShowSuccessPage(false);
+          const link = document.createElement('a');
+          link.href = '/tasks';
+          link.click();
+        }, 2000);
+      } else {
+        setShowStatusDialog(false);
+        router.refresh();
+      }
+
+      toast.success("Status updated successfully");
+    } catch (error) {
+      console.error("Error updating status:", error);
+      toast.error("Failed to update status");
+    }
+  };
+
   const formatStatus = (status: string) => {
     switch (status) {
       case 'not_started':
@@ -100,7 +185,7 @@ export function TaskOverview({ taskDetails }: TaskOverviewProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" suppressHydrationWarning>
       {/* Quick Actions */}
       <Card>
         <CardContent className="p-6">
@@ -109,26 +194,37 @@ export function TaskOverview({ taskDetails }: TaskOverviewProps) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
             {taskDetails.role === 'task' ? (
               <>
-                <Button className="w-full gap-2">
-                  <CheckSquare className="w-4 h-4" />
-                  Complete Task
-                </Button>
-                <Button className="w-full gap-2">
+                <Button 
+                  className="w-full gap-2"
+                  onClick={() => {
+                    form.setValue("status", "complete");
+                    setShowStatusDialog(true);
+                  }}
+                >
                   <FileSignature className="w-4 h-4" />
                   Update Status
                 </Button>
-                <Button className="w-full gap-2">
-                  <Wrench className="w-4 h-4" />
-                  New Work Order
+                <Button className="w-full gap-2" onClick={handleNavigateToNotes}>
+                  <StickyNote className="w-4 h-4" />
+                  Add Note
                 </Button>
+                <Link href={`/tasks/add-work-order?task_id=${taskDetails.id}`} className="w-full">
+                  <Button className="w-full gap-2">
+                    <Wrench className="w-4 h-4" />
+                    New Work Order
+                  </Button>
+                </Link>
               </>
             ) : (
               <>
-                <Button className="w-full gap-2">
+                <Button 
+                  className="w-full gap-2"
+                  onClick={() => setShowStatusDialog(true)}
+                >
                   <FileSignature className="w-4 h-4" />
                   Update Status
                 </Button>
-                <Button className="w-full gap-2">
+                <Button className="w-full gap-2" onClick={handleNavigateToNotes}>
                   <StickyNote className="w-4 h-4" />
                   Add Note
                 </Button>
@@ -183,11 +279,11 @@ export function TaskOverview({ taskDetails }: TaskOverviewProps) {
                 <span className="flex flex-col gap-1">
                   <span>{formatFrequency(taskDetails.Recurring_frequency)}</span>
                   <span className="text-xs text-muted-foreground">
-                    {taskDetails.start_date && format(new Date(taskDetails.start_date), 'MMM d')} - {taskDetails.end_date && format(new Date(taskDetails.end_date), 'MMM d, yyyy')}
+                    {taskDetails.start_date && format(parseISO(taskDetails.start_date), 'MMM d')} - {taskDetails.end_date && format(parseISO(taskDetails.end_date), 'MMM d, yyyy')}
                   </span>
                 </span>
               ) : (
-                taskDetails.due_date ? format(new Date(taskDetails.due_date), 'MMM d, yyyy') : 'Not Set'
+                taskDetails.due_date ? format(parseISO(taskDetails.due_date), 'MMM d, yyyy h:mm a') : 'Not Set'
               )}
             </p>
           </CardContent>
@@ -238,6 +334,81 @@ export function TaskOverview({ taskDetails }: TaskOverviewProps) {
           </p>
         </CardContent>
       </Card>
+
+      {/* Status Update Dialog */}
+      <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Status</DialogTitle>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleUpdateStatus)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="not_started">Not Started</SelectItem>
+                        <SelectItem value="in_progress">In Progress</SelectItem>
+                        <SelectItem value="complete">Complete</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="note"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Note (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Add a note about this status update..."
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowStatusDialog(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Save Changes</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Success Page Dialog */}
+      <Dialog open={showSuccessPage} onOpenChange={setShowSuccessPage}>
+        <DialogContent className="flex flex-col items-center justify-center min-h-[200px] sm:min-h-[300px]">
+          <DialogHeader>
+            <DialogTitle className="sr-only">Task Status Update</DialogTitle>
+          </DialogHeader>
+          <div className="rounded-full bg-emerald-100 p-3 dark:bg-emerald-900/20">
+            <Check className="h-8 w-8 text-emerald-600 dark:text-emerald-500" />
+          </div>
+          <h2 className="mt-4 text-lg font-semibold">
+            {taskDetails.role.charAt(0).toUpperCase() + taskDetails.role.slice(1)} Complete
+          </h2>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

@@ -46,10 +46,8 @@ interface PropertyResponse extends Omit<Property, 'property_settings'> {
   description: string
 }
 
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     console.log("GET route started - property ID:", params.id)
     const supabase = createRouteHandlerClient({ cookies })
@@ -134,10 +132,8 @@ export async function GET(
   }
 }
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     console.log("Updating property with ID:", params.id)
     const supabase = createRouteHandlerClient({ cookies })

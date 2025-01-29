@@ -144,21 +144,22 @@ async function getUserRole(): Promise<string> {
   }
 }
 
-export default async function PersonDetails({
-  params,
-}: {
-  params: { id: string }
-}) {
+export default async function PersonDetails(
+  props: {
+    params: Promise<{ id: string }>
+  }
+) {
+  const params = await props.params;
   // Ensure params is treated as a promise and properly awaited
   const id = (await Promise.resolve(params)).id;
-  
+
   if (!id) {
     notFound();
   }
-  
+
   const personDetails = await getPersonDetails(id);
   const userRole = await getUserRole();
-  
+
   return (
     <div className="h-screen flex flex-col">
       <Tabs defaultValue="overview" className="flex flex-col h-full">

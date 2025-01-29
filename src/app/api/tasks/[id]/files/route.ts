@@ -30,7 +30,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -59,7 +59,7 @@ export async function GET(
           last_name
         )
       `)
-      .eq('maintenance_id', context.params.id)
+      .eq('maintenance_id', (await context.params).id)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -89,7 +89,7 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -108,7 +108,7 @@ export async function POST(
       .storage
       .from('maintenance_files')
       .upload(
-        `${context.params.id}/${Date.now()}-${body.fileName}`,
+        `${(await context.params).id}/${Date.now()}-${body.fileName}`,
         Buffer.from(body.file.split(',')[1], 'base64'),
         {
           contentType: body.fileType,
@@ -132,7 +132,7 @@ export async function POST(
       .from('maintenance_file')
       .insert([
         {
-          maintenance_id: context.params.id,
+          maintenance_id: (await context.params).id,
           file_name: body.fileName,
           file_type: body.fileType,
           file_url: publicUrl,
@@ -181,7 +181,7 @@ export async function POST(
 
 export async function DELETE(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -201,7 +201,7 @@ export async function DELETE(
       .from('maintenance_file')
       .select('file_path')
       .eq('id', fileId)
-      .eq('maintenance_id', context.params.id)
+      .eq('maintenance_id', (await context.params).id)
       .single()
 
     if (fetchError) {
@@ -229,7 +229,7 @@ export async function DELETE(
       .from('maintenance_file')
       .delete()
       .eq('id', fileId)
-      .eq('maintenance_id', context.params.id)
+      .eq('maintenance_id', (await context.params).id)
 
     if (dbError) {
       console.error('Error deleting file record:', dbError)

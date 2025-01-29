@@ -1,7 +1,6 @@
-'use server';
+'use client';
 
-import { redirect } from 'next/navigation';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@/utils/supabase/client';
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,6 +12,8 @@ import { TaskFiles } from './components/TaskFiles';
 import { TaskSettings } from './components/TaskSettings';
 import { TaskPartsLabour } from './components/TaskPartsLabour';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useState, useEffect } from 'react';
+import { use } from 'react';
 
 interface Task {
   id: string;
@@ -274,163 +275,184 @@ async function getNotes(taskId: string): Promise<ProcessedNote[]> {
   }
 }
 
-export default async function TaskDetails({
+export default function TaskDetails({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
-  try {
-    // Properly await and destructure params
-    const { id } = await params;
-    const taskDetails = await getTaskDetails(id);
-    const notes = await getNotes(id);
-    
-    return (
-      <div className="h-screen flex flex-col">
-        <Tabs defaultValue="overview" className="flex flex-col h-full">
-          {/* Top section with white background */}
-          <div className="bg-card flex-shrink-0">
-            <div className="flex flex-col p-6 pb-6">
-              <Link href="/tasks" className="mb-12">
-                <Button variant="outline" size="sm" className="gap-2 w-fit">
-                  <ArrowLeft className="w-4 h-4" />
-                  Back to Tasks
-                </Button>
-              </Link>
-              <h1 className="text-2xl font-bold mb-2">
-                {taskDetails.subject.length > 35 ? (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        {`${taskDetails.subject.slice(0, 35)}...`}
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{taskDetails.subject}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ) : taskDetails.subject}
-              </h1>
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2 text-[#16B364]">
-                  <div className="flex items-center gap-2 flex-1">
-                    <Link 
-                      href={taskDetails.property_id ? `/property/${taskDetails.property_id}` : '#'} 
-                      className={taskDetails.property_id ? "hover:underline" : ""}
-                    >
-                      <span>{taskDetails.property?.name || 'No Property'}</span>
-                    </Link>
-                    {taskDetails.unit?.unit_name && (
-                      <>
-                        <span>•</span>
-                        <Link 
-                          href={`/property/${taskDetails.property_id}/units/${taskDetails.unit_id}`}
-                          className="hover:underline"
-                        >
-                          <span>{taskDetails.unit.unit_name}</span>
-                        </Link>
-                      </>
-                    )}
-                  </div>
-                  <span 
-                    className={`
-                      inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-normal
-                      ${taskDetails.priority === 'high' ? 'bg-[hsl(var(--high-light))] text-[hsl(var(--high-light-foreground))] border border-[hsl(var(--high-light-border))]' : 
-                        taskDetails.priority === 'medium' ? 'bg-[hsl(var(--medium-light))] text-[hsl(var(--medium-light-foreground))] border border-[hsl(var(--medium-light-border))]' : 
-                        'bg-[hsl(var(--low-light))] text-[hsl(var(--low-light-foreground))] border border-[hsl(var(--low-light-border))]'}
-                    `}
+  const resolvedParams = use(params);
+  const [taskDetails, setTaskDetails] = useState<Task | null>(null);
+  const [notes, setNotes] = useState<ProcessedNote[]>([]);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const taskData = await getTaskDetails(resolvedParams.id);
+        const notesData = await getNotes(resolvedParams.id);
+        setTaskDetails(taskData);
+        setNotes(notesData);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === 'Unauthorized') {
+            window.location.href = '/login';
+            return;
+          }
+        }
+        window.location.href = '/tasks';
+      }
+    };
+    fetchData();
+  }, [resolvedParams.id]);
+
+  const handleAddNoteClick = () => {
+    setActiveTab("notes");
+    setNotesDialogOpen(true);
+  };
+
+  if (!taskDetails) {
+    return <div>Loading...</div>;
+  }
+
+  return (
+    <div className="h-screen flex flex-col">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
+        {/* Top section with white background */}
+        <div className="bg-card flex-shrink-0">
+          <div className="flex flex-col p-6 pb-6">
+            <Link href="/tasks" className="mb-12">
+              <Button variant="outline" size="sm" className="gap-2 w-fit">
+                <ArrowLeft className="w-4 h-4" />
+                Back to Tasks
+              </Button>
+            </Link>
+            <h1 className="text-2xl font-bold mb-2">
+              {taskDetails.subject.length > 35 ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      {`${taskDetails.subject.slice(0, 35)}...`}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{taskDetails.subject}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : taskDetails.subject}
+            </h1>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2 text-[#16B364]">
+                <div className="flex items-center gap-2 flex-1">
+                  <Link 
+                    href={taskDetails.property_id ? `/property/${taskDetails.property_id}` : '#'} 
+                    className={taskDetails.property_id ? "hover:underline" : ""}
                   >
-                    Priority: {taskDetails.priority ? taskDetails.priority.charAt(0).toUpperCase() + taskDetails.priority.slice(1) : 'Low'}
+                    <span>{taskDetails.property?.name || 'No Property'}</span>
+                  </Link>
+                  {taskDetails.unit?.unit_name && (
+                    <>
+                      <span>•</span>
+                      <Link 
+                        href={`/property/${taskDetails.property_id}/units/${taskDetails.unit_id}`}
+                        className="hover:underline"
+                      >
+                        <span>{taskDetails.unit.unit_name}</span>
+                      </Link>
+                    </>
+                  )}
+                </div>
+                <span 
+                  className={`
+                    inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-normal
+                    ${taskDetails.priority === 'high' ? 'bg-[hsl(var(--high-light))] text-[hsl(var(--high-light-foreground))] border border-[hsl(var(--high-light-border))]' : 
+                      taskDetails.priority === 'medium' ? 'bg-[hsl(var(--medium-light))] text-[hsl(var(--medium-light-foreground))] border border-[hsl(var(--medium-light-border))]' : 
+                      'bg-[hsl(var(--low-light))] text-[hsl(var(--low-light-foreground))] border border-[hsl(var(--low-light-border))]'}
+                  `}
+                >
+                  Priority: {taskDetails.priority ? taskDetails.priority.charAt(0).toUpperCase() + taskDetails.priority.slice(1) : 'Low'}
+                </span>
+              </div>
+              {taskDetails.nano_id && (
+                <div>
+                  <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                    #{taskDetails.nano_id}
                   </span>
                 </div>
-                {taskDetails.nano_id && (
-                  <div>
-                    <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                      #{taskDetails.nano_id}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Tabs navigation */}
-            <div className="border-b-2 border-border">
-              <ScrollArea>
-                <TabsList className="mb-0 h-auto rounded-none bg-transparent py-1 text-foreground">
-                  <div className="px-6 flex gap-2">
-                    <TabsTrigger
-                      value="overview"
-                      className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                    >
-                      <ClipboardList className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                      Overview
-                    </TabsTrigger>
-                    {taskDetails.role === 'work_order' && (
-                      <TabsTrigger
-                        value="parts-labour"
-                        className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                      >
-                        <Boxes className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                        Parts & Labour
-                      </TabsTrigger>
-                    )}
-                    <TabsTrigger
-                      value="notes"
-                      className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                    >
-                      <StickyNote className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                      Notes
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="files"
-                      className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                    >
-                      <FolderOpen className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                      Files
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="settings"
-                      className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                    >
-                      <Settings className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                      Settings
-                    </TabsTrigger>
-                  </div>
-                </TabsList>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
+              )}
             </div>
           </div>
 
-          {/* Scrollable content section */}
-          <div className="flex-1 overflow-y-auto bg-transparent px-6 pt-6">
-            <TabsContent value="overview" className="mt-0">
-              <TaskOverview taskDetails={taskDetails} />
-            </TabsContent>
-            {taskDetails.role === 'work_order' && (
-              <TabsContent value="parts-labour" className="mt-0">
-                <TaskPartsLabour taskDetails={taskDetails} />
-              </TabsContent>
-            )}
-            <TabsContent value="notes" className="mt-0">
-              <TaskNotes taskId={taskDetails.id} initialNotes={notes} />
-            </TabsContent>
-            <TabsContent value="files" className="mt-0">
-              <TaskFiles />
-            </TabsContent>
-            <TabsContent value="settings" className="mt-0">
-              <TaskSettings taskDetails={taskDetails} />
-            </TabsContent>
+          {/* Tabs navigation */}
+          <div className="border-b-2 border-border">
+            <ScrollArea>
+              <TabsList className="mb-0 h-auto rounded-none bg-transparent py-1 text-foreground">
+                <div className="px-6 flex gap-2">
+                  <TabsTrigger
+                    value="overview"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                  >
+                    <ClipboardList className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Overview
+                  </TabsTrigger>
+                  {taskDetails.role === 'work_order' && (
+                    <TabsTrigger
+                      value="parts-labour"
+                      className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                    >
+                      <Boxes className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                      Parts & Labour
+                    </TabsTrigger>
+                  )}
+                  <TabsTrigger
+                    value="notes"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                  >
+                    <StickyNote className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Notes
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="files"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                  >
+                    <FolderOpen className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Files
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="settings"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
+                  >
+                    <Settings className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Settings
+                  </TabsTrigger>
+                </div>
+              </TabsList>
+              <ScrollBar orientation="horizontal" />
+            </ScrollArea>
           </div>
-        </Tabs>
-      </div>
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === 'Unauthorized') {
-        redirect('/login');
-      }
-    }
-    redirect('/tasks');
-  }
+        </div>
+
+        {/* Scrollable content section */}
+        <div className="flex-1 overflow-y-auto bg-transparent px-6 pt-6">
+          <TabsContent value="overview" className="mt-0">
+            <TaskOverview taskDetails={taskDetails} setActiveTab={setActiveTab} onAddNote={handleAddNoteClick} />
+          </TabsContent>
+          {taskDetails.role === 'work_order' && (
+            <TabsContent value="parts-labour" className="mt-0">
+              <TaskPartsLabour taskDetails={taskDetails} />
+            </TabsContent>
+          )}
+          <TabsContent value="notes" className="mt-0">
+            <TaskNotes taskId={taskDetails.id} initialNotes={notes} initialDialogOpen={notesDialogOpen} />
+          </TabsContent>
+          <TabsContent value="files" className="mt-0">
+            <TaskFiles />
+          </TabsContent>
+          <TabsContent value="settings" className="mt-0">
+            <TaskSettings taskDetails={taskDetails} />
+          </TabsContent>
+        </div>
+      </Tabs>
+    </div>
+  );
 } 

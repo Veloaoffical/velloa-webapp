@@ -107,13 +107,14 @@ async function getPropertyDetails(propertyId: string): Promise<PropertyDetails> 
   return property;
 }
 
-export default async function PropertyDetails({
-  params,
-}: {
-  params: { id: string }
-}) {
+export default async function PropertyDetails(
+  props: {
+    params: Promise<{ id: string }>
+  }
+) {
+  const params = await props.params;
   const propertyDetails = await getPropertyDetails(params.id);
-  
+
   return (
     <div className="h-screen flex flex-col">
       <Tabs defaultValue="overview" className="flex flex-col h-full">

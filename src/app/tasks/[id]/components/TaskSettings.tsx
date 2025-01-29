@@ -107,8 +107,8 @@ export function TaskSettings({ taskDetails }: TaskSettingsProps) {
     {
       id: 'assignees',
       icon: <Users className="w-5 h-5 text-green-600" />,
-      label: "Assignees",
-      description: "Manage task assignees and notifications.",
+      label: "People",
+      description: "Manage task assignees/people and notifications.",
     },
     {
       id: 'delete',

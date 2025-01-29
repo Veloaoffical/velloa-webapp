@@ -89,7 +89,7 @@ const CalendarInput = forwardRef<{ hasDateSelected: () => boolean }, CalendarInp
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             placeholder={isFocused ? "YYYY/MM/DD" : "Enter date"}
-            className={cn("pr-10 bg-[#FAFAFA] h-[42px]", error && "border-red-500 focus-visible:ring-red-500")}
+            className={cn("pr-10 bg-background h-[42px]", error && "border-red-500 focus-visible:ring-red-500")}
             disabled={disabled}
           />
           <Popover open={isOpen} onOpenChange={setIsOpen}>

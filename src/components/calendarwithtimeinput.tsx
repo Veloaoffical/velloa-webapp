@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useImperativeHandle, forwardRef } from "react"
+import { useState, useImperativeHandle, forwardRef, useEffect } from "react"
 import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -20,13 +20,25 @@ interface CalendarWithTimeInputProps {
 }
 
 const CalendarWithTimeInput = forwardRef<{ hasTimeSelected: () => boolean }, CalendarWithTimeInputProps>(({ value, onChange, className, disabled }, ref) => {
-  const [date, setDate] = useState<Date | undefined>(value)
+  const [isClient, setIsClient] = useState(false)
+  const [date, setDate] = useState<Date | undefined>(undefined)
   const [isOpen, setIsOpen] = useState(false)
-  const [inputValue, setInputValue] = useState(value ? format(value, "yyyy/MM/dd hh:mm a") : "")
+  const [inputValue, setInputValue] = useState("")
   const [isFocused, setIsFocused] = useState(false)
-  const [displayMonth, setDisplayMonth] = useState<Date>(value || new Date())
+  const [displayMonth, setDisplayMonth] = useState<Date>(new Date())
   const [error, setError] = useState<string | undefined>()
-  const [timeSelected, setTimeSelected] = useState(!!value)
+  const [timeSelected, setTimeSelected] = useState(false)
+
+  // Handle hydration and initial value
+  useEffect(() => {
+    setIsClient(true)
+    if (value) {
+      setDate(value)
+      setInputValue(format(value, "yyyy/MM/dd hh:mm a"))
+      setDisplayMonth(value)
+      setTimeSelected(true)
+    }
+  }, [value])
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = event.target.value
@@ -129,6 +141,21 @@ const CalendarWithTimeInput = forwardRef<{ hasTimeSelected: () => boolean }, Cal
     hasTimeSelected
   }));
 
+  if (!isClient) {
+    return (
+      <div className={className}>
+        <div className="relative">
+          <Input
+            type="text"
+            value=""
+            disabled
+            className="pr-10 bg-background h-[42px]"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={className}>
       <div className="relative">
@@ -140,8 +167,8 @@ const CalendarWithTimeInput = forwardRef<{ hasTimeSelected: () => boolean }, Cal
           onBlur={() => setIsFocused(false)}
           placeholder={isFocused ? "YYYY/MM/DD hh:mm AM/PM" : "Enter date and time"}
           className={cn(
-            "pr-10 bg-[#FAFAFA] h-[42px]",
-            error && "border-red-500 focus-visible:ring-red-500"
+            "pr-10 bg-background h-[42px]",
+            error && "border-red-500 focus-visible:ring-red-500 "
           )}
           disabled={disabled}
         />
@@ -258,7 +285,7 @@ const CalendarWithTimeInput = forwardRef<{ hasTimeSelected: () => boolean }, Cal
         )}
       </div>
     </div>
-  )
+  );
 })
 
 CalendarWithTimeInput.displayName = "CalendarWithTimeInput"

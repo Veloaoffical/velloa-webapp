@@ -3,8 +3,9 @@ import { NextResponse } from 'next/server'
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string; photoId: string } }
+  props: { params: Promise<{ id: string; photoId: string }> }
 ) {
+  const params = await props.params;
   try {
     const supabase = await createClient()
 

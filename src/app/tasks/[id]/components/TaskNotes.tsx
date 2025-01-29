@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { MoreHorizontal, Search, StickyNote, Plus, X, Upload } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { useDropzone } from "react-dropzone";
+import { useSearchParams } from 'next/navigation';
 
 interface Note {
   id: string;
@@ -26,16 +27,29 @@ interface Note {
 interface TaskNotesProps {
   taskId: string;
   initialNotes: Note[];
+  initialDialogOpen?: boolean;
 }
 
-export function TaskNotes({ taskId, initialNotes }: TaskNotesProps) {
+export function TaskNotes({ taskId, initialNotes, initialDialogOpen = false }: TaskNotesProps) {
   const [notes, setNotes] = useState<Note[]>(initialNotes);
-  const [showDialog, setShowDialog] = useState(false);
+  const [showDialog, setShowDialog] = useState(initialDialogOpen);
   const [noteContent, setNoteContent] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    // Open dialog if action=add is in the URL
+    if (searchParams.get('action') === 'add') {
+      setShowDialog(true);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    setShowDialog(initialDialogOpen);
+  }, [initialDialogOpen]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setFiles(prev => [...prev, ...acceptedFiles]);
@@ -193,7 +207,6 @@ export function TaskNotes({ taskId, initialNotes }: TaskNotesProps) {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <>{console.log('Rendering note created_by:', note.created_by)}</>
                         {note.created_by.first_name} {note.created_by.middle_name} {note.created_by.last_name}
                       </TableCell>
                       <TableCell>{format(new Date(note.created_at), 'MMM d, yyyy h:mm a')}</TableCell>

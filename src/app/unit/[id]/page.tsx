@@ -14,7 +14,7 @@ import { UnitSettings } from "./components/UnitSettings";
 import { UnitTasks } from "./components/UnitTasks";
 
 interface PageParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 interface UnitDetails {
@@ -72,17 +72,18 @@ async function getUnitDetails(id: string): Promise<UnitDetails> {
   };
 }
 
-export default async function UnitDetails({ params }: PageParams) {
+export default async function UnitDetails(props: PageParams) {
+  const params = await props.params;
   const { id } = params;
   let unitDetails: UnitDetails;
-  
+
   try {
     unitDetails = await getUnitDetails(id);
   } catch (error) {
     console.error('Error fetching unit:', error);
     throw new Error('Failed to fetch unit details');
   }
-  
+
   return (
     <div className="h-screen flex flex-col">
       <Tabs defaultValue="overview" className="flex flex-col h-full">

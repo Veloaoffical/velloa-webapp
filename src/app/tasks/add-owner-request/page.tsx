@@ -41,9 +41,9 @@ interface TenantRequestForm {
   startDate?: Date;
   dueDate?: Date;
   assignedTo: string;
-  tenantId: string;
+  ownerId: string;
   notify: boolean;
-  notifyTenant: boolean;
+  notifyOwner: boolean;
   permissionToEnter: boolean;
   category: string;
 }
@@ -54,7 +54,7 @@ interface UploadingFile {
   error?: string;
 }
 
-export default function AddTenantRequestPage() {
+export default function AddOwnerRequestPage() {
   const id = useId();
   const router = useRouter();
   type StepType = 'intro' | 'details' | 'attachments' | 'summary';
@@ -67,15 +67,15 @@ export default function AddTenantRequestPage() {
     status: 'in_progress',
     requestType: '',
     assignedTo: '',
-    tenantId: '',
+    ownerId: '',
     notify: true,
-    notifyTenant: true,
+    notifyOwner: true,
     permissionToEnter: false,
     category: '',
   });
 
-  const [tenants, setTenants] = useState<{ id: string; first_name: string; last_name: string; unit?: { unit_number: string; property_name?: string; } }[]>([]);
-  const [tenantOpen, setTenantOpen] = useState(false);
+  const [owners, setOwners] = useState<{ id: string; first_name: string; last_name: string; unit?: { unit_number: string; property_name?: string; } }[]>([]);
+  const [ownerOpen, setOwnerOpen] = useState(false);
   const [companyMembers, setCompanyMembers] = useState<{ id: string; first_name: string; last_name: string; }[]>([]);
   const [assigneeOpen, setAssigneeOpen] = useState(false);
 
@@ -161,12 +161,12 @@ export default function AddTenantRequestPage() {
     maxSize: 10 * 1024 * 1024 // 10MB
   });
 
-  // Add useEffect to fetch tenants
+  // Add useEffect to fetch owners
   useEffect(() => {
-    const fetchTenants = async () => {
+    const fetchOwners = async () => {
       try {
-        console.log('Fetching tenants...');
-        const response = await fetch('/api/people/tenants/search', {
+        console.log('Fetching owners...');
+        const response = await fetch('/api/people/owner/search', {
           method: 'GET',
           credentials: 'include',
           cache: 'no-store',
@@ -174,7 +174,7 @@ export default function AddTenantRequestPage() {
             'Content-Type': 'application/json',
           },
         });
-        console.log('Tenants API response status:', response.status);
+        console.log('Owners API response status:', response.status);
         
         if (response.status === 401) {
           console.error('Authentication error - redirecting to login');
@@ -185,19 +185,19 @@ export default function AddTenantRequestPage() {
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           console.error('API Error:', errorData);
-          throw new Error(`Failed to fetch tenants: ${response.status} - ${errorData.error || ''} ${errorData.details || ''}`);
+          throw new Error(`Failed to fetch owners: ${response.status} - ${errorData.error || ''} ${errorData.details || ''}`);
         }
         
         const data = await response.json();
-        console.log('Tenants data received:', data);
-        setTenants(data || []);
+        console.log('Owners data received:', data);
+        setOwners(data || []);
       } catch (error) {
-        console.error('Error fetching tenants:', error);
-        toast.error('Failed to load tenants. Please try refreshing the page.');
+        console.error('Error fetching owners:', error);
+        toast.error('Failed to load owners. Please try refreshing the page.');
       }
     };
 
-    fetchTenants();
+    fetchOwners();
   }, [router]);
 
   // Add useEffect to fetch company members
@@ -231,16 +231,16 @@ export default function AddTenantRequestPage() {
         start_date: request.startDate,
         due_date: request.dueDate,
         assignees: request.assignedTo || null,
-        tenant_id: request.tenantId || null,
+        owner_id: request.ownerId || null,
         notify_assignee: request.notify,
-        notify_tenant: request.notifyTenant || false,
+        notify_owner: request.notifyOwner || false,
         permit_enter: request.permissionToEnter || false,
-        role: 'tenant_request'
+        role: 'owner_request'
       };
 
       console.log('Sending request data:', JSON.stringify(requestData, null, 2));
 
-      const response = await fetch('/api/tasks/tenant-requests', {
+      const response = await fetch('/api/tasks/owner-requests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -257,35 +257,34 @@ export default function AddTenantRequestPage() {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to create tenant request: ${response.status} - ${responseData.error || ''} ${responseData.details || ''} ${responseData.hint || ''}`);
+        throw new Error(`Failed to create owner request: ${response.status} - ${responseData.error || ''} ${responseData.details || ''} ${responseData.hint || ''}`);
       }
 
-      toast.success('Tenant request created successfully');
+      toast.success('Owner request created successfully');
       router.push('/tasks');
     } catch (error) {
-      console.error('Error creating tenant request:', error);
-      toast.error('Failed to create tenant request. Please try again.');
+      console.error('Error creating owner request:', error);
+      toast.error('Failed to create owner request. Please try again.');
     }
   };
 
   const renderIntroForm = () => (
     <div className="flex flex-col items-center justify-center max-w-3xl mx-auto text-center">
       <div className="space-y-4 mb-8">
-        <h2 className="text-3xl font-bold">Add a Tenant Request</h2>
+        <h2 className="text-3xl font-bold">Add an Owner Request</h2>
         <div className="text-lg text-gray-600">
-          Create a new request to track tenant maintenance, complaints, or general inquiries.
+          Create a new request to track owner maintenance, complaints, or general inquiries.
         </div>
       </div>
 
       <div className="bg-[hsl(var(--success-light))] text-[hsl(var(--success-light-foreground))] border-[hsl(var(--success-light-border))] p-6 rounded-lg border text-left w-full">
         <h3 className="text-lg font-semibold mb-3">Required Information</h3>
         <div className="mb-4">
-          The following fields are mandatory to create a tenant request:
+          The following fields are mandatory to create an owner request:
         </div>
         <ul className="list-disc list-inside space-y-2">
           <li>Title</li>
           <li>Property</li>
-          <li>Unit</li>
           <li>Request Type</li>
         </ul>
       </div>
@@ -320,20 +319,20 @@ export default function AddTenantRequestPage() {
 
         <div className="grid grid-cols-3 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="tenantId">Tenant <span className="text-red-500">*</span></Label>
-            <Popover open={tenantOpen} onOpenChange={setTenantOpen}>
+            <Label htmlFor="ownerId">Owner <span className="text-red-500">*</span></Label>
+            <Popover open={ownerOpen} onOpenChange={setOwnerOpen}>
               <PopoverTrigger asChild>
                 <Button
-                  id="tenantId"
+                  id="ownerId"
                   variant="outline"
                   role="combobox"
-                  aria-expanded={tenantOpen}
+                  aria-expanded={ownerOpen}
                   className="w-full h-[42px] justify-between bg-background px-3 font-normal outline-offset-0 hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                 >
-                  <span className={cn("truncate", !request.tenantId && "text-muted-foreground")}>
-                    {request.tenantId
-                      ? tenants.find(tenant => tenant.id === request.tenantId)?.first_name + " " + tenants.find(tenant => tenant.id === request.tenantId)?.last_name || "Select tenant"
-                      : "Select tenant"}
+                  <span className={cn("truncate", !request.ownerId && "text-muted-foreground")}>
+                    {request.ownerId
+                      ? owners.find(owner => owner.id === request.ownerId)?.first_name + " " + owners.find(owner => owner.id === request.ownerId)?.last_name || "Select owner"
+                      : "Select owner"}
                   </span>
                   <ChevronDown
                     size={16}
@@ -348,30 +347,30 @@ export default function AddTenantRequestPage() {
                 align="start"
               >
                 <Command>
-                  <CommandInput placeholder="Search tenants..." />
+                  <CommandInput placeholder="Search owners..." />
                   <CommandList>
-                    <CommandEmpty>No tenants found.</CommandEmpty>
+                    <CommandEmpty>No owners found.</CommandEmpty>
                     <CommandGroup>
-                      {tenants.map((tenant) => (
+                      {owners.map((owner) => (
                         <CommandItem
-                          key={tenant.id}
-                          value={tenant.id}
+                          key={owner.id}
+                          value={owner.id}
                           onSelect={(currentValue) => {
-                            const newTenantId = currentValue === request.tenantId ? "" : currentValue;
+                            const newOwnerId = currentValue === request.ownerId ? "" : currentValue;
                             setRequest(prev => ({
                               ...prev,
-                              tenantId: newTenantId,
+                              ownerId: newOwnerId,
                             }));
-                            setTenantOpen(false);
+                            setOwnerOpen(false);
                           }}
                         >
                           <div className="flex flex-col">
-                            <span>{tenant.first_name} {tenant.last_name}</span>
-                            {tenant.unit && (
-                              <span className="text-xs text-muted-foreground">{tenant.unit.unit_number} - {tenant.unit.property_name}</span>
+                            <span>{owner.first_name} {owner.last_name}</span>
+                            {owner.unit && (
+                              <span className="text-xs text-muted-foreground">{owner.unit.unit_number} - {owner.unit.property_name}</span>
                             )}
                           </div>
-                          {request.tenantId === tenant.id && (
+                          {request.ownerId === owner.id && (
                             <Check size={16} strokeWidth={2} className="ml-auto" />
                           )}
                         </CommandItem>
@@ -536,13 +535,13 @@ export default function AddTenantRequestPage() {
             </div>
             <div className="flex items-center gap-2 h-[42px]">
               <Switch 
-                id={`${id}-notify-tenant`}
-                checked={request.notifyTenant}
-                onCheckedChange={(checked) => setRequest({...request, notifyTenant: checked})}
-                aria-label="Notify tenant"
+                id={`${id}-notify-owner`}
+                checked={request.notifyOwner}
+                onCheckedChange={(checked) => setRequest({...request, notifyOwner: checked})}
+                aria-label="Notify owner"
               />
-              <Label htmlFor={`${id}-notify-tenant`} className="text-sm font-medium">
-                Notify Tenant
+              <Label htmlFor={`${id}-notify-owner`} className="text-sm font-medium">
+                Notify Owner
               </Label>
             </div>
             <div className="flex items-center gap-2 h-[42px]">
@@ -614,22 +613,20 @@ export default function AddTenantRequestPage() {
           <h3 className="text-lg font-semibold border-b pb-2">Location & Assignment</h3>
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label>Tenant</Label>
+              <Label>Owner</Label>
               <Input 
-                value={request.tenantId 
-                  ? tenants.find(tenant => tenant.id === request.tenantId)?.first_name + " " + tenants.find(tenant => tenant.id === request.tenantId)?.last_name || 'No tenant'
-                  : 'No tenant'} 
+                value={request.ownerId 
+                  ? owners.find(owner => owner.id === request.ownerId)?.first_name + " " + owners.find(owner => owner.id === request.ownerId)?.last_name || 'No owner'
+                  : 'No owner'} 
                 className="h-[42px] bg-muted" 
                 disabled 
               />
             </div>
-            {request.tenantId && (
+            {request.ownerId && owners.find(owner => owner.id === request.ownerId)?.unit && (
               <div className="grid gap-2">
-                <Label>Unit</Label>
+                <Label>Property</Label>
                 <Input 
-                  value={request.tenantId 
-                    ? tenants.find(tenant => tenant.id === request.tenantId)?.unit?.unit_number || 'No unit'
-                    : 'No unit'} 
+                  value={owners.find(owner => owner.id === request.ownerId)?.unit?.property_name || 'No property'} 
                   className="h-[42px] bg-muted" 
                   disabled 
                 />
@@ -660,9 +657,9 @@ export default function AddTenantRequestPage() {
                 <div className="flex items-center gap-2">
                   <div className={cn(
                     "w-4 h-4 rounded-full",
-                    request.notifyTenant ? "bg-green-500" : "bg-gray-300"
+                    request.notifyOwner ? "bg-green-500" : "bg-gray-300"
                   )} />
-                  <span className="text-sm">Notify Tenant</span>
+                  <span className="text-sm">Notify Owner</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className={cn(
@@ -737,7 +734,7 @@ export default function AddTenantRequestPage() {
       <div className="bg-card rounded-xl p-16 min-h-[calc(100vh-3rem)] flex flex-col shadow-sm border">
         <div className="flex-1">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-3xl font-semibold">Add a Tenant Request</h1>
+            <h1 className="text-3xl font-semibold">Add an Owner Request</h1>
           </div>
 
           {/* Progress Steps */}
@@ -819,7 +816,7 @@ export default function AddTenantRequestPage() {
               if (step === 'intro') {
                 setStep('details');
               } else if (step === 'details') {
-                if (!request.title || !request.tenantId || !request.requestType) {
+                if (!request.title || !request.ownerId || !request.requestType) {
                   toast.error('Please fill in all required fields');
                   return;
                 }

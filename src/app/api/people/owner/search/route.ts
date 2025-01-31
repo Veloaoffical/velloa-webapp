@@ -13,6 +13,7 @@ interface Owner {
       name: string;
     };
   } | null;
+  company?: string;
 }
 
 export async function GET() {
@@ -53,6 +54,7 @@ export async function GET() {
             name
           )
         )
+        company
       `)
       .eq('company_id', companyMember.company_id)
       .eq('role', 'owner')
@@ -72,7 +74,8 @@ export async function GET() {
       unit: owner.units ? {
         unit_number: owner.units.unit_name,
         property_name: owner.units.properties.name
-      } : undefined
+      } : undefined,
+      company: owner.company
     }));
 
     return NextResponse.json(transformedOwners);

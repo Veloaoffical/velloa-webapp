@@ -2,10 +2,11 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ClipboardList, Users, StickyNote, Building2, Key, Users2, Settings2 } from "lucide-react";
+import { ClipboardList, Users, StickyNote, Building2, Key, Users2, Settings2, Plus } from "lucide-react";
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Skeleton } from "@/components/ui/skeleton";
+import Link from 'next/link';
 
 interface PropertyPhoto {
   id: string;
@@ -50,12 +51,22 @@ interface PropertyOverviewProps {
 }
 
 interface Owner {
-  peopleId: string;
-  ownershipPercentage: number;
-  firstName?: string;
-  middleName?: string;
-  lastName?: string;
+  id: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  ownership_percentage?: number;
+  first_name?: string;
+  last_name?: string;
   company?: string;
+}
+
+interface OwnerSearchResult {
+  id: string;
+  first_name: string;
+  last_name: string;
+  company?: string;
+  email?: string;
 }
 
 export function PropertyOverview({ propertyDetails, propertyId }: PropertyOverviewProps) {
@@ -107,12 +118,35 @@ export function PropertyOverview({ propertyDetails, propertyId }: PropertyOvervi
 
     const fetchOwners = async () => {
       try {
-        const response = await fetch(`/api/property/${propertyId}/owners`);
-        if (!response.ok) throw new Error('Failed to fetch owners');
-        const data = await response.json();
-        
+        // Fetch both property settings and owner details
+        const [settingsResponse, ownersResponse] = await Promise.all([
+          fetch(`/api/property/${propertyId}/propertySettings`),
+          fetch('/api/people/owner/search')
+        ]);
+
+        if (!settingsResponse.ok) throw new Error('Failed to fetch property settings');
+        if (!ownersResponse.ok) throw new Error('Failed to fetch owner details');
+
+        const settingsData = await settingsResponse.json();
+        const ownersData = await ownersResponse.json();
+
+        console.log('Property settings response:', settingsData);
+        console.log('Owners search response:', ownersData);
+
+        // Combine the data
+        const propertyOwners = settingsData.owners || [];
+        const enrichedOwners = propertyOwners.map((propertyOwner: Owner) => {
+          const ownerDetails = ownersData.find((o: OwnerSearchResult) => o.id === propertyOwner.id);
+          return {
+            ...propertyOwner,
+            first_name: ownerDetails?.first_name,
+            last_name: ownerDetails?.last_name,
+            company: ownerDetails?.company,
+          };
+        });
+
         if (mounted) {
-          setOwners(data);
+          setOwners(enrichedOwners);
           setOwnersError(null);
         }
       } catch (err) {
@@ -357,7 +391,15 @@ export function PropertyOverview({ propertyDetails, propertyId }: PropertyOvervi
         {/* Owners Card */}
         <Card>
           <CardContent className="p-0">
-            <h2 className="p-4 font-medium border-b">Owners</h2>
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="font-medium">Owners</h2>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/people/add-owner" className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Owner
+                </Link>
+              </Button>
+            </div>
             {ownersLoading ? (
               <div className="p-4">
                 <Skeleton className="h-12 w-full" />
@@ -370,32 +412,36 @@ export function PropertyOverview({ propertyDetails, propertyId }: PropertyOvervi
               <div className="p-4">
                 <div className="max-w-[200px]">
                   {owners.map((owner) => (
-                    <div key={owner.peopleId} className="flex flex-col items-center p-4 border rounded-lg mb-2">
+                    <div key={owner?.id || Math.random()} className="flex flex-col items-center p-4 border rounded-lg mb-2">
                       {/* Avatar Circle */}
                       <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-2">
                         <span className="text-sm font-medium">
-                          {[owner.firstName?.[0], owner.lastName?.[0]]
-                            .filter(Boolean)
-                            .join('')
-                            .toUpperCase() || '??'}
+                          {owner?.first_name && owner?.last_name 
+                            ? `${owner.first_name[0]}${owner.last_name[0]}`.toUpperCase()
+                            : '??'}
                         </span>
                       </div>
                       
                       {/* Name */}
                       <h3 className="text-sm font-medium">
-                        {[owner.firstName, owner.middleName, owner.lastName]
-                          .filter(Boolean)
-                          .join(' ') || 'Unnamed Owner'}
+                        {owner?.first_name && owner?.last_name 
+                          ? `${owner.first_name} ${owner.last_name}`
+                          : owner?.name || 'Unnamed Owner'}
                       </h3>
                       
                       {/* Company */}
-                      {owner.company && (
+                      {owner?.company && (
                         <p className="text-xs text-muted-foreground">{owner.company}</p>
+                      )}
+                      
+                      {/* Email */}
+                      {owner?.email && (
+                        <p className="text-xs text-muted-foreground">{owner.email}</p>
                       )}
                       
                       {/* Ownership Percentage */}
                       <p className="text-xs text-muted-foreground">
-                        {owner.ownershipPercentage}% Ownership
+                        {owner?.ownership_percentage || 0}% Ownership
                       </p>
                     </div>
                   ))}
@@ -407,4 +453,4 @@ export function PropertyOverview({ propertyDetails, propertyId }: PropertyOvervi
       </div>
     </div>
   );
-} 
+}

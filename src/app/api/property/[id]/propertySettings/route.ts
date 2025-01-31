@@ -1,31 +1,42 @@
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+import { createClient } from "@/utils/supabase/server"
 import { NextResponse } from "next/server"
 
-interface PropertySettingsValue {
-  category?: string
+interface PropertyType {
+  propertyType: string
+  propertyKind: string
+}
+
+interface PetPolicy {
+  petsAllowed: boolean
+  allowedPets: string[]
   description?: string
-  petPolicy?: {
-    petsAllowed: boolean
-    allowedPets: string[]
-  }
-  bankAccount?: {
-    useDefaultAccount: boolean
-    defaultAccountName: string
-  }
-  reserveFund?: {
-    hasReserve: boolean
-    amount: string
-  }
-  ownership?: {
-    type: string
-  }
-  amenities?: string[]
+}
+
+interface BankAccount {
+  accountName: string
+  accountNumber: string
+  routingNumber: string
+  isDefault: boolean
+}
+
+interface Owner {
+  id: string
+  name: string
+  email: string
+  phone?: string
+  ownership_percentage?: number
 }
 
 interface PropertySettings {
+  id: string
   type: string
-  value: string | PropertySettingsValue
+  property_type: PropertyType | null
+  amenities: string[] | null
+  pet_policy: PetPolicy | null
+  owners: Owner[] | null
+  bank_accounts: BankAccount[] | null
+  property_description: string | null
+  value: string
 }
 
 interface Property {
@@ -37,39 +48,29 @@ interface Property {
   state: string
   zip: string
   company_id: string
-  property_settings?: PropertySettings[]
+  property_settings?: PropertySettings
 }
 
 interface PropertyResponse extends Omit<Property, 'property_settings'> {
   type: string
   category: string
   description: string
+  amenities: string[] | null
+  pet_policy: PetPolicy | null
+  owners: Owner[] | null
 }
 
 export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   try {
     console.log("GET route started - property ID:", params.id)
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     console.log("Supabase client created")
 
     // First get the property data
     const { data: property, error: propertyError } = await supabase
       .from("properties")
-      .select(`
-        id,
-        name,
-        address_line_1,
-        address_line_2,
-        city,
-        state,
-        zip,
-        company_id,
-        property_settings (
-          type,
-          value
-        )
-      `)
+      .select("*, property_settings(*)")
       .eq("id", params.id)
       .single()
 
@@ -90,17 +91,8 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
     }
 
     // Extract settings from property data
-    const settings = property.property_settings?.[0] || { type: "", value: "{}" }
-    
-    // Parse the settings value
-    let settingsValue: PropertySettingsValue = {}
-    try {
-      settingsValue = typeof settings.value === 'string' 
-        ? JSON.parse(settings.value)
-        : settings.value
-    } catch (e) {
-      console.error("Error parsing settings value:", e)
-    }
+    const settings = property.property_settings || {}
+    const propertyType = settings.property_type || {}
     
     // Create response without property_settings using object destructuring
     const propertyWithoutSettings: Omit<Property, 'property_settings'> = {
@@ -116,9 +108,12 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
     
     const responseData: PropertyResponse = {
       ...propertyWithoutSettings,
-      type: settings.type || "",
-      category: settingsValue.category || "",
-      description: settingsValue.description || ""
+      type: propertyType.propertyKind || "",
+      category: propertyType.propertyType || "",
+      description: settings.property_description || "",
+      amenities: settings.amenities || [],
+      pet_policy: settings.pet_policy || null,
+      owners: settings.owners || []
     }
 
     console.log("Successfully fetched property:", responseData)
@@ -136,144 +131,179 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
   const params = await props.params;
   try {
     console.log("Updating property with ID:", params.id)
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     const body = await request.json()
     console.log("Update data:", body)
 
-    let property = null
-
-    // Only update property data if we have property fields
-    if (body.name || body.address_line_1 || body.address_line_2 || body.city || body.state || body.zip) {
-      const { data: updatedProperty, error: propertyError } = await supabase
-        .from("properties")
-        .update({
-          name: body.name,
-          address_line_1: body.address_line_1,
-          address_line_2: body.address_line_2,
-          city: body.city,
-          state: body.state,
-          zip: body.zip
-        })
-        .eq("id", params.id)
-        .select()
-        .single()
-
-      if (propertyError) {
-        console.error("Supabase error updating property:", propertyError)
-        return new NextResponse(
-          JSON.stringify({ error: propertyError.message, details: propertyError.details }),
-          { status: 400 }
-        )
-      }
-
-      property = updatedProperty
-    } else {
-      // If we're not updating property data, just fetch the current property
-      const { data: currentProperty, error: propertyError } = await supabase
-        .from("properties")
-        .select()
-        .eq("id", params.id)
-        .single()
-
-      if (propertyError) {
-        console.error("Supabase error fetching property:", propertyError)
-        return new NextResponse(
-          JSON.stringify({ error: propertyError.message, details: propertyError.details }),
-          { status: 400 }
-        )
-      }
-
-      property = currentProperty
-    }
-
-    // Get existing settings
-    const { data: existingSettings, error: getSettingsError } = await supabase
-      .from("property_settings")
-      .select("value, type")
-      .eq("property_id", params.id)
+    // First get the current property to check if it has property_settings
+    const { data: property, error: propertyError } = await supabase
+      .from("properties")
+      .select("*, property_settings(*)")
+      .eq("id", params.id)
       .single()
 
-    if (getSettingsError && getSettingsError.code !== "PGRST116") {
-      console.error("Error fetching existing settings:", getSettingsError)
+    if (propertyError) {
+      console.error("Error fetching property:", propertyError)
       return new NextResponse(
-        JSON.stringify({ error: getSettingsError.message, details: getSettingsError.details }),
+        JSON.stringify({ error: propertyError.message }),
         { status: 400 }
       )
     }
 
-    // Parse the existing settings value
-    let currentSettings: PropertySettingsValue = {}
-    try {
-      currentSettings = existingSettings?.value ? 
-        (typeof existingSettings.value === 'string' ? 
-          JSON.parse(existingSettings.value) : 
-          existingSettings.value) 
-        : {}
-    } catch (e) {
-      console.error("Error parsing existing settings:", e)
-    }
+    // If we have property data to update, do that first
+    if (body.name || body.address_line_1 || body.address_line_2 || body.city || body.state || body.zip) {
+      const updateData: Partial<Omit<Property, 'property_settings' | 'id' | 'company_id'>> = {}
+      if (body.name !== undefined) updateData.name = body.name
+      if (body.address_line_1 !== undefined) updateData.address_line_1 = body.address_line_1
+      if (body.address_line_2 !== undefined) updateData.address_line_2 = body.address_line_2
+      if (body.city !== undefined) updateData.city = body.city
+      if (body.state !== undefined) updateData.state = body.state
+      if (body.zip !== undefined) updateData.zip = body.zip
 
-    // Create new settings with updated category and/or description
-    const newSettings: PropertySettingsValue = {
-      ...currentSettings,
-      category: body.type ? body.category : currentSettings.category,
-      description: body.description !== undefined ? body.description : currentSettings.description
-    }
+      const { error: updatePropertyError } = await supabase
+        .from("properties")
+        .update(updateData)
+        .eq("id", params.id)
 
-    // First try to update existing settings
-    const { error: updateError } = await supabase
-      .from("property_settings")
-      .update({
-        type: body.type || existingSettings?.type || 'general',
-        value: JSON.stringify(newSettings) // Stringify the value before saving
-      })
-      .eq('property_id', params.id)
-
-    // If update fails because no row exists, then insert
-    if (updateError && updateError.code === 'PGRST116') {
-      const { error: insertError } = await supabase
-        .from("property_settings")
-        .insert({
-          property_id: params.id,
-          type: body.type || 'general',
-          value: JSON.stringify(newSettings) // Stringify the value before saving
-        })
-
-      if (insertError) {
-        console.error("Error inserting settings:", insertError)
+      if (updatePropertyError) {
+        console.error("Error updating property:", updatePropertyError)
         return new NextResponse(
-          JSON.stringify({ error: insertError.message, details: insertError.details }),
+          JSON.stringify({ error: updatePropertyError.message }),
           { status: 400 }
         )
       }
-    } else if (updateError) {
-      console.error("Error updating settings:", updateError)
+    }
+
+    // Prepare settings update data
+    const updateData: Partial<PropertySettings> = {}
+    
+    if (body.type || body.category) {
+      updateData.property_type = {
+        propertyType: body.category,
+        propertyKind: body.type
+      }
+    }
+
+    if (body.description !== undefined) {
+      updateData.property_description = body.description
+    }
+
+    if (body.amenities !== undefined) {
+      updateData.amenities = body.amenities
+    }
+
+    // Handle pet policy update
+    if (body.pet_policy !== undefined) {
+      updateData.pet_policy = {
+        petsAllowed: body.pet_policy.petsAllowed,
+        allowedPets: body.pet_policy.allowedPets || [],
+        description: body.pet_policy.description || ""
+      }
+    }
+
+    // Handle owners update
+    if (body.owners !== undefined) {
+      updateData.owners = body.owners.map((owner: Owner) => ({
+        id: owner.id,
+        name: owner.name,
+        email: owner.email,
+        phone: owner.phone || null,
+        ownership_percentage: owner.ownership_percentage || null
+      }))
+    }
+
+    // If property already has settings, update them
+    if (property.property_settings) {
+      console.log("Updating existing settings:", property.property_settings.id)
+      const { error: updateError } = await supabase
+        .from("property_settings")
+        .update(updateData)
+        .eq("id", property.property_settings.id)
+
+      if (updateError) {
+        console.error("Error updating settings:", updateError)
+        return new NextResponse(
+          JSON.stringify({ error: updateError.message }),
+          { status: 400 }
+        )
+      }
+    } else {
+      // If no settings exist, create new ones and link to property
+      console.log("Creating new settings")
+      const { data: newSettings, error: createError } = await supabase
+        .from("property_settings")
+        .insert({
+          type: body.type || 'default',
+          property_type: body.type || body.category ? {
+            propertyType: body.category,
+            propertyKind: body.type
+          } : null,
+          property_description: body.description,
+          amenities: body.amenities || [], // Initialize empty array if no amenities provided
+          pet_policy: body.pet_policy || null,
+          owners: body.owners || [] // Initialize empty array if no owners provided
+        })
+        .select()
+        .single()
+
+      if (createError) {
+        console.error("Error creating settings:", createError)
+        return new NextResponse(
+          JSON.stringify({ error: createError.message }),
+          { status: 400 }
+        )
+      }
+
+      // Link the new settings to the property
+      const { error: linkError } = await supabase
+        .from("properties")
+        .update({ property_settings: newSettings.id })
+        .eq("id", params.id)
+
+      if (linkError) {
+        console.error("Error linking settings:", linkError)
+        return new NextResponse(
+          JSON.stringify({ error: linkError.message }),
+          { status: 400 }
+        )
+      }
+    }
+
+    // Get updated property data for response
+    const { data: updatedProperty, error: fetchError } = await supabase
+      .from("properties")
+      .select("*, property_settings(*)")
+      .eq("id", params.id)
+      .single()
+
+    if (fetchError) {
+      console.error("Error fetching updated property:", fetchError)
       return new NextResponse(
-        JSON.stringify({ error: updateError.message, details: updateError.details }),
+        JSON.stringify({ error: fetchError.message }),
         { status: 400 }
       )
     }
 
-    // Create response without property_settings using object destructuring
-    const propertyWithoutSettings: Omit<Property, 'property_settings'> = {
-      id: property.id,
-      name: property.name,
-      address_line_1: property.address_line_1,
-      address_line_2: property.address_line_2,
-      city: property.city,
-      state: property.state,
-      zip: property.zip,
-      company_id: property.company_id
-    }
+    const settings = updatedProperty.property_settings || {}
+    const propertyType = settings.property_type || {}
     
     const responseData: PropertyResponse = {
-      ...propertyWithoutSettings,
-      type: body.type || existingSettings?.type || "",
-      category: body.category || currentSettings.category || "",
-      description: body.description || currentSettings.description || ""
+      id: updatedProperty.id,
+      name: updatedProperty.name,
+      address_line_1: updatedProperty.address_line_1,
+      address_line_2: updatedProperty.address_line_2,
+      city: updatedProperty.city,
+      state: updatedProperty.state,
+      zip: updatedProperty.zip,
+      company_id: updatedProperty.company_id,
+      type: propertyType.propertyKind || "",
+      category: propertyType.propertyType || "",
+      description: settings.property_description || "",
+      amenities: settings.amenities || [],
+      pet_policy: settings.pet_policy || null,
+      owners: settings.owners || []
     }
 
-    console.log("Updated property:", responseData)
     return NextResponse.json(responseData)
   } catch (error) {
     console.error("Error updating property:", error)

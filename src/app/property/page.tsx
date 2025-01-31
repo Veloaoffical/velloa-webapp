@@ -13,10 +13,19 @@ interface Property {
   numberOfUnits: number;
 }
 
+interface PropertyTypeData {
+  propertyType: string;
+  propertyKind: string;
+}
+
 interface PropertySetting {
   id: string;
   type: string;
-  value: string | null;
+  property_type: PropertyTypeData;
+  amenities: string[];
+  pet_policy: Record<string, unknown>;
+  owners: Record<string, unknown>;
+  bank_accounts: Record<string, unknown>;
 }
 
 interface PropertyRecord {
@@ -27,7 +36,7 @@ interface PropertyRecord {
   city: string;
   state: string;
   zip: string;
-  property_settings: PropertySetting[];
+  property_settings: PropertySetting | null;
   units: { unit_id: string }[] | null;
 }
 
@@ -79,10 +88,10 @@ async function getProperties(): Promise<Property[]> {
       .select(`
         id,
         name,
-        property_settings!property_settings_property_id_fkey (
+        property_settings (
           id,
           type,
-          value
+          property_type
         ),
         address_line_1,
         address_line_2,
@@ -106,31 +115,30 @@ async function getProperties(): Promise<Property[]> {
     console.log('Raw properties data:', properties);
     return (properties || []).map(property => {
       console.log('Processing property:', property.id);
-      // Get the first property setting if it exists
-      const settings = property.property_settings?.[0];
+      // Get property settings
+      const settings = property.property_settings;
       console.log('Property settings:', settings);
       
-      // Property type is directly stored in the type field
-      const propertyType = settings?.type || 'Unknown';
-      
-      // Property kind (category) is stored in the value JSON field
+      // Get property type and kind from settings
+      let propertyType = 'Unknown';
       let propertyKind = 'Unknown';
-      if (settings?.value) {
+      if (settings?.property_type) {
         try {
-          const parsedValue = JSON.parse(settings.value);
-          console.log('Parsed settings value:', parsedValue);
-          if (parsedValue && typeof parsedValue === 'object' && 'category' in parsedValue) {
-            propertyKind = parsedValue.category;
-          }
+          const propertyTypeData = settings.property_type;
+          propertyType = propertyTypeData.propertyType || 'Unknown';
+          propertyKind = propertyTypeData.propertyKind || 'Unknown';
+          console.log('Extracted values:', { propertyType, propertyKind });
         } catch (e) {
-          console.error(`Error parsing property settings for property ${property.id}:`, e);
+          console.error(`Error parsing property_type for property ${property.id}:`, e);
         }
+      } else {
+        console.log('No property_type found in settings');
       }
-
+      
       const result = {
         id: property.id.toString(),
         propertyName: property.name || `Property ${property.id}`,
-        propertyType: propertyType,
+        propertyType: propertyType.charAt(0).toUpperCase() + propertyType.slice(1),
         propertyKind: propertyKind.charAt(0).toUpperCase() + propertyKind.slice(1),
         address: [
           property.address_line_1,

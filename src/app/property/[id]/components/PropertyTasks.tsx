@@ -29,6 +29,7 @@ interface Task {
   request_type: string | null;
   task_type: string | null;
   tenant: string | null;
+  tenant_id: string | null;
   property?: {
     name: string;
   } | null;
@@ -43,6 +44,13 @@ interface Task {
     };
   } | null;
   role: string;
+  vendor_id: string | null;
+  vendor?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    company: string;
+  } | null;
 }
 
 interface PropertyTasksProps {
@@ -54,6 +62,7 @@ async function getPropertyTasks(propertyId: string): Promise<Task[]> {
   
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   if (userError || !user) {
+    console.error('Auth error:', userError);
     return [];
   }
 
@@ -81,49 +90,74 @@ async function getPropertyTasks(propertyId: string): Promise<Task[]> {
     return [];
   }
 
-  // Fetch all tasks for this property with their related details
-  const { data: tasks, error: tasksError } = await supabase
-    .from('maintenance_requests')
-    .select(`
-      id,
-      subject,
-      description,
-      status,
-      priority,
-      due_date,
-      created_at,
-      assignees,
-      created_by,
-      property_id,
-      unit_id,
-      request_type,
-      task_type,
-      tenant,
-      role,
-      nano_id,
-      property:properties!property_id (
-        name
-      ),
-      unit:units!maintenance_requests_unit_id_fkey (
-        unit_name
-      ),
-      assignee:company_members!maintenance_requests_assignees_fkey (
-        id,
-        profile:profiles (
-          first_name,
-          last_name
-        )
-      )
-    `)
-    .eq('property_id', propertyId)
-    .returns<Task[]>();
+  try {
+    // First, let's verify if the property exists and if the user has access to it
+    const { data: property, error: propertyError } = await supabase
+      .from('properties')
+      .select('id')
+      .eq('id', propertyId)
+      .single();
 
-  if (tasksError) {
-    console.error('Error fetching tasks:', tasksError);
+    if (propertyError || !property) {
+      console.error('Error verifying property access:', propertyError);
+      return [];
+    }
+
+    // Now fetch the tasks with a simpler query first
+    const { data: tasks, error: tasksError } = await supabase
+      .from('maintenance_requests')
+      .select(`
+        id,
+        subject,
+        description,
+        status,
+        priority,
+        due_date,
+        created_at,
+        assignees,
+        created_by,
+        property_id,
+        unit_id,
+        request_type,
+        task_type,
+        tenant_id,
+        tenant:tenant_id,
+        role,
+        nano_id,
+        vendor_id,
+        property:properties!property_id (
+          name
+        ),
+        unit:units!maintenance_requests_unit_id_fkey (
+          unit_name
+        ),
+        assignee:company_members!maintenance_requests_assignees_fkey (
+          id,
+          profile:profiles (
+            first_name,
+            last_name
+          )
+        ),
+        vendor:people!maintenance_requests_vendor_id_fkey (
+          id,
+          first_name,
+          last_name,
+          company
+        )
+      `)
+      .eq('property_id', propertyId)
+      .returns<Task[]>();
+
+    if (tasksError) {
+      console.error('Error fetching tasks:', tasksError);
+      return [];
+    }
+
+    return tasks || [];
+  } catch (error) {
+    console.error('Unexpected error in getPropertyTasks:', error);
     return [];
   }
-
-  return tasks || [];
 }
 
 export async function PropertyTasks({ propertyId }: PropertyTasksProps) {

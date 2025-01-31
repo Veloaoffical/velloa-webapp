@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, ClipboardList, Building2, Users, FileText, Inbox, StickyNote, Settings, ListTodo } from "lucide-react";
+import { ArrowLeft, Building2, Users, FileText, Inbox, StickyNote, Settings, ListTodo, ChartArea } from "lucide-react";
 import Link from 'next/link';
 import { PropertyOverview } from './components/PropertyOverview';
 import { PropertyUnit } from './components/PropertyUnit';
@@ -11,14 +11,19 @@ import { notFound } from 'next/navigation';
 import { PropertySettings } from "./components/PropertySettings";
 import { PropertyTasks } from "./components/PropertyTasks";
 
-interface PageParams {
-  params: { id: string };
+interface PropertyTypeData {
+  propertyType: string;
+  propertyKind: string;
 }
 
 interface PropertySetting {
   id: string;
   type: string;
-  value: string | null;
+  property_type: PropertyTypeData;
+  amenities: string[];
+  pet_policy: Record<string, unknown>;
+  owners: Record<string, unknown>;
+  bank_accounts: Record<string, unknown>;
 }
 
 interface PropertyDetails {
@@ -29,8 +34,8 @@ interface PropertyDetails {
   city: string;
   state: string;
   zip: string;
-  property_settings: PropertySetting[];
-  units: { id: number }[] | null;
+  property_settings: PropertySetting | null;
+  units: { unit_id: number }[] | null;
   created_at: string;
   company_id: number;
 }
@@ -77,7 +82,11 @@ async function getPropertyDetails(propertyId: string): Promise<PropertyDetails> 
       property_settings (
         id,
         type,
-        value
+        property_type,
+        amenities,
+        pet_policy,
+        owners,
+        bank_accounts
       ),
       address_line_1,
       address_line_2,
@@ -104,7 +113,30 @@ async function getPropertyDetails(propertyId: string): Promise<PropertyDetails> 
     notFound();
   }
 
-  return property;
+  // Transform the property data to match the interface
+  const transformedProperty: PropertyDetails = {
+    id: property.id,
+    name: property.name,
+    address_line_1: property.address_line_1,
+    address_line_2: property.address_line_2,
+    city: property.city,
+    state: property.state,
+    zip: property.zip,
+    property_settings: property.property_settings?.[0] ? {
+      id: property.property_settings[0].id,
+      type: property.property_settings[0].type,
+      property_type: property.property_settings[0].property_type,
+      amenities: property.property_settings[0].amenities || [],
+      pet_policy: property.property_settings[0].pet_policy || {},
+      owners: property.property_settings[0].owners || {},
+      bank_accounts: property.property_settings[0].bank_accounts || {}
+    } : null,
+    units: property.units || [],
+    created_at: property.created_at,
+    company_id: property.company_id
+  };
+
+  return transformedProperty;
 }
 
 export default async function PropertyDetails(
@@ -146,8 +178,8 @@ export default async function PropertyDetails(
                     value="reports"
                     className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
                   >
-                    <ClipboardList className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Reports
+                    <ChartArea className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Analytics
                   </TabsTrigger>
                   <TabsTrigger
                     value="units"
@@ -217,8 +249,8 @@ export default async function PropertyDetails(
           <TabsContent value="overview" className="mt-0">
             <PropertyOverview propertyDetails={propertyDetails} propertyId={params.id} />
           </TabsContent>
-          <TabsContent value="reports" className="mt-0">
-            Reports content
+          <TabsContent value="analytics" className="mt-0">
+            Analytics content
           </TabsContent>
           <TabsContent value="units" className="mt-0">
             <PropertyUnit propertyId={params.id} />
@@ -242,7 +274,7 @@ export default async function PropertyDetails(
             Notes content
           </TabsContent>
           <TabsContent value="settings" className="mt-0">
-            <PropertySettings propertyDetails={propertyDetails} propertyId={params.id} />
+            <PropertySettings params={{ id: params.id }} />
           </TabsContent>
         </div>
       </Tabs>

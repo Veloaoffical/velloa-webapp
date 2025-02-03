@@ -1,3 +1,5 @@
+'use client';
+
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,8 +10,10 @@ import { PersonSettings } from '@/app/people/[id]/components/PersonSettings';
 import { PersonFiles } from '@/app/people/[id]/components/PersonFiles';
 import { PersonNotes } from '@/app/people/[id]/components/PersonNotes';
 import { PersonRentalApplication } from '@/app/people/[id]/components/PersonRentalApplication';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@/utils/supabase/client';
 import { notFound } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 
 interface PersonDetails {
   id: string;
@@ -55,114 +59,89 @@ interface PersonDetails {
   };
 }
 
-async function getPersonDetails(id: string): Promise<PersonDetails> {
-  try {
-    console.log('Fetching person details for ID:', id);
-    const supabase = await createClient();
-    
-    // First get the person details
-    const { data: person, error: personError } = await supabase
-      .from('people')
-      .select('*')
-      .eq('id', id)
-      .single();
+export default function PersonDetails() {
+  const params = useParams();
+  const [personDetails, setPersonDetails] = useState<PersonDetails | null>(null);
+  const [userRole, setUserRole] = useState<string>('');
+  const [activeTab, setActiveTab] = useState('overview');
 
-    console.log('Person query result:', { person, error: personError });
-
-    if (personError) {
-      console.error('Error fetching person details:', personError);
-      notFound();
-    }
-
-    if (!person) {
-      console.error('No person found with ID:', id);
-      notFound();
-    }
-
-    // If person has a unit_id, fetch the unit and property details
-    let unitDetails = null;
-    if (person.unit_id) {
-      console.log('Fetching unit details for unit_id:', person.unit_id);
-      const { data: units, error: unitError } = await supabase
-        .from('units')
-        .select('*')
-        .eq('unit_id', person.unit_id)
-        .single();
-
-      console.log('Unit query result:', { units, error: unitError });
-
-      if (units) {
-        unitDetails = {
-          unit_number: units.unit_name || units.name || 'Unknown',
-          property_name: null
-        };
-      } else if (unitError?.message) {
-        console.error('Error fetching unit details:', unitError.message);
+  useEffect(() => {
+    const fetchData = async () => {
+      const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : null;
+      if (!id) {
+        notFound();
+        return;
       }
-    }
 
-    const personDetails = {
-      ...person,
-      unit: unitDetails
+      try {
+        const supabase = createClient();
+        
+        // First get the person details
+        const { data: person, error: personError } = await supabase
+          .from('people')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (personError) {
+          console.error('Error fetching person details:', personError);
+          notFound();
+          return;
+        }
+
+        if (!person) {
+          console.error('No person found with ID:', id);
+          notFound();
+          return;
+        }
+
+        // If person has a unit_id, fetch the unit and property details
+        let unitDetails = null;
+        if (person.unit_id) {
+          const { data: units } = await supabase
+            .from('units')
+            .select('*')
+            .eq('unit_id', person.unit_id)
+            .single();
+
+          if (units) {
+            unitDetails = {
+              unit_number: units.unit_name || units.name || 'Unknown',
+              property_name: null
+            };
+          }
+        }
+
+        // Get user role
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user?.id)
+          .single();
+
+        if (profileError) throw profileError;
+
+        setUserRole(profile?.role || '');
+        setPersonDetails({ ...person, unit: unitDetails });
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        notFound();
+      }
     };
 
-    console.log('Final person details:', personDetails);
+    fetchData();
+  }, [params.id]);
 
-    return personDetails;
-  } catch (error) {
-    console.error('Unexpected error in getPersonDetails:', error);
-    throw error;
+  if (!personDetails) {
+    return <div>Loading...</div>;
   }
-}
-
-async function getUserRole(): Promise<string> {
-  try {
-    const supabase = await createClient();
-    
-    // Get the authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return '';
-    }
-
-    // Get the user's role from company_members
-    const { data: companyMember, error: companyError } = await supabase
-      .from('company_members')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (companyError || !companyMember) {
-      console.error('Error fetching company member:', companyError);
-      return '';
-    }
-
-    return companyMember.role || '';
-  } catch (error) {
-    console.error('Error getting user role:', error);
-    return '';
-  }
-}
-
-export default async function PersonDetails(
-  props: {
-    params: Promise<{ id: string }>
-  }
-) {
-  const params = await props.params;
-  // Ensure params is treated as a promise and properly awaited
-  const id = (await Promise.resolve(params)).id;
-
-  if (!id) {
-    notFound();
-  }
-
-  const personDetails = await getPersonDetails(id);
-  const userRole = await getUserRole();
 
   return (
     <div className="h-screen flex flex-col">
-      <Tabs defaultValue="overview" className="flex flex-col h-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
         {/* Top section with white background */}
         <div className="bg-card flex-shrink-0">
           <div className="flex flex-col p-6 pb-6">
@@ -264,7 +243,7 @@ export default async function PersonDetails(
         <div className="flex-1 overflow-auto">
           <div className="p-6 space-y-8">
             <TabsContent value="overview" className="m-0">
-              <PersonOverview personDetails={personDetails} />
+              <PersonOverview personDetails={personDetails} setActiveTab={setActiveTab} />
             </TabsContent>
             {personDetails.role === 'vendor' && (
               <TabsContent value="billing" className="m-0">
@@ -300,7 +279,7 @@ export default async function PersonDetails(
               </>
             )}
             <TabsContent value="notes" className="m-0">
-              <PersonNotes personId={params.id} />
+              <PersonNotes personId={typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : ''} />
             </TabsContent>
             <TabsContent value="files" className="m-0">
               <PersonFiles />

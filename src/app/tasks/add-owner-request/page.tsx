@@ -31,6 +31,7 @@ import {
 import { toast } from 'sonner';
 import { Switch } from "@/components/ui/switch";
 import { useDropzone } from 'react-dropzone';
+import CalendarWithTimeInput from "@/components/calendarwithtimeinput";
 
 interface TenantRequestForm {
   title: string;
@@ -384,9 +385,10 @@ export default function AddOwnerRequestPage() {
           The following fields are mandatory to create an owner request:
         </div>
         <ul className="list-disc list-inside space-y-2">
-          <li>Title</li>
-          <li>Property</li>
-          <li>Request Type</li>
+          <li>Owner</li>
+          <li>Subject</li>
+          <li>Status</li>
+          <li>Priority</li>
         </ul>
       </div>
     </div>
@@ -418,7 +420,7 @@ export default function AddOwnerRequestPage() {
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <div className="grid gap-2">
             <Label htmlFor="ownerId">Owner <span className="text-red-500">*</span></Label>
             <Popover open={ownerOpen} onOpenChange={setOwnerOpen}>
@@ -486,7 +488,7 @@ export default function AddOwnerRequestPage() {
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="propertyId">Property <span className="text-red-500">*</span></Label>
+            <Label htmlFor="propertyId">Property</Label>
             <Popover open={propertyOpen} onOpenChange={setPropertyOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -511,7 +513,7 @@ export default function AddOwnerRequestPage() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent
-                className="w-full min-w-[var(--radix-popper-anchor-width)] border-input p-0"
+                className="w-full min-w-[var(--radix-popover-anchor-width)] border-input p-0"
                 align="start"
               >
                 <Command>
@@ -605,51 +607,14 @@ export default function AddOwnerRequestPage() {
               </PopoverContent>
             </Popover>
           </div>
+
+          <div className="grid gap-2">
+            <Label>Due Date</Label>
+            <CalendarWithTimeInput />
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="requestType">Request Type <span className="text-red-500">*</span></Label>
-            <Select
-              value={request.requestType}
-              onValueChange={(value) => setRequest({...request, requestType: value})}
-            >
-              <SelectTrigger id="requestType" className="h-[42px] bg-background">
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-                <SelectItem value="complaint">Complaint</SelectItem>
-                <SelectItem value="inquiry">General Inquiry</SelectItem>
-                <SelectItem value="emergency">Emergency</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="category">Category <span className="text-red-500">*</span></Label>
-            <Select
-              value={request.category}
-              onValueChange={(value) => setRequest({...request, category: value})}
-            >
-              <SelectTrigger id="category" className="h-[42px] bg-background">
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="general">General</SelectItem>
-                <SelectItem value="plumbing">Plumbing</SelectItem>
-                <SelectItem value="electrical">Electrical</SelectItem>
-                <SelectItem value="hvac">HVAC</SelectItem>
-                <SelectItem value="appliance">Appliance</SelectItem>
-                <SelectItem value="structural">Structural</SelectItem>
-                <SelectItem value="pest">Pest Control</SelectItem>
-                <SelectItem value="security">Security</SelectItem>
-                <SelectItem value="noise">Noise</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
           <div className="grid gap-2">
             <Label htmlFor="status">Status <span className="text-red-500">*</span></Label>
             <Select
@@ -806,17 +771,9 @@ export default function AddOwnerRequestPage() {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
-                <Label>Request Type</Label>
+                <Label>Status</Label>
                 <Input 
-                  value={request.requestType.charAt(0).toUpperCase() + request.requestType.slice(1)} 
-                  className="h-[42px] bg-muted" 
-                  disabled 
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Category</Label>
-                <Input 
-                  value={request.category.charAt(0).toUpperCase() + request.category.slice(1)} 
+                  value={request.status.charAt(0).toUpperCase() + request.status.slice(1).replace('_', ' ')} 
                   className="h-[42px] bg-muted" 
                   disabled 
                 />
@@ -825,6 +782,14 @@ export default function AddOwnerRequestPage() {
                 <Label>Priority</Label>
                 <Input 
                   value={request.priority.charAt(0).toUpperCase() + request.priority.slice(1)} 
+                  className="h-[42px] bg-muted" 
+                  disabled 
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Due Date</Label>
+                <Input 
+                  value={request.dueDate ? new Date(request.dueDate).toLocaleDateString() : 'Not set'} 
                   className="h-[42px] bg-muted" 
                   disabled 
                 />
@@ -846,11 +811,21 @@ export default function AddOwnerRequestPage() {
                 disabled 
               />
             </div>
-            {request.ownerId && owners.find(owner => owner.id === request.ownerId)?.unit && (
+            {request.propertyId && (
               <div className="grid gap-2">
                 <Label>Property</Label>
                 <Input 
-                  value={owners.find(owner => owner.id === request.ownerId)?.unit?.property_name || 'No property'} 
+                  value={properties.find(property => property.id === request.propertyId)?.name || 'No property'} 
+                  className="h-[42px] bg-muted" 
+                  disabled 
+                />
+              </div>
+            )}
+            {request.unitId && (
+              <div className="grid gap-2">
+                <Label>Unit</Label>
+                <Input 
+                  value={units.find(unit => unit.id === request.unitId)?.unit_name || 'No unit'} 
                   className="h-[42px] bg-muted" 
                   disabled 
                 />
@@ -1040,7 +1015,7 @@ export default function AddOwnerRequestPage() {
               if (step === 'intro') {
                 setStep('details');
               } else if (step === 'details') {
-                if (!request.title || !request.ownerId || !request.requestType || !request.propertyId) {
+                if (!request.title || !request.ownerId || !request.status || !request.priority) {
                   toast.error('Please fill in all required fields');
                   return;
                 }

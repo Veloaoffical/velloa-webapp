@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PersonProperties } from "./Overview/PersonProperties";
 import { PersonInterests } from "./Overview/PersonInterests";
 import { VendorProperties } from "./Overview/VendorProperties";
+import { useRouter } from 'next/navigation';
 
 interface PersonDetails {
   id: string;
@@ -73,6 +74,12 @@ interface AssigneeDetails {
   last_name: string;
 }
 
+interface CompanyMember {
+  id: string;
+  first_name: string;
+  last_name: string;
+}
+
 interface UnitDetails {
   id: string;
   unit_name: string;
@@ -102,6 +109,7 @@ interface UnitDetails {
 
 interface PersonOverviewProps {
   personDetails: PersonDetails;
+  setActiveTab?: (value: string) => void;
 }
 
 function formatPhoneNumber(phone: string) {
@@ -115,7 +123,8 @@ function formatPhoneNumber(phone: string) {
   return `+${cleaned.slice(0, 1)} (${cleaned.slice(1, 4)})-${cleaned.slice(4, 7)}-${cleaned.slice(7, 11)}`;
 }
 
-export function PersonOverview({ personDetails }: PersonOverviewProps) {
+export function PersonOverview({ personDetails, setActiveTab }: PersonOverviewProps) {
+  const router = useRouter();
   const [isLoadingAssignee, setIsLoadingAssignee] = useState(true);
   const [isLoadingProperties, setIsLoadingProperties] = useState(personDetails.role === 'owner' || personDetails.role === 'vendor');
   const [isLoadingUnit, setIsLoadingUnit] = useState(personDetails.role === 'prospect' && !!personDetails.unit_id);
@@ -135,7 +144,7 @@ export function PersonOverview({ personDetails }: PersonOverviewProps) {
       }
 
       try {
-        const assigneeResponse = await fetch(`/api/people/${personDetails.assignee_id}`);
+        const assigneeResponse = await fetch(`/api/company/members`);
         if (!assigneeResponse.ok) {
           const errorData = await assigneeResponse.json();
           console.error('Assignee fetch failed:', {
@@ -145,10 +154,11 @@ export function PersonOverview({ personDetails }: PersonOverviewProps) {
           });
           throw new Error(`Failed to fetch assignee details: ${assigneeResponse.status} ${assigneeResponse.statusText}`);
         }
-        const assigneeData = await assigneeResponse.json();
+        const assigneesData = await assigneeResponse.json();
+        const assigneeData = assigneesData.find((member: CompanyMember) => member.id === personDetails.assignee_id);
         
         if (mounted) {
-          setAssigneeDetails(assigneeData);
+          setAssigneeDetails(assigneeData || null);
         }
       } catch (err) {
         console.error('Error fetching assignee:', err);
@@ -308,6 +318,10 @@ export function PersonOverview({ personDetails }: PersonOverviewProps) {
     };
   }, [personDetails.unit_id, personDetails.role]);
 
+  const handleNewTask = () => {
+    router.push(`/tasks/add-task?person_id=${personDetails.id}&person_role=${personDetails.role}`);
+  };
+
   if (isLoadingAssignee) {
     return (
       <div className="space-y-6">
@@ -369,10 +383,26 @@ export function PersonOverview({ personDetails }: PersonOverviewProps) {
           <p className="text-sm text-muted-foreground">What would you like to do next?</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
             {personDetails.role === 'prospect' && (
-              <Button className="w-full gap-2">
-                <FileText className="w-4 h-4" />
-                View Rental Application
-              </Button>
+              <>
+                <Button 
+                  className="w-full gap-2"
+                  onClick={() => setActiveTab?.("rental-application")}
+                >
+                  <FileText className="w-4 h-4" />
+                  View Rental Application
+                </Button>
+                <Button 
+                  className="w-full gap-2"
+                  onClick={handleNewTask}
+                >
+                  <ClipboardList className="w-4 h-4" />
+                  New Task
+                </Button>
+                <Button className="w-full gap-2">
+                  <FileSignature className="w-4 h-4" />
+                  New Lease
+                </Button>
+              </>
             )}
             {personDetails.role === 'owner' ? (
               <>
@@ -395,7 +425,10 @@ export function PersonOverview({ personDetails }: PersonOverviewProps) {
                   <FileText className="w-4 h-4" />
                   New Work Order
                 </Button>
-                <Button className="w-full gap-2">
+                <Button 
+                  className="w-full gap-2"
+                  onClick={handleNewTask}
+                >
                   <ClipboardList className="w-4 h-4" />
                   New Task
                 </Button>
@@ -404,18 +437,7 @@ export function PersonOverview({ personDetails }: PersonOverviewProps) {
                   New Note
                 </Button>
               </>
-            ) : personDetails.role === 'prospect' && (
-              <>
-                <Button className="w-full gap-2">
-                  <ClipboardList className="w-4 h-4" />
-                  New Task
-                </Button>
-                <Button className="w-full gap-2">
-                  <FileSignature className="w-4 h-4" />
-                  New Lease
-                </Button>
-              </>
-            )}
+            ) : null}
           </div>
         </CardContent>
       </Card>

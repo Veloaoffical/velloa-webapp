@@ -17,89 +17,64 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       )
     }
 
-    // First try to get from profiles
-    console.log('Fetching person details from profiles table for ID:', params.id)
-    const { data: profilePerson, error: profileError } = await supabase
-      .from('profiles')
+    // First try to get from people table
+    console.log('Fetching person details from people table for ID:', params.id)
+    const { data: person, error: personError } = await supabase
+      .from('people')
       .select(`
         id,
         first_name,
         middle_name,
         last_name,
-        move_in_date
+        email,
+        phone,
+        ssn,
+        drivers_license_state,
+        drivers_license_number,
+        date_of_birth,
+        gender,
+        marital_status,
+        about_you,
+        status,
+        company_id,
+        current_address,
+        pets,
+        vehicles,
+        dependents,
+        employment,
+        income
       `)
       .eq('id', params.id)
       .single()
 
-    if (profileError && profileError.code !== 'PGRST116') {
-      console.error('Database error when fetching from profiles:', {
-        error: profileError,
-        errorMessage: profileError.message,
-        errorDetails: profileError.details,
-        errorHint: profileError.hint,
+    if (personError) {
+      console.error('Database error when fetching from people:', {
+        error: personError,
+        errorMessage: personError.message,
+        errorDetails: personError.details,
+        errorHint: personError.hint,
         params
       })
-      // Only return error if it's not a "not found" error
       return NextResponse.json(
         { 
-          error: 'Error fetching from profiles',
-          details: profileError.message
+          error: 'Error fetching from people',
+          details: personError.message
         },
         { status: 500 }
       )
     }
 
-    if (profilePerson) {
-      console.log('Found person in profiles table:', { id: profilePerson.id })
-      return NextResponse.json(profilePerson)
+    if (person) {
+      console.log('Found person in people table:', { id: person.id })
+      return NextResponse.json(person)
     }
 
-    // If not in profiles, try company_members
-    console.log('Trying company_members table for ID:', params.id)
-    const { data: memberPerson, error: memberError } = await supabase
-      .from('company_members')
-      .select(`
-        id,
-        profiles!inner (
-          first_name,
-          middle_name,
-          last_name
-        )
-      `)
-      .eq('id', params.id)
-      .single()
-
-    if (memberError) {
-      console.error('Database error when fetching from company_members:', {
-        error: memberError,
-        errorMessage: memberError.message,
-        errorDetails: memberError.details,
-        errorHint: memberError.hint,
-        params
-      })
-      return NextResponse.json(
-        { 
-          error: 'Error fetching from company_members',
-          details: memberError.message
-        },
-        { status: 500 }
-      )
-    }
-
-    if (memberPerson?.profiles) {
-      console.log('Found person in company_members table:', { id: memberPerson.id })
-      return NextResponse.json({
-        id: memberPerson.id,
-        ...memberPerson.profiles
-      })
-    }
-
-    // If we get here, we couldn't find the person in either table
-    console.error('Person not found in any table:', params.id)
+    // If we get here, we couldn't find the person
+    console.error('Person not found:', params.id)
     return NextResponse.json(
       { 
         error: 'Person not found',
-        details: `No person exists with ID: ${params.id} in profiles or company_members`
+        details: `No person exists with ID: ${params.id}`
       },
       { status: 404 }
     )

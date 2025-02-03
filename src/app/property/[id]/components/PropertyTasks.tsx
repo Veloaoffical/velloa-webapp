@@ -43,7 +43,7 @@ interface Task {
       last_name: string;
     };
   } | null;
-  role: string;
+  role: 'task' | 'tenant_request' | 'work_order' | 'owner_request';
   vendor_id: string | null;
   vendor?: {
     id: string;
@@ -230,19 +230,19 @@ export async function PropertyTasks({ propertyId }: PropertyTasksProps) {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="all">
-            <TaskTable tasks={tasks} />
+            <TaskTable tasks={tasks} currentTab="all" />
           </TabsContent>
           <TabsContent value="task">
-            <TaskTable tasks={tasks.filter(task => task.role === 'task')} />
+            <TaskTable tasks={tasks.filter(task => task.role === 'task')} currentTab="task" />
           </TabsContent>
           <TabsContent value="tenant_request">
-            <TaskTable tasks={tasks.filter(task => task.role === 'tenant_request')} />
+            <TaskTable tasks={tasks.filter(task => task.role === 'tenant_request')} currentTab="tenant_request" />
           </TabsContent>
           <TabsContent value="work_order">
-            <TaskTable tasks={tasks.filter(task => task.role === 'work_order' || task.role === 'owner_request')} />
+            <TaskTable tasks={tasks.filter(task => task.role === 'work_order' || task.role === 'owner_request')} currentTab="work_order" />
           </TabsContent>
           <TabsContent value="owner_request">
-            <TaskTable tasks={tasks.filter(task => task.role === 'owner_request')} />
+            <TaskTable tasks={tasks.filter(task => task.role === 'owner_request')} currentTab="owner_request" />
           </TabsContent>
         </Tabs>
       </CardContent>

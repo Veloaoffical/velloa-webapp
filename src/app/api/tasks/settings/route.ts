@@ -43,13 +43,20 @@ export const taskSettingsApi = {
       }
 
       const data = await response.json();
-      console.log('Fetched task data:', data);
+      console.log('Raw task data from API:', {
+        id: data.id,
+        role: data.role,
+        owner_id: data.owner_id,
+        property_id: data.property_id,
+        unit_id: data.unit_id
+      });
       
       const taskType = data.task_type || 'one_time';
       const isRecurring = taskType === 'recurring';
 
-      return {
+      const transformedData = {
         role: data.role || null,
+        owner_id: data.owner_id || null,
         basicInfo: {
           subject: data.subject || '',
           description: data.description || ''
@@ -77,6 +84,16 @@ export const taskSettingsApi = {
           notify_vendor: data.notify_vendor || false
         }
       };
+
+      console.log('Transformed task data:', {
+        id: id,
+        role: transformedData.role,
+        owner_id: transformedData.owner_id,
+        property_id: transformedData.location.property_id,
+        unit_id: transformedData.location.unit_id
+      });
+
+      return transformedData;
     } catch (error) {
       console.error('Unexpected error in fetchTaskData:', error);
       return null;

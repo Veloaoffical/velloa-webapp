@@ -79,7 +79,7 @@ function getPriorityClass(priority: string) {
   }
 }
 
-export function TaskTable({ tasks }: { tasks: Task[] }) {
+export function TaskTable({ tasks, currentTab }: { tasks: Task[], currentTab: string }) {
   const router = useRouter();
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(9);
@@ -130,7 +130,9 @@ export function TaskTable({ tasks }: { tasks: Task[] }) {
               </TableHead>
               <TableHead>Priority</TableHead>
               <TableHead>Assigned To</TableHead>
-              <TableHead>Vendor</TableHead>
+              {currentTab === 'work_order' && (
+                <TableHead>Vendor</TableHead>
+              )}
               <TableHead>Due/Frequency</TableHead>
               <TableHead>Related To</TableHead>
               <TableHead>Status</TableHead>
@@ -200,22 +202,24 @@ export function TaskTable({ tasks }: { tasks: Task[] }) {
                       <span className="text-muted-foreground">Unassigned</span>
                     }
                   </TableCell>
-                  <TableCell>
-                    {task.vendor ? (
-                      <div className="flex flex-col">
-                        <span>
-                          {`${task.vendor.first_name} ${task.vendor.last_name}`}
-                        </span>
-                        {task.vendor.company && (
-                          <span className="text-xs text-muted-foreground">
-                            {task.vendor.company}
+                  {currentTab === 'work_order' && (
+                    <TableCell>
+                      {task.vendor ? (
+                        <div className="flex flex-col">
+                          <span>
+                            {`${task.vendor.first_name} ${task.vendor.last_name}`}
                           </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">No vendor</span>
-                    )}
-                  </TableCell>
+                          {task.vendor.company && (
+                            <span className="text-xs text-muted-foreground">
+                              {task.vendor.company}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">No vendor</span>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell>
                     {task.due_date ? (
                       <DueDate date={task.due_date} />
@@ -230,7 +234,7 @@ export function TaskTable({ tasks }: { tasks: Task[] }) {
                         `${task.unit.unit_name}${task.property ? ` - ${task.property.name}` : ''}` :
                         task.property ? 
                           task.property.name :
-                          <span className="text-muted-foreground">No location</span>
+                          <span className="text-muted-foreground">No property</span>
                       }
                     </div>
                   </TableCell>

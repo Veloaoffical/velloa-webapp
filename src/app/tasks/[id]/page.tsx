@@ -28,6 +28,9 @@ interface Task {
   nano_id: string | null;
   property_id: string | null;
   unit_id: string | null;
+  owner_id: string | null;
+  tenant_id: string | null;
+  vendor_id: string | null;
   request_type: string | null;
   task_type: string | null;
   tenant: string | null;
@@ -44,7 +47,7 @@ interface Task {
       last_name: string;
     };
   } | null;
-  role: string;
+  role: 'task' | 'tenant_request' | 'work_order' | 'owner_request';
   permit_enter: boolean | null;
   permit_owner: boolean | null;
   Recurring_frequency?: string | null;
@@ -181,10 +184,13 @@ async function getTaskDetails(id: string): Promise<Task> {
     nano_id: task.nano_id,
     property_id: task.property_id,
     unit_id: task.unit_id,
+    tenant_id: task.tenant_id,
+    vendor_id: task.vendor_id,
     request_type: task.request_type,
     task_type: task.task_type,
     tenant: task.tenant,
     role: task.role,
+    owner_id: task.owner_id,
     property: task.property,
     unit: task.unit,
     assignee: task.company_members ? {

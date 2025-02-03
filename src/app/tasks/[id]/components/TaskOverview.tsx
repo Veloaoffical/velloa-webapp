@@ -10,7 +10,6 @@ import {
   AlarmClock,
   AlarmClockCheck,
   Users,
-  CheckSquare,
   Wrench,
   Repeat,
   DoorOpen,
@@ -18,7 +17,7 @@ import {
   Check
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -45,6 +44,9 @@ interface Task {
   request_type: string | null;
   task_type: string | null;
   tenant: string | null;
+  owner_id?: string | null;
+  tenant_id?: string | null;
+  vendor_id?: string | null;
   property?: {
     name: string;
   } | null;
@@ -58,7 +60,7 @@ interface Task {
       last_name: string;
     };
   } | null;
-  role: string;
+  role: 'task' | 'tenant_request' | 'work_order' | 'owner_request';
   Recurring_frequency?: string | null;
   start_date?: string | null;
   end_date?: string | null;
@@ -78,9 +80,30 @@ interface UpdateStatusForm {
   note: string;
 }
 
+interface OwnerData {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  company: string | null;
+}
+
+interface TenantData {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+}
+
+interface VendorData {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  company: string | null;
+}
+
 export function TaskOverview({ taskDetails, setActiveTab, onAddNote }: TaskOverviewProps) {
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showSuccessPage, setShowSuccessPage] = useState(false);
+  const [personName, setPersonName] = useState<string>('Loading...');
   const router = useRouter();
   const form = useForm<UpdateStatusForm>({
     defaultValues: {
@@ -88,6 +111,87 @@ export function TaskOverview({ taskDetails, setActiveTab, onAddNote }: TaskOverv
       note: ""
     }
   });
+
+  // Fetch owner, tenant, or vendor details based on role
+  useEffect(() => {
+    const fetchPersonDetails = async () => {
+      if (taskDetails.role === 'tenant_request') {
+        if (!taskDetails.tenant_id) {
+          setPersonName('No Tenant Set');
+          return;
+        }
+
+        try {
+          const response = await fetch('/api/people/tenants/search');
+          if (!response.ok) {
+            throw new Error('Failed to fetch tenant details');
+          }
+          const tenants = await response.json();
+          const tenant = tenants.find((t: TenantData) => t.id === taskDetails.tenant_id);
+          if (tenant) {
+            const displayName = [tenant.first_name, tenant.last_name].filter(Boolean).join(' ');
+            setPersonName(displayName || tenant.id);
+          } else {
+            setPersonName('Tenant not found');
+          }
+        } catch (error) {
+          console.error('Error fetching tenant details:', error);
+          setPersonName('Error loading tenant');
+        }
+      } else if (taskDetails.role === 'work_order') {
+        if (!taskDetails.vendor_id) {
+          setPersonName('No Vendor Set');
+          return;
+        }
+
+        try {
+          const response = await fetch('/api/people/vendor/search');
+          if (!response.ok) {
+            throw new Error('Failed to fetch vendor details');
+          }
+          const vendors = await response.json();
+          const vendor = vendors.find((v: VendorData) => v.id === taskDetails.vendor_id);
+          if (vendor) {
+            const personFullName = [vendor.first_name, vendor.last_name].filter(Boolean).join(' ');
+            const displayName = vendor.company 
+              ? `${vendor.company}${personFullName ? ` (${personFullName})` : ''}`
+              : personFullName || vendor.id;
+            setPersonName(displayName);
+          } else {
+            setPersonName('Vendor not found');
+          }
+        } catch (error) {
+          console.error('Error fetching vendor details:', error);
+          setPersonName('Error loading vendor');
+        }
+      } else {
+        if (!taskDetails.owner_id) {
+          setPersonName('Not Set');
+          return;
+        }
+
+        try {
+          const response = await fetch('/api/people/owner/search');
+          if (!response.ok) {
+            throw new Error('Failed to fetch owner details');
+          }
+          const owners = await response.json();
+          const owner = owners.find((o: OwnerData) => o.id === taskDetails.owner_id);
+          if (owner) {
+            const displayName = [owner.first_name, owner.last_name].filter(Boolean).join(' ');
+            setPersonName(displayName || owner.company || owner.id);
+          } else {
+            setPersonName('Owner not found');
+          }
+        } catch (error) {
+          console.error('Error fetching owner details:', error);
+          setPersonName('Error loading owner');
+        }
+      }
+    };
+
+    fetchPersonDetails();
+  }, [taskDetails.owner_id, taskDetails.tenant_id, taskDetails.vendor_id, taskDetails.role]);
 
   const handleNavigateToNotes = () => {
     if (onAddNote) {
@@ -170,10 +274,6 @@ export function TaskOverview({ taskDetails, setActiveTab, onAddNote }: TaskOverv
     }
   };
 
-  const getSubtasksIcon = () => {
-    return <CheckSquare className="h-6 w-6 mb-2 text-muted-foreground" />;
-  };
-
   const formatAssigneesNames = (assignee: { profile: { first_name: string; last_name: string; }; } | null | undefined) => {
     if (!assignee) return 'Not Assigned';
     return `${assignee.profile.first_name} ${assignee.profile.last_name}`;
@@ -250,9 +350,25 @@ export function TaskOverview({ taskDetails, setActiveTab, onAddNote }: TaskOverv
 
         <Card>
           <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            {getSubtasksIcon()}
-            <p className="text-sm text-muted-foreground">Subtasks</p>
-            <p className="font-medium">0 Complete</p>
+            {taskDetails.role === 'task' ? (
+              <>
+                <Repeat className="h-6 w-6 mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Type</p>
+                <p className="font-medium">
+                  {taskDetails.task_type === 'recurring' ? 'Recurring' : 'One Time'}
+                </p>
+              </>
+            ) : (
+              <>
+                <Users className="h-6 w-6 mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  {taskDetails.role === 'tenant_request' ? 'Tenant' : taskDetails.role === 'work_order' ? 'Vendor' : 'Owner'}
+                </p>
+                <p className="font-medium">
+                  {personName}
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -326,14 +442,16 @@ export function TaskOverview({ taskDetails, setActiveTab, onAddNote }: TaskOverv
       )}
 
       {/* Task Description */}
-      <Card>
-        <CardContent className="p-6">
-          <h2 className="font-semibold mb-4">Description</h2>
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-            {taskDetails.description || 'No description provided'}
-          </p>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-2 gap-4 pb-6">
+        <Card>
+          <CardContent className="p-6 min-h-[300px]">
+            <h2 className="font-semibold mb-4">Description</h2>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+              {taskDetails.description || 'No description provided'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Status Update Dialog */}
       <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>

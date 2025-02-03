@@ -109,6 +109,22 @@ interface Assignees {
   notify_vendor: boolean;
 }
 
+interface TaskData {
+  role: string;
+  owner_id: string | null;
+  basicInfo: {
+    subject: string | null;
+    description: string | null;
+  };
+  taskProperties: {
+    status: string;
+    priority: string;
+  };
+  scheduling: TaskScheduling;
+  location: Location;
+  assignees: Assignees;
+}
+
 const settings = [
   {
     id: 'basic-info',
@@ -195,7 +211,15 @@ export default function TaskSettingsPage({ params }: { params: Promise<{ id: str
   const fetchTaskData = useCallback(async () => {
     setIsDataLoading(true);
     try {
-      const data = await taskSettingsApi.fetchTaskData(id);
+      const data = await taskSettingsApi.fetchTaskData(id) as TaskData;
+      console.log('Task data received in settings page:', {
+        id: id,
+        role: data.role,
+        owner_id: data.owner_id,
+        property_id: data.location.property_id,
+        unit_id: data.location.unit_id
+      });
+      
       if (data) {
         setTaskRole(data.role);
         setBasicInfo(data.basicInfo);
@@ -203,6 +227,85 @@ export default function TaskSettingsPage({ params }: { params: Promise<{ id: str
         setScheduling(data.scheduling);
         setLocation(data.location);
         setAssignees(data.assignees);
+
+        // After we have the task data and role, fetch properties
+        try {
+          if (data.role === 'owner_request') {
+            // For owner requests, get the owner_id from the maintenance request
+            const ownerId = data.owner_id;
+            console.log('Owner request detected, using owner_id:', ownerId);
+            
+            if (!ownerId) {
+              console.log('No owner ID found for owner request');
+              setPropertyList([]);
+              return;
+            }
+
+            const ownerPropertiesResponse = await fetch(`/api/people/${ownerId}/properties`);
+            if (!ownerPropertiesResponse.ok) {
+              console.error('Failed to fetch owner properties:', await ownerPropertiesResponse.text());
+              throw new Error('Failed to fetch owner properties');
+            }
+            const ownerProperties = await ownerPropertiesResponse.json();
+            console.log('Owner properties response:', ownerProperties);
+            
+            // If data is an array of property_ids, fetch full property details
+            if (ownerProperties.length > 0) {
+              console.log('Found property IDs, fetching details for each property');
+              const propertyPromises = ownerProperties.map(async ({ property_id }: { property_id: string }) => {
+                console.log('Fetching details for property:', property_id);
+                const propertyResponse = await fetch(`/api/property/${property_id}/propertySettings`);
+                if (!propertyResponse.ok) {
+                  console.error('Failed to fetch property details:', property_id, await propertyResponse.text());
+                  return null;
+                }
+                const propertyData = await propertyResponse.json();
+                console.log('Property details received:', propertyData);
+                return {
+                  id: propertyData.id,
+                  name: propertyData.name,
+                  address: [
+                    propertyData.address_line_1,
+                    propertyData.address_line_2,
+                    [propertyData.city, propertyData.state, propertyData.zip].filter(Boolean).join(', ')
+                  ].filter(Boolean).join(', ')
+                };
+              });
+              
+              const propertyDetails = (await Promise.all(propertyPromises)).filter(Boolean);
+              console.log('All property details fetched:', propertyDetails);
+
+              // Sort the properties to put the selected property first
+              if (data.location.property_id) {
+                const sortedProperties = propertyDetails.sort((a, b) => {
+                  if (a.id === data.location.property_id) return -1;
+                  if (b.id === data.location.property_id) return 1;
+                  return 0;
+                });
+                setPropertyList(sortedProperties);
+              } else {
+                setPropertyList(propertyDetails);
+              }
+            } else {
+              console.log('No properties found for owner');
+              setPropertyList([]);
+            }
+          } else {
+            console.log('Not an owner request, fetching all company properties');
+            const response = await fetch('/api/property');
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error('Failed to fetch properties:', errorText);
+              throw new Error('Failed to fetch properties');
+            }
+            const data = await response.json();
+            console.log('All company properties:', data);
+            setPropertyList(data);
+          }
+        } catch (error) {
+          console.error('Error fetching properties:', error);
+          setPropertyList([]);
+        }
 
         if (data.location.property_id) {
           const unitsData = await taskSettingsApi.fetchUnits(data.location.property_id);
@@ -213,12 +316,6 @@ export default function TaskSettingsPage({ params }: { params: Promise<{ id: str
       setIsDataLoading(false);
     }
   }, [id]);
-
-  // Fetch properties
-  const fetchProperties = useCallback(async () => {
-    const data = await taskSettingsApi.fetchProperties();
-    setPropertyList(data);
-  }, []);
 
   // Fetch company members
   const fetchCompanyMembers = useCallback(async () => {
@@ -236,11 +333,10 @@ export default function TaskSettingsPage({ params }: { params: Promise<{ id: str
   useEffect(() => {
     if (id) {
       fetchTaskData();
-      fetchProperties();
       fetchCompanyMembers();
       fetchVendors();
     }
-  }, [id, fetchTaskData, fetchProperties, fetchCompanyMembers, fetchVendors]);
+  }, [id, fetchTaskData, fetchCompanyMembers, fetchVendors]);
 
   // Handle basic info update
   const handleBasicInfoUpdate = async () => {

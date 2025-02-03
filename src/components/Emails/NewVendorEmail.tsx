@@ -150,7 +150,7 @@ import {
               </Link>
             </Section>
   
-            <Link href="#" style={unsubscribeLink}>
+            <Link href="https://www.velloa.ca/unsubscribe" style={unsubscribeLink}>
               Unsubscribe from our emails
             </Link>
           </Container>

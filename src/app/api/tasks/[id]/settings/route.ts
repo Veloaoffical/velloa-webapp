@@ -30,6 +30,7 @@ interface MaintenanceRequest {
   repeat_infinite: boolean | null;
   notify_vendor: boolean | null;
   vendor_id: string | null;
+  owner_id: string | null;
 }
 
 type Params = { id: string }
@@ -87,6 +88,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    console.log('Fetching task data for ID:', (await params).id);
+
     const { data, error } = await supabase
       .from('maintenance_requests')
       .select(`
@@ -117,7 +120,8 @@ export async function GET(
         created_at,
         updated_at,
         created_by,
-        nano_id
+        nano_id,
+        owner_id
       `)
       .eq('id', (await params).id)
       .single();
@@ -130,6 +134,14 @@ export async function GET(
     if (!data) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
+
+    console.log('Task data retrieved:', {
+      id: data.id,
+      role: data.role,
+      owner_id: data.owner_id,
+      property_id: data.property_id,
+      unit_id: data.unit_id
+    });
 
     return NextResponse.json(data);
   } catch (error) {

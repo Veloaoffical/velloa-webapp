@@ -74,7 +74,7 @@ import {
             <Section style={downloadSection}>
               <Text style={downloadTitle}>Get our mobile app</Text>
               <Text style={downloadText}>
-                Complete your application on the go and track your rental journey from anywhere
+              Pay your rent, submit maintenance requests, and manage your tenancy easily with our mobile app
               </Text>
               
               <Section style={storeButtons}>
@@ -149,7 +149,7 @@ import {
               </Link>
             </Section>
   
-            <Link href="#" style={unsubscribeLink}>
+            <Link href="https://www.velloa.ca/unsubscribe" style={unsubscribeLink}>
               Unsubscribe from our emails
             </Link>
           </Container>

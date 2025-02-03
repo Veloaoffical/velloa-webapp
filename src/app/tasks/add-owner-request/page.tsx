@@ -42,6 +42,8 @@ interface TenantRequestForm {
   dueDate?: Date;
   assignedTo: string;
   ownerId: string;
+  propertyId: string;
+  unitId: string;
   notify: boolean;
   notifyOwner: boolean;
   permissionToEnter: boolean;
@@ -52,6 +54,17 @@ interface UploadingFile {
   file: File;
   progress: number;
   error?: string;
+}
+
+interface Unit {
+  id: string;
+  unit_name: string;
+  tenant?: string;
+  beds?: number;
+  baths?: number;
+  market_rent?: number;
+  size?: string;
+  status?: string;
 }
 
 export default function AddOwnerRequestPage() {
@@ -68,6 +81,8 @@ export default function AddOwnerRequestPage() {
     requestType: '',
     assignedTo: '',
     ownerId: '',
+    propertyId: '',
+    unitId: '',
     notify: true,
     notifyOwner: true,
     permissionToEnter: false,
@@ -78,6 +93,10 @@ export default function AddOwnerRequestPage() {
   const [ownerOpen, setOwnerOpen] = useState(false);
   const [companyMembers, setCompanyMembers] = useState<{ id: string; first_name: string; last_name: string; }[]>([]);
   const [assigneeOpen, setAssigneeOpen] = useState(false);
+  const [properties, setProperties] = useState<{ id: string; name: string; }[]>([]);
+  const [propertyOpen, setPropertyOpen] = useState(false);
+  const [units, setUnits] = useState<{ id: string; unit_name: string; }[]>([]);
+  const [unitOpen, setUnitOpen] = useState(false);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     // Initialize uploading files state
@@ -218,6 +237,86 @@ export default function AddOwnerRequestPage() {
     fetchCompanyMembers();
   }, []);
 
+  // Add useEffect to fetch owner's properties
+  useEffect(() => {
+    const fetchOwnerProperties = async () => {
+      if (!request.ownerId) {
+        console.log('No owner ID selected, clearing properties');
+        setProperties([]);
+        setUnits([]);
+        return;
+      }
+
+      try {
+        console.log('Fetching properties for owner:', request.ownerId);
+        const response = await fetch(`/api/people/${request.ownerId}/properties`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch owner properties');
+        }
+        const data = await response.json();
+        console.log('Owner properties response:', data);
+        
+        // If data is an array of property_ids, fetch full property details
+        if (data.length > 0) {
+          console.log('Found property IDs, fetching details for each property');
+          const propertyPromises = data.map(async ({ property_id }: { property_id: string }) => {
+            console.log('Fetching details for property:', property_id);
+            const propertyResponse = await fetch(`/api/property/${property_id}/propertySettings`);
+            if (!propertyResponse.ok) {
+              console.error('Failed to fetch property details:', property_id, await propertyResponse.text());
+              throw new Error('Failed to fetch property details');
+            }
+            const propertyData = await propertyResponse.json();
+            console.log('Property details received:', propertyData);
+            return {
+              id: propertyData.id,
+              name: propertyData.name
+            };
+          });
+          
+          const propertyDetails = await Promise.all(propertyPromises);
+          console.log('All property details fetched:', propertyDetails);
+          setProperties(propertyDetails);
+        } else {
+          console.log('No properties found for owner');
+          setProperties([]);
+        }
+      } catch (error) {
+        console.error('Error fetching owner properties:', error);
+        toast.error('Failed to load properties');
+      }
+    };
+
+    fetchOwnerProperties();
+  }, [request.ownerId]);
+
+  // Add useEffect to fetch property units
+  useEffect(() => {
+    const fetchPropertyUnits = async () => {
+      if (!request.propertyId) {
+        setUnits([]);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/property/${request.propertyId}/units`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch property units');
+        }
+        const data = await response.json();
+        setUnits(data.map((unit: Unit) => ({
+          id: unit.id,
+          unit_name: unit.unit_name
+        })));
+      } catch (error) {
+        console.error('Error fetching property units:', error);
+        toast.error('Failed to load units');
+      }
+    };
+
+    fetchPropertyUnits();
+  }, [request.propertyId]);
+
   const handleSubmit = async () => {
     try {
       const requestData = {
@@ -232,6 +331,8 @@ export default function AddOwnerRequestPage() {
         due_date: request.dueDate,
         assignees: request.assignedTo || null,
         owner_id: request.ownerId || null,
+        property_id: request.propertyId || null,
+        unit_id: request.unitId || null,
         notify_assignee: request.notify,
         notify_owner: request.notifyOwner || false,
         permit_enter: request.permissionToEnter || false,
@@ -360,6 +461,8 @@ export default function AddOwnerRequestPage() {
                             setRequest(prev => ({
                               ...prev,
                               ownerId: newOwnerId,
+                              propertyId: '', // Reset property when owner changes
+                              unitId: '', // Reset unit when owner changes
                             }));
                             setOwnerOpen(false);
                           }}
@@ -382,6 +485,129 @@ export default function AddOwnerRequestPage() {
             </Popover>
           </div>
 
+          <div className="grid gap-2">
+            <Label htmlFor="propertyId">Property <span className="text-red-500">*</span></Label>
+            <Popover open={propertyOpen} onOpenChange={setPropertyOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  id="propertyId"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={propertyOpen}
+                  className="w-full h-[42px] justify-between bg-background px-3 font-normal outline-offset-0 hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                  disabled={!request.ownerId}
+                >
+                  <span className={cn("truncate", !request.propertyId && "text-muted-foreground")}>
+                    {request.propertyId
+                      ? properties.find(property => property.id === request.propertyId)?.name || "Select property"
+                      : "Select property"}
+                  </span>
+                  <ChevronDown
+                    size={16}
+                    strokeWidth={2}
+                    className="shrink-0 text-muted-foreground/80"
+                    aria-hidden="true"
+                  />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-full min-w-[var(--radix-popper-anchor-width)] border-input p-0"
+                align="start"
+              >
+                <Command>
+                  <CommandInput placeholder="Search properties..." />
+                  <CommandList>
+                    <CommandEmpty>No properties found.</CommandEmpty>
+                    <CommandGroup>
+                      {properties.map((property) => (
+                        <CommandItem
+                          key={property.id}
+                          value={property.id}
+                          onSelect={(currentValue) => {
+                            const newPropertyId = currentValue === request.propertyId ? "" : currentValue;
+                            setRequest(prev => ({
+                              ...prev,
+                              propertyId: newPropertyId,
+                              unitId: '', // Reset unit when property changes
+                            }));
+                            setPropertyOpen(false);
+                          }}
+                        >
+                          {property.name}
+                          {request.propertyId === property.id && (
+                            <Check size={16} strokeWidth={2} className="ml-auto" />
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="unitId">Unit</Label>
+            <Popover open={unitOpen} onOpenChange={setUnitOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  id="unitId"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={unitOpen}
+                  className="w-full h-[42px] justify-between bg-background px-3 font-normal outline-offset-0 hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                  disabled={!request.propertyId}
+                >
+                  <span className={cn("truncate", !request.unitId && "text-muted-foreground")}>
+                    {request.unitId
+                      ? units.find(unit => unit.id === request.unitId)?.unit_name || "Select unit"
+                      : "Select unit"}
+                  </span>
+                  <ChevronDown
+                    size={16}
+                    strokeWidth={2}
+                    className="shrink-0 text-muted-foreground/80"
+                    aria-hidden="true"
+                  />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-full min-w-[var(--radix-popper-anchor-width)] border-input p-0"
+                align="start"
+              >
+                <Command>
+                  <CommandInput placeholder="Search units..." />
+                  <CommandList>
+                    <CommandEmpty>No units found.</CommandEmpty>
+                    <CommandGroup>
+                      {units.map((unit) => (
+                        <CommandItem
+                          key={unit.id}
+                          value={unit.id}
+                          onSelect={(currentValue) => {
+                            const newUnitId = currentValue === request.unitId ? "" : currentValue;
+                            setRequest(prev => ({
+                              ...prev,
+                              unitId: newUnitId,
+                            }));
+                            setUnitOpen(false);
+                          }}
+                        >
+                          {unit.unit_name}
+                          {request.unitId === unit.id && (
+                            <Check size={16} strokeWidth={2} className="ml-auto" />
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4">
           <div className="grid gap-2">
             <Label htmlFor="requestType">Request Type <span className="text-red-500">*</span></Label>
             <Select
@@ -423,9 +649,7 @@ export default function AddOwnerRequestPage() {
               </SelectContent>
             </Select>
           </div>
-        </div>
 
-        <div className="grid grid-cols-3 gap-4">
           <div className="grid gap-2">
             <Label htmlFor="status">Status <span className="text-red-500">*</span></Label>
             <Select
@@ -816,7 +1040,7 @@ export default function AddOwnerRequestPage() {
               if (step === 'intro') {
                 setStep('details');
               } else if (step === 'details') {
-                if (!request.title || !request.ownerId || !request.requestType) {
+                if (!request.title || !request.ownerId || !request.requestType || !request.propertyId) {
                   toast.error('Please fill in all required fields');
                   return;
                 }

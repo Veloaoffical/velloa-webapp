@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import CalendarWithTimeInput from "@/components/calendarwithtimeinput"
 import { Card, CardContent } from "@/components/ui/card"
 import React from "react"
+import { generateId } from "@/lib/utils/generate-id"
 
 interface CalendarEvent {
   id: string
@@ -21,7 +22,11 @@ interface CalendarEvent {
 }
 
 export default function CalendarPage() {
-  const [date, setDate] = useState<Date>(new Date())
+  const [date, setDate] = useState<Date>(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  })
   const [view, setView] = useState<"month" | "week" | "day" | "year">("month")
   const [showEventDialog, setShowEventDialog] = useState(false)
   const [events, setEvents] = useState<CalendarEvent[]>([])
@@ -29,14 +34,14 @@ export default function CalendarPage() {
     title: "",
     description: "",
     allDay: false,
-    start: new Date(),
-    end: new Date()
+    start: new Date(date),
+    end: new Date(date)
   })
 
   const handleAddEvent = () => {
     if (newEvent.title && newEvent.start && newEvent.end) {
       const event: CalendarEvent = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         title: newEvent.title,
         description: newEvent.description || "",
         start: newEvent.start,
@@ -49,8 +54,8 @@ export default function CalendarPage() {
         title: "",
         description: "",
         allDay: false,
-        start: new Date(),
-        end: new Date()
+        start: new Date(date),
+        end: new Date(date)
       })
     }
   }
@@ -61,9 +66,7 @@ export default function CalendarPage() {
 
   return (
     <main className="flex flex-col h-screen p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-4xl font-bold tracking-tight">Calendar</h1>
-      </div>
+
 
       <Card className="flex-1">
         <CardContent className="p-6 h-full">

@@ -24,3 +24,10 @@ export function generateCustomId(length: number = 8, seed?: string): string {
   const nanoid = customAlphabet(alphabet, length)
   return nanoid()
 }
+
+let counter = 0;
+
+export const generateId = (prefix: string = 'id') => {
+  counter += 1;
+  return `${prefix}_${counter}_${Date.now().toString(36)}`;
+};

@@ -1,6 +1,25 @@
 import { createClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
 
+interface PropertyOwner {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  ownership_percentage?: number;
+}
+
+interface PropertySettings {
+  id: string;
+  owners: PropertyOwner[] | null;
+}
+
+interface Property {
+  id: string;
+  name: string;
+  property_settings: PropertySettings | null;
+}
+
 export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   try {
@@ -19,38 +38,68 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       );
     }
 
-    // Get the vendor's service_address to check property assignments
-    const { data: person, error: personError } = await supabase
-      .from('people')
-      .select('service_address')
-      .eq('id', params.id)
+    // Get the company ID for the authenticated user
+    const { data: companyMember, error: companyError } = await supabase
+      .from('company_members')
+      .select('company_id')
+      .eq('id', user.id)
       .single();
 
-    if (personError) {
-      console.error('Error fetching person:', personError);
+    if (companyError) {
+      console.error('Error fetching company member:', companyError);
       return NextResponse.json(
-        { error: 'Failed to fetch person details', details: personError.message },
+        { error: 'Failed to fetch company details', details: companyError.message },
         { status: 500 }
       );
     }
 
-    // Parse service_address
-    const serviceAddress = person.service_address ? 
-      (typeof person.service_address === 'string' ? JSON.parse(person.service_address) : person.service_address) 
-      : {};
+    // First get all property settings that have this owner
+    const { data: propertySettings, error: settingsError } = await supabase
+      .from('property_settings')
+      .select('id, owners');
 
-    // If access type is 'all', return empty array (frontend will handle this case)
-    if (serviceAddress.type === 'all') {
+    if (settingsError) {
+      console.error('Error fetching property settings:', settingsError);
+      return NextResponse.json(
+        { error: 'Failed to fetch property settings', details: settingsError.message },
+        { status: 500 }
+      );
+    }
+
+    // Filter property settings to find ones where this person is an owner
+    const settingsWithOwner = propertySettings.filter(settings => {
+      const owners = settings.owners;
+      if (!owners) return false;
+      
+      // Parse owners if it's a string
+      const ownersArray = typeof owners === 'string' ? JSON.parse(owners) : owners;
+      
+      // Check if the owner ID exists in the owners array
+      return Array.isArray(ownersArray) && ownersArray.some(owner => owner.id === params.id);
+    });
+
+    if (settingsWithOwner.length === 0) {
       return NextResponse.json([]);
     }
 
-    // If no property_ids or not specific access, return empty array
-    if (serviceAddress.type !== 'specific' || !serviceAddress.property_ids?.length) {
-      return NextResponse.json([]);
+    // Now get the properties that use these settings
+    const { data: properties, error: propertiesError } = await supabase
+      .from('properties')
+      .select('id, name')
+      .eq('company_id', companyMember.company_id)
+      .in('property_settings', settingsWithOwner.map(s => s.id));
+
+    if (propertiesError) {
+      console.error('Error fetching properties:', propertiesError);
+      return NextResponse.json(
+        { error: 'Failed to fetch properties', details: propertiesError.message },
+        { status: 500 }
+      );
     }
 
-    // Return the array of property IDs
-    return NextResponse.json(serviceAddress.property_ids.map((id: string) => ({ property_id: id })));
+    console.log('Found properties for owner:', properties);
+
+    return NextResponse.json(properties.map(property => ({ property_id: property.id })));
   } catch (error) {
     console.error('Error in properties route:', error);
     return NextResponse.json(

@@ -27,6 +27,18 @@ interface CustomCalendarProps {
   className?: string
 }
 
+// Create a stable formatter that will be consistent between server and client
+const formatDate = (date: Date | number, formatStr: string) => {
+  try {
+    // If date is a number (from setHours), convert it to Date
+    const dateObj = typeof date === 'number' ? new Date(date) : date
+    return format(dateObj, formatStr, { weekStartsOn: 0 })
+  } catch (error) {
+    console.error('Date formatting error:', error)
+    return ''
+  }
+}
+
 export function CustomCalendar({
   mode = "month",
   events = [],
@@ -36,25 +48,39 @@ export function CustomCalendar({
   onViewChange,
   className,
 }: CustomCalendarProps) {
-  const [currentDate, setCurrentDate] = React.useState(selectedDate)
+  const [currentDate, setCurrentDate] = React.useState(() => {
+    const d = new Date(selectedDate)
+    d.setHours(0, 0, 0, 0)
+    return d
+  })
   const [currentMode, setCurrentMode] = React.useState(mode)
-  const [now, setNow] = React.useState(new Date())
+  const [now, setNow] = React.useState(() => {
+    const d = new Date()
+    d.setMilliseconds(0)
+    return d
+  })
 
-  React.useEffect(() => {
-    setCurrentDate(selectedDate)
-  }, [selectedDate])
-
-  React.useEffect(() => {
-    setCurrentMode(mode)
-  }, [mode])
-
-  // Update current time every minute
+  // Update current time on client-side only
   React.useEffect(() => {
     const timer = setInterval(() => {
-      setNow(new Date())
+      const d = new Date()
+      d.setMilliseconds(0)
+      setNow(d)
     }, 60000)
     return () => clearInterval(timer)
   }, [])
+
+  // Update currentDate when selectedDate prop changes
+  React.useEffect(() => {
+    const d = new Date(selectedDate)
+    d.setHours(0, 0, 0, 0)
+    setCurrentDate(d)
+  }, [selectedDate])
+
+  // Update mode when prop changes
+  React.useEffect(() => {
+    setCurrentMode(mode)
+  }, [mode])
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
@@ -110,7 +136,7 @@ export function CustomCalendar({
               onViewChange?.("month")
             }}
           >
-            {format(monthDate, "MMMM")}
+            {formatDate(monthDate, "MMMM")}
           </div>
           <div className="grid grid-cols-7 gap-px">
             {dayHeaders.map((day) => (
@@ -125,7 +151,7 @@ export function CustomCalendar({
               <React.Fragment key={weekIndex}>
                 {week.map((day: Date, dayIndex: number) => {
                   const hasEvents = monthEvents.some(event => 
-                    isEqual(parseISO(format(event.start, 'yyyy-MM-dd')), parseISO(format(day, 'yyyy-MM-dd')))
+                    isEqual(parseISO(formatDate(event.start, 'yyyy-MM-dd')), parseISO(formatDate(day, 'yyyy-MM-dd')))
                   )
 
                   return (
@@ -145,7 +171,7 @@ export function CustomCalendar({
                         onViewChange?.("day")
                       }}
                     >
-                      {format(day, "d")}
+                      {formatDate(day, "d")}
                     </div>
                   )
                 })}
@@ -159,7 +185,7 @@ export function CustomCalendar({
     return (
       <div className="h-full flex flex-col">
         <div className="text-3xl font-bold flex items-baseline gap-3 px-4">
-          <span>{format(currentDate, "yyyy")}</span>
+          <span className="text-muted-foreground">{formatDate(currentDate, "yyyy")}</span>
         </div>
         <ScrollArea className="flex-1 mt-4">
           <div className="grid grid-cols-4 gap-2 p-4">
@@ -186,8 +212,8 @@ export function CustomCalendar({
     return (
       <div className="h-full flex flex-col">
         <div className="text-3xl font-bold flex items-baseline gap-3 shrink-0">
-          <span>{format(currentDate, "MMMM")}</span>
-          <span className="text-muted-foreground">{format(currentDate, "yyyy")}</span>
+          <span>{formatDate(currentDate, "MMMM")}</span>
+          <span className="text-muted-foreground">{formatDate(currentDate, "yyyy")}</span>
         </div>
         <div className="grid grid-cols-7 text-sm mt-6 shrink-0">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
@@ -201,7 +227,7 @@ export function CustomCalendar({
             <div key={weekIndex} className="grid grid-cols-7 h-full">
               {week.map((day: Date, dayIndex: number) => {
                 const dayEvents = events.filter(event => 
-                  isEqual(parseISO(format(event.start, 'yyyy-MM-dd')), parseISO(format(day, 'yyyy-MM-dd')))
+                  isEqual(parseISO(formatDate(event.start, 'yyyy-MM-dd')), parseISO(formatDate(day, 'yyyy-MM-dd')))
                 )
 
                 return (
@@ -222,7 +248,7 @@ export function CustomCalendar({
                       isToday(day) && "bg-primary text-primary-foreground",
                       isEqual(day, selectedDate) && isSameMonth(day, currentDate) && !isToday(day) && "text-primary font-bold"
                     )}>
-                      {format(day, "d")}
+                      {formatDate(day, "d")}
                     </span>
                     <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
                       {dayEvents.map((event) => (
@@ -256,7 +282,7 @@ export function CustomCalendar({
 
     // Get month display text
     const monthCounts = days.reduce((acc, day) => {
-      const month = format(day, "MMMM")
+      const month = formatDate(day, "MMMM")
       acc[month] = (acc[month] || 0) + 1
       return acc
     }, {} as Record<string, number>)
@@ -265,12 +291,13 @@ export function CustomCalendar({
       (a[1] > b[1] ? a : b)
     )[0]
     
-    const monthDisplay = `${dominantMonth} ${format(days[0], "yyyy")}`
+    const monthDisplay = dominantMonth
 
     return (
       <div className="space-y-4">
         <div className="text-3xl font-bold flex items-baseline gap-3">
           <span>{monthDisplay}</span>
+          <span className="text-muted-foreground">{formatDate(currentDate, "yyyy")}</span>
         </div>
         <div className="flex flex-col h-[730px]">
           <div className="grid grid-cols-8 border-b">
@@ -283,12 +310,12 @@ export function CustomCalendar({
                   isEqual(day, selectedDate) && "text-primary"
                 )}
               >
-                <div className="text-muted-foreground text-sm">{format(day, "EEE")}</div>
+                <div className="text-muted-foreground text-sm">{formatDate(day, "EEE")}</div>
                 <div className={cn(
                   "inline-flex items-center justify-center",
                   isToday(day) && "bg-primary text-primary-foreground rounded-full w-6 h-6"
                 )}>
-                  {format(day, "d")}
+                  {formatDate(day, "d")}
                 </div>
               </div>
             ))}
@@ -298,11 +325,11 @@ export function CustomCalendar({
               {timeSlots.map((hour) => (
                 <React.Fragment key={hour}>
                   <div className="h-14 text-sm text-muted-foreground p-2 text-right border-r relative">
-                    {format(new Date().setHours(hour), "h a")}
+                    {formatDate(new Date().setHours(hour), "h a")}
                   </div>
                   {days.map((day) => {
                     const dayEvents = events.filter(event => 
-                      isEqual(parseISO(format(event.start, 'yyyy-MM-dd')), parseISO(format(day, 'yyyy-MM-dd'))) &&
+                      isEqual(parseISO(formatDate(event.start, 'yyyy-MM-dd')), parseISO(formatDate(day, 'yyyy-MM-dd'))) &&
                       new Date(event.start).getHours() === hour
                     )
 
@@ -333,7 +360,7 @@ export function CustomCalendar({
                   >
                     <div className="flex items-center pl-2">
                       <div className="w-16 h-6 rounded-full bg-primary flex items-center justify-center">
-                        <div className="text-primary-foreground text-xs font-medium">{format(now, "h:mm a")}</div>
+                        <div className="text-primary-foreground text-xs font-medium">{formatDate(now, "h:mm a")}</div>
                       </div>
                     </div>
                     <div className="flex-1 h-px bg-primary" />
@@ -356,11 +383,11 @@ export function CustomCalendar({
       <div className="space-y-4">
         <div className="text-3xl font-bold flex flex-col">
           <div className="flex items-baseline gap-3">
-            <span>{format(currentDate, "MMMM d,")}</span>
-            <span className="text-muted-foreground">{format(currentDate, "yyyy")}</span>
+            <span>{formatDate(currentDate, "MMMM d,")}</span>
+            <span className="text-muted-foreground">{formatDate(currentDate, "yyyy")}</span>
           </div>
           <div className="text-xl text-muted-foreground font-normal">
-            {format(currentDate, "EEEE")}
+            {formatDate(currentDate, "EEEE")}
           </div>
         </div>
         <div className="grid grid-cols-[1fr_300px] gap-4">
@@ -372,14 +399,14 @@ export function CustomCalendar({
               <div className="grid grid-cols-[100px_1fr] relative">
                 {timeSlots.map((hour) => {
                   const hourEvents = events.filter(event => 
-                    isEqual(parseISO(format(event.start, 'yyyy-MM-dd')), parseISO(format(currentDate, 'yyyy-MM-dd'))) &&
+                    isEqual(parseISO(formatDate(event.start, 'yyyy-MM-dd')), parseISO(formatDate(currentDate, 'yyyy-MM-dd'))) &&
                     new Date(event.start).getHours() === hour
                   )
 
                   return (
                     <React.Fragment key={hour}>
                       <div className="h-14 text-sm text-muted-foreground p-2 text-right border-r">
-                        {hour === 12 ? "Noon" : format(new Date().setHours(hour), "h a")}
+                        {hour === 12 ? "Noon" : formatDate(new Date().setHours(hour), "h a")}
                       </div>
                       <div className="h-14 border-b relative">
                         {hourEvents.map((event) => (
@@ -403,7 +430,7 @@ export function CustomCalendar({
                     >
                       <div className="flex items-center pl-2">
                         <div className="w-16 h-6 rounded-full bg-primary flex items-center justify-center">
-                          <div className="text-primary-foreground text-xs font-medium">{format(now, "h:mm a")}</div>
+                          <div className="text-primary-foreground text-xs font-medium">{formatDate(now, "h:mm a")}</div>
                         </div>
                       </div>
                       <div className="flex-1 h-px bg-primary" />
@@ -438,7 +465,7 @@ export function CustomCalendar({
                     onDateSelect?.(day)
                   }}
                 >
-                  {format(day, "d")}
+                  {formatDate(day, "d")}
                 </div>
               ))}
             </div>

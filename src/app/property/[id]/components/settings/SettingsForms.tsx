@@ -46,7 +46,7 @@ import {
   RiLeafLine,
   RiSunLine,
 } from "@remixicon/react"
-import { Baby, GlassWater, Building2, Home, Store, Building, Archive, HelpCircle, Building as Building4, Home as HomeSmile, X, CircleCheck, Ban, Dog, Dumbbell, Cat, Rabbit, UploadCloud, ImageIcon, Users } from "lucide-react"
+import { Baby, GlassWater, Building2, Home, Store, Building, Archive, HelpCircle, Building as Building4, Home as HomeSmile, X, CircleCheck, Ban, Dog, Dumbbell, Cat, Rabbit, UploadCloud, ImageIcon, Users, CircleDollarSign } from "lucide-react"
 
 import Image from "next/image"
 import { cn } from "@/lib/utils"
@@ -62,6 +62,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Check, ChevronDown } from "lucide-react"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { LateFeeContent } from "@/components/settingscomponents/LateFee"
 
 interface GeneralInfoForm {
   name: string
@@ -160,6 +162,34 @@ interface UploadingFile {
 interface FormElement extends HTMLDivElement {
   __showAddOwnerDialog?: (show: boolean) => void;
   __showUploadDialog?: (show: boolean) => void;
+}
+
+interface LateFeeFormProps {
+  enabled?: boolean;
+}
+
+interface LateFee {
+  type: string;
+  amount: number;
+  frequency: string;
+  gracePeriod?: number;
+  revenueAccount: string;
+  description?: string;
+}
+
+interface LateFeeSettings {
+  isEnabled: boolean;
+  lateFees: LateFee[];
+  maxDailyFeesEnabled: boolean;
+  maxMonthlyFeesEnabled: boolean;
+  minBalanceEnabled: boolean;
+  applyToMostRecentEnabled: boolean;
+  applyToSpecificEnabled: boolean;
+  maxDailyAmount: string;
+  maxMonthlyAmount: string;
+  minBalanceAmount: string;
+  selectedChargeTypes: string;
+  useCompanyPolicy: boolean;
 }
 
 export function GeneralInfoForm() {
@@ -1572,6 +1602,240 @@ export function OwnersForm() {
           />
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+export function LateFeeForm({ enabled = true }: LateFeeFormProps) {
+  const paramsPromise = useParams();
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [policyType, setPolicyType] = React.useState<'company' | 'custom'>('company');
+  const [lateFees, setLateFees] = React.useState<LateFee[]>([]);
+  const [maxDailyFeesEnabled, setMaxDailyFeesEnabled] = React.useState(false);
+  const [maxMonthlyFeesEnabled, setMaxMonthlyFeesEnabled] = React.useState(false);
+  const [minBalanceEnabled, setMinBalanceEnabled] = React.useState(false);
+  const [applyToMostRecentEnabled, setApplyToMostRecentEnabled] = React.useState(false);
+  const [applyToSpecificEnabled, setApplyToSpecificEnabled] = React.useState(false);
+  const [maxDailyAmount, setMaxDailyAmount] = React.useState("");
+  const [maxMonthlyAmount, setMaxMonthlyAmount] = React.useState("");
+  const [minBalanceAmount, setMinBalanceAmount] = React.useState("");
+  const [selectedChargeTypes, setSelectedChargeTypes] = React.useState("");
+
+  React.useEffect(() => {
+    async function fetchData() {
+      try {
+        setIsLoading(true);
+        const params = await paramsPromise;
+        const response = await fetch(`/api/property/${params.id}/late-fees`);
+        
+        if (!response.ok) {
+          throw new Error("Failed to fetch late fee settings");
+        }
+
+        const data = await response.json();
+        if (data.late_fees) {
+          const settings = data.late_fees;
+          setLateFees(settings.lateFees || []);
+          setMaxDailyFeesEnabled(settings.maxDailyFeesEnabled || false);
+          setMaxMonthlyFeesEnabled(settings.maxMonthlyFeesEnabled || false);
+          setMinBalanceEnabled(settings.minBalanceEnabled || false);
+          setApplyToMostRecentEnabled(settings.applyToMostRecentEnabled || false);
+          setApplyToSpecificEnabled(settings.applyToSpecificEnabled || false);
+          setMaxDailyAmount(settings.maxDailyAmount || "");
+          setMaxMonthlyAmount(settings.maxMonthlyAmount || "");
+          setMinBalanceAmount(settings.minBalanceAmount || "");
+          setSelectedChargeTypes(settings.selectedChargeTypes || "");
+          setPolicyType(settings.useCompanyPolicy ? 'company' : 'custom');
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load late fee settings");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [paramsPromise]);
+
+  const handleSettingsChange = async (settings: Partial<LateFeeSettings>) => {
+    try {
+      setIsLoading(true);
+      const params = await paramsPromise;
+
+      // Update local state with new settings
+      Object.entries(settings).forEach(([key, value]) => {
+        switch(key) {
+          case 'lateFees':
+            setLateFees(value as LateFee[]);
+            break;
+          case 'maxDailyFeesEnabled':
+            setMaxDailyFeesEnabled(value as boolean);
+            break;
+          case 'maxMonthlyFeesEnabled':
+            setMaxMonthlyFeesEnabled(value as boolean);
+            break;
+          case 'minBalanceEnabled':
+            setMinBalanceEnabled(value as boolean);
+            break;
+          case 'applyToMostRecentEnabled':
+            setApplyToMostRecentEnabled(value as boolean);
+            break;
+          case 'applyToSpecificEnabled':
+            setApplyToSpecificEnabled(value as boolean);
+            break;
+          case 'maxDailyAmount':
+            setMaxDailyAmount(value as string);
+            break;
+          case 'maxMonthlyAmount':
+            setMaxMonthlyAmount(value as string);
+            break;
+          case 'minBalanceAmount':
+            setMinBalanceAmount(value as string);
+            break;
+          case 'selectedChargeTypes':
+            setSelectedChargeTypes(value as string);
+            break;
+        }
+      });
+
+      const updatedSettings = {
+        isEnabled: enabled,
+        lateFees,
+        maxDailyFeesEnabled,
+        maxMonthlyFeesEnabled,
+        minBalanceEnabled,
+        applyToMostRecentEnabled,
+        applyToSpecificEnabled,
+        maxDailyAmount,
+        maxMonthlyAmount,
+        minBalanceAmount,
+        selectedChargeTypes,
+        useCompanyPolicy: policyType === 'company'
+      };
+
+      const response = await fetch(`/api/property/${params.id}/late-fees`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          late_fees: updatedSettings
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update late fee settings");
+      }
+
+      toast.success("Late fee settings updated successfully");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update late fee settings");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePolicyTypeChange = async (value: 'company' | 'custom') => {
+    setPolicyType(value);
+    try {
+      setIsLoading(true);
+      const params = await paramsPromise;
+      const response = await fetch(`/api/property/${params.id}/late-fees`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          late_fees: {
+            useCompanyPolicy: value === 'company'
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update late fee policy type");
+      }
+
+      toast.success("Late fee policy type updated successfully");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update late fee policy type");
+      // Revert the policy type if save failed
+      setPolicyType(value === 'company' ? 'custom' : 'company');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className={cn(
+      "flex flex-col items-center justify-center w-full",
+      !enabled && "opacity-50 pointer-events-none"
+    )}>
+      {enabled && (
+        <>
+          <RadioGroup 
+            className="grid grid-cols-2 gap-4 max-w-xl w-full" 
+            value={policyType}
+            onValueChange={handlePolicyTypeChange}
+            disabled={!enabled || isLoading}
+          >
+            <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-6 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+              <RadioGroupItem 
+                value="company" 
+                id="late-fees-company" 
+                className="sr-only after:absolute after:inset-0" 
+                disabled={!enabled || isLoading}
+              />
+              <CircleCheck className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium leading-none">Use Company Policy</p>
+                <p className="text-xs text-muted-foreground">Use company late fees policy</p>
+              </div>
+            </label>
+
+            <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-6 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+              <RadioGroupItem 
+                value="custom" 
+                id="late-fees-custom" 
+                className="sr-only after:absolute after:inset-0" 
+                disabled={!enabled || isLoading}
+              />
+              <CircleDollarSign className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium leading-none">Custom Policy</p>
+                <p className="text-xs text-muted-foreground">Specify a custom policy for this property</p>
+              </div>
+            </label>
+          </RadioGroup>
+
+          <div className="w-full mt-8">
+            {policyType === 'custom' ? (
+              <LateFeeContent 
+                isEnabled={enabled && !isLoading}
+                lateFees={lateFees}
+                maxDailyFeesEnabled={maxDailyFeesEnabled}
+                maxMonthlyFeesEnabled={maxMonthlyFeesEnabled}
+                minBalanceEnabled={minBalanceEnabled}
+                applyToMostRecentEnabled={applyToMostRecentEnabled}
+                applyToSpecificEnabled={applyToSpecificEnabled}
+                maxDailyAmount={maxDailyAmount}
+                maxMonthlyAmount={maxMonthlyAmount}
+                minBalanceAmount={minBalanceAmount}
+                selectedChargeTypes={selectedChargeTypes}
+                onSettingsChange={handleSettingsChange}
+              />
+            ) : null}
+
+            <div className="flex justify-end mt-6">
+              <Button 
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => handleSettingsChange({
+                  useCompanyPolicy: policyType === 'company'
+                })}
+                disabled={isLoading}
+              >
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 } 

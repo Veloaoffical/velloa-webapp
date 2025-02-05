@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { User, ChevronRight, Users, ChevronDown, Home, Building2, Wrench, UserPlus, Mail, Phone, MoreHorizontal, Check, Copy, Share2, CalendarIcon } from "lucide-react";
+import { User, ChevronRight, Users, ChevronDown, Home, Building2, Wrench, UserPlus, Mail, Phone, MoreHorizontal, Check, Copy, Share2, CalendarIcon, Send, BookOpenText, CircleCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -285,23 +285,34 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
           if (status === 'sent') {
             return (
               <div className="flex items-center">
-                <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-600/20">
+                  <Send size={12} strokeWidth={2} />
                   Sent
                 </span>
               </div>
             );
-          } else if (status === 'completed') {
+          } else if (status === 'review') {
             return (
               <div className="flex items-center">
-                <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
-                  Completed
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-700 ring-1 ring-inset ring-yellow-600/20">
+                  <BookOpenText size={12} strokeWidth={2} />
+                  Review
+                </span>
+              </div>
+            );
+          } else if (status === 'accepted') {
+            return (
+              <div className="flex items-center">
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                  <CircleCheck size={12} strokeWidth={2} />
+                  Accepted
                 </span>
               </div>
             );
           } else {
             return (
               <div className="flex items-center">
-                <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 ring-1 ring-inset ring-gray-600/20">
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 ring-1 ring-inset ring-gray-600/20">
                   Not Started
                 </span>
               </div>
@@ -328,7 +339,7 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
         } else if (status === 'sent') {
           return (
             <div className="flex items-center">
-              <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+              <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-600/20">
                 Sent
               </span>
             </div>
@@ -542,7 +553,7 @@ export function PeopleTable({ initialPeople }: PeopleTableProps) {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/people/add?type=tenant" className="flex items-center">
+              <Link href="/people/add-lease" className="flex items-center">
                 <Home size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
                 New Tenant
               </Link>

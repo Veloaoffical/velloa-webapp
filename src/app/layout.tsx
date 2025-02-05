@@ -19,7 +19,7 @@ function RootLayoutContent({ children }: { children: React.ReactNode }) {
 
         <meta name="theme-color" content="#1DB954" />
       </head>
-      <body >
+      <body suppressHydrationWarning={true}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

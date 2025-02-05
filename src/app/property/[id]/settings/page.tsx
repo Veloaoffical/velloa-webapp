@@ -29,7 +29,15 @@ import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from 'react';
-import { GeneralInfoForm, PropertyTypeForm, AmenitiesForm, PetPolicyForm, PhotosForm, OwnersForm } from "../components/settings/SettingsForms";
+import { GeneralInfoForm, PropertyTypeForm, AmenitiesForm, PetPolicyForm, PhotosForm, OwnersForm, LateFeeForm } from "../components/settings/SettingsForms";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
+import { Separator } from "@/components/ui/separator";
+
+interface FormElement extends HTMLDivElement {
+  __showAddOwnerDialog?: (show: boolean) => void;
+  __showUploadDialog?: (show: boolean) => void;
+}
 
 const settings = [
   {
@@ -101,11 +109,7 @@ const settings = [
     icon: <CircleDollarSign className="w-5 h-5 text-green-600" />,
     label: "Late Fees",
     description: "Update the late fees for this property.",
-    component: () => (
-      <div className="text-muted-foreground">
-        Form content for Late Fees will go here...
-      </div>
-    )
+    component: LateFeeForm
   },
   {
     id: 'tenant-portal',
@@ -197,11 +201,6 @@ const settings = [
   },
 ];
 
-interface FormElement extends HTMLDivElement {
-  __showAddOwnerDialog?: (show: boolean) => void;
-  __showUploadDialog?: (show: boolean) => void;
-}
-
 export default function PropertySettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const searchParams = useSearchParams();
@@ -209,12 +208,65 @@ export default function PropertySettingsPage({ params }: { params: Promise<{ id:
   const [activeSection, setActiveSection] = useState(section);
   const [isClient, setIsClient] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(true);
+  const [lateFeesEnabled, setLateFeesEnabled] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
-    // Simulate data loading
-    setTimeout(() => setIsDataLoading(false), 1000);
+    fetchLateFeeSettings();
   }, []);
+
+  const fetchLateFeeSettings = async () => {
+    try {
+      setIsDataLoading(true);
+      const response = await fetch(`/api/property/${id}/late-fees`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch late fee settings");
+      }
+      const data = await response.json();
+      setLateFeesEnabled(data.late_fees?.isEnabled || false);
+    } catch (error) {
+      console.error("Error fetching late fee settings:", error);
+      toast.error("Failed to load late fee settings");
+    } finally {
+      setIsDataLoading(false);
+    }
+  };
+
+  const handleLateFeeToggle = async (checked: boolean) => {
+    try {
+      setLateFeesEnabled(checked);
+      const response = await fetch(`/api/property/${id}/late-fees`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          late_fees: {
+            isEnabled: checked,
+            lateFees: [],
+            maxDailyFeesEnabled: false,
+            maxMonthlyFeesEnabled: false,
+            minBalanceEnabled: false,
+            applyToMostRecentEnabled: false,
+            applyToSpecificEnabled: false,
+            maxDailyAmount: "",
+            maxMonthlyAmount: "",
+            minBalanceAmount: "",
+            selectedChargeTypes: "",
+            useCompanyPolicy: true
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update late fee settings");
+      }
+
+      toast.success("Late fee settings updated successfully");
+    } catch (error) {
+      console.error("Error updating late fee settings:", error);
+      toast.error("Failed to update late fee settings");
+      setLateFeesEnabled(!checked); // Revert on error
+    }
+  };
 
   return (
     <div className="h-[calc(100vh-4rem)] p-6">
@@ -324,6 +376,7 @@ export default function PropertySettingsPage({ params }: { params: Promise<{ id:
                         <div>
                           <h2 className="text-lg font-semibold mb-1">{setting.label}</h2>
                           <p className="text-sm text-muted-foreground">{setting.description}</p>
+                          {setting.id === 'late-fees' && <Separator className="w-[calc(100%+8rem)] -mx-16 mt-4" />}
                         </div>
                       </div>
                       {setting.id === 'owners' && (
@@ -354,9 +407,16 @@ export default function PropertySettingsPage({ params }: { params: Promise<{ id:
                           Add Photos
                         </Button>
                       )}
+                      {setting.id === 'late-fees' && (
+                        <Switch
+                          checked={lateFeesEnabled}
+                          onCheckedChange={handleLateFeeToggle}
+                          disabled={isDataLoading}
+                        />
+                      )}
                     </div>
                     <div className="pl-12">
-                      <Component />
+                      <Component enabled={setting.id === 'late-fees' ? lateFeesEnabled : true} />
                     </div>
                     <div className="border-t border-border mt-12" />
                   </div>

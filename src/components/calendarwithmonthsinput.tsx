@@ -16,10 +16,12 @@ interface CalendarInputProps {
   onChange?: (date: Date | undefined) => void
   className?: string
   disabled?: boolean
+  placeholder?: string
+  minDate?: Date
 }
 
 const CalendarInput = forwardRef<{ hasDateSelected: () => boolean }, CalendarInputProps>(
-  ({ value, onChange, className, disabled }, ref) => {
+  ({ value, onChange, className, disabled, placeholder, minDate }, ref) => {
     const [date, setDate] = useState<Date | undefined>(value)
     const [isOpen, setIsOpen] = useState(false)
     const [inputValue, setInputValue] = useState(value ? format(value, "yyyy/MM/dd") : "")
@@ -88,7 +90,7 @@ const CalendarInput = forwardRef<{ hasDateSelected: () => boolean }, CalendarInp
             onChange={handleInputChange}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            placeholder={isFocused ? "YYYY/MM/DD" : "Enter date"}
+            placeholder={isFocused ? "YYYY/MM/DD" : placeholder || "Enter date"}
             className={cn("pr-10 bg-background h-[42px]", error && "border-red-500 focus-visible:ring-red-500")}
             disabled={disabled}
           />
@@ -113,6 +115,7 @@ const CalendarInput = forwardRef<{ hasDateSelected: () => boolean }, CalendarInp
                 onMonthChange={setDisplayMonth}
                 initialFocus
                 disabled={disabled}
+                fromDate={minDate}
                 components={{
                   Caption: ({ displayMonth }: CaptionProps) => (
                     <div className="flex justify-between items-center px-2 py-1">

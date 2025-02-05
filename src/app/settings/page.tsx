@@ -28,8 +28,10 @@ import {
   Briefcase,
   CircleDollarSign,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 export default function SettingsPage() {
+  const router = useRouter()
   const [personalIconClicks, setPersonalIconClicks] = useState(0)
 
   const handlePersonalIconClick = () => {
@@ -39,6 +41,10 @@ export default function SettingsPage() {
       toast("Hey princess, I just want to say I love you so much and I'm so happy to be with you and I'm so happy I met you, your more then anything i could ever ask for")
       setPersonalIconClicks(0)
     }
+  }
+
+  const handlePropertySettingClick = () => {
+    router.push(`/settings/propertysettings`)
   }
 
   const settingsCategories = [
@@ -238,6 +244,11 @@ export default function SettingsPage() {
                 <Card 
                   key={item.name} 
                   className="p-4 hover:bg-accent cursor-pointer transition-colors"
+                  onClick={() => {
+                    if (category.title === "Property Settings") {
+                      handlePropertySettingClick()
+                    }
+                  }}
                 >
                   <div className="flex items-start space-x-4">
                     <div className="p-2 bg-primary/10 rounded-lg shrink-0">

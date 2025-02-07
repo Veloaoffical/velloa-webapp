@@ -44,8 +44,8 @@ const data = {
       icon: MapPinHouse
     },
     {
-      title: "Leasing",
-      url: "/leasing",
+      title: "Leases",
+      url: "/leases",
       icon: ScrollText
     },
     {

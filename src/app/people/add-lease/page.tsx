@@ -42,6 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { generateCustomId } from "@/lib/utils/generate-id";
+import { LateFeeContent } from "@/components/settingscomponents/LateFee";
 
 interface LeaseForm {
   // Tenant Information
@@ -126,8 +127,35 @@ interface Person {
   status: 'accepted' | 'pending' | 'declined';
 }
 
+interface PropertyLateFeeSettings {
+  isEnabled: boolean;
+  lateFees: Array<{
+    type: string;
+    amount: number;
+    frequency: string;
+    gracePeriod?: number;
+    revenueAccount: string;
+    description?: string;
+  }>;
+  maxDailyFeesEnabled: boolean;
+  maxMonthlyFeesEnabled: boolean;
+  minBalanceEnabled: boolean;
+  applyToMostRecentEnabled: boolean;
+  applyToSpecificEnabled: boolean;
+  maxDailyAmount: string;
+  maxMonthlyAmount: string;
+  minBalanceAmount: string;
+  selectedChargeTypes: string;
+  useCompanyPolicy: boolean;
+}
+
 type StepType = 'intro' | 'property_details' | 'tenant' | 'rent' | 'security_deposit' | 'late_fees' | 'documents' | 'summary';
 type PaymentFrequency = 'monthly' | 'quarterly' | 'annually';
+
+// Add the cn utility function at the top of the file
+function cn(...classes: string[]) {
+  return classes.filter(Boolean).join(' ');
+}
 
 export default function AddLeasePage() {
   const router = useRouter();
@@ -140,6 +168,8 @@ export default function AddLeasePage() {
   const [isLoadingUnits, setIsLoadingUnits] = useState(false);
   const [propertyOpen, setPropertyOpen] = useState(false);
   const [unitOpen, setUnitOpen] = useState(false);
+  const [propertyLateFeeSettings, setPropertyLateFeeSettings] = useState<PropertyLateFeeSettings | null>(null);
+  const [isLoadingLateFees, setIsLoadingLateFees] = useState(false);
   const [lease, setLease] = useState<LeaseForm>({
     tenants: [],
     property_id: '',
@@ -737,20 +767,7 @@ export default function AddLeasePage() {
                     {properties.map((property) => (
                       <CommandItem
                         key={property.id}
-                        onSelect={() => {
-                          // Clear previous unit selection when changing property
-                          setLease({
-                            ...lease,
-                            property_id: property.id === lease.property_id ? '' : property.id,
-                            property_name: property.id === lease.property_id ? '' : property.name,
-                            unit_id: '',
-                            unit_number: ''
-                          });
-                          if (property.id !== lease.property_id) {
-                            fetchUnits(property.id);
-                          }
-                          setPropertyOpen(false);
-                        }}
+                        onSelect={() => handlePropertySelect(property.id, property.name)}
                       >
                         <div className="flex items-center gap-2">
                           <Check 
@@ -1100,27 +1117,7 @@ export default function AddLeasePage() {
                 />
               </div>
 
-              <div className="mt-8">
-                <Label className="text-base">What is the security deposit?</Label>
-                <div className="relative w-full max-w-md mx-auto mt-2">
-                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
-                  <Input 
-                    id="security_deposit"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    required
-                    value={lease.security_deposit}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (/^\d*\.?\d*$/.test(value)) {
-                        setLease({...lease, security_deposit: parseFloat(value) || 0});
-                      }
-                    }}
-                    className="pl-8 w-full h-[42px]"
-                  />
-                </div>
-              </div>
+              
             </>
           ) : (
             <motion.div 
@@ -1227,11 +1224,11 @@ export default function AddLeasePage() {
           transition={{ delay: 0.4, duration: 0.3 }}
           className="flex flex-col items-center justify-center gap-2 w-full"
         >
-          <div className="w-full max-w-md space-y-4">
+          <div className="w-full max-w-md space-y-4 pb-4">
             <Button 
               variant={showAdvancedOptions ? "secondary" : "default"} 
               className={cn(
-                "w-full h-[42px]",
+                "w-full h-[42px] max-w-md mx-auto",
                 showAdvancedOptions ? "bg-foreground hover:bg-foreground/90 text-background" : ""
               )}
               onClick={() => handleAdvancedOptions(false)}
@@ -1349,10 +1346,248 @@ export default function AddLeasePage() {
     </div>
   );
 
+  const renderDepositForm = () => (
+    <div className="w-full max-w-[1200px] mx-auto space-y-8">
+      <div className="space-y-4 w-full">
+        <AnimatePresence mode="sync">
+          {lease.security_deposit > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 w-full"
+            >
+              <div className="flex gap-3">
+                <div className="shrink-0">
+                  <Info className="h-5 w-5 text-yellow-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-yellow-800">
+                    It seems like you&apos;re adding a lease that has already started. Using Agha AI, Velloa will intelligenlty do the accounting for you to mark these deposits as already collected.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
+        <div className="flex flex-col items-center justify-center w-full">
+          <RadioGroup 
+            className="grid grid-cols-2 gap-4 max-w-md w-full" 
+            defaultValue="no"
+            value={lease.security_deposit > 0 ? "yes" : "no"}
+            onValueChange={(value) => {
+              setLease({
+                ...lease,
+                security_deposit: value === "yes" ? 1 : 0
+              });
+            }}
+          >
+            <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-12 py-6 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+              <RadioGroupItem 
+                value="yes" 
+                id="deposit-yes" 
+                className="sr-only after:absolute after:inset-0" 
+              />
+              <CircleCheck className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium leading-none">Yes</p>
+                <p className="text-xs text-muted-foreground">Require deposit</p>
+              </div>
+            </label>
+
+            <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-12 py-6 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+              <RadioGroupItem 
+                value="no" 
+                id="deposit-no" 
+                className="sr-only after:absolute after:inset-0" 
+              />
+              <Ban className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium leading-none">No</p>
+                <p className="text-xs text-muted-foreground">No deposit</p>
+              </div>
+            </label>
+          </RadioGroup>
+
+          <AnimatePresence mode="sync">
+            {lease.security_deposit > 0 && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, y: -10 }}
+                animate={{ opacity: 1, height: "auto", y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="w-full mt-8"
+              >
+                {!showAdvancedDepositOptions ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ delay: 0.3, duration: 0.3 }}
+                    className="flex flex-col items-center justify-center gap-2 w-full"
+                  >
+                    <Label className="text-sm text-muted-foreground">What is the security deposit amount?</Label>
+                    <div className="relative w-full max-w-md mx-auto">
+                      <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
+                      <Input 
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        value={lease.security_deposit}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (/^\d*\.?\d*$/.test(value)) {
+                            setLease({
+                              ...lease,
+                              security_deposit: parseFloat(value) || 0
+                            });
+                          }
+                        }}
+                        className="pl-8 w-full h-[42px]"
+                      />
+                    </div>
+
+                    <div className="mt-8 w-full max-w-md">
+                      <Button 
+                        variant="default"
+                        className="w-full h-[42px]"
+                        onClick={() => handleAdvancedOptions(true)}
+                      >
+                        <Settings2 className="-ms-1 me-2 opacity-60" size={16} strokeWidth={2} aria-hidden="true" />
+                        Show advanced options
+                      </Button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="space-y-6"
+                  >
+                    <motion.div 
+                      initial={{ width: "400px" }}
+                      animate={{ width: "900px" }}
+                      exit={{ width: "400px" }}
+                      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                      className="w-full max-w-[900px] overflow-visible mx-auto"
+                    >
+                      <div className="grid grid-cols-[2fr,2fr,1fr] gap-4 mb-2">
+                        <motion.div
+                          initial={{ x: -800, opacity: 0 }}
+                          animate={{ x: 0, opacity: 1 }}
+                          exit={{ x: -800, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                          className="col-span-2 grid grid-cols-2 gap-4"
+                        >
+                          <Label className="text-sm text-muted-foreground">Deposit Type</Label>
+                          <Label className="text-sm text-muted-foreground">Description</Label>
+                        </motion.div>
+                        <div>
+                          <Label className="text-sm text-muted-foreground">Amount</Label>
+                        </div>
+                      </div>
+
+                      <div className="pr-2 space-y-3">
+                        {lease.additional_charges.map((charge, index) => (
+                          <motion.div 
+                            key={charge.id}
+                            initial={{ x: -800, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: -800, opacity: 0 }}
+                            transition={{ duration: 0.3, delay: 0.1 + (index * 0.05), ease: [0.16, 1, 0.3, 1] }}
+                            className="grid grid-cols-[2fr,2fr,1fr] gap-4 items-center"
+                          >
+                            <div className="col-span-2 grid grid-cols-2 gap-4">
+                              <Input
+                                placeholder="e.g. Pet Deposit"
+                                value={charge.type}
+                                onChange={(e) => updateCharge(charge.id, 'type', e.target.value)}
+                                className="h-[42px] w-full"
+                              />
+                              <Input
+                                placeholder="e.g. Refundable pet deposit"
+                                value={charge.description}
+                                onChange={(e) => updateCharge(charge.id, 'description', e.target.value)}
+                                className="h-[42px] w-full"
+                              />
+                            </div>
+                            <div className="flex gap-2 items-center">
+                              <div className="relative flex-1">
+                                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
+                                <Input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="0.00"
+                                  value={charge.amount}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    if (/^\d*\.?\d*$/.test(value)) {
+                                      updateCharge(charge.id, 'amount', value);
+                                    }
+                                  }}
+                                  className="pl-8 h-[42px]"
+                                />
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeCharge(charge.id)}
+                                className="shrink-0"
+                                disabled={lease.additional_charges.length === 1}
+                              >
+                                <X className={cn(
+                                  "h-4 w-4",
+                                  lease.additional_charges.length === 1 ? "text-muted-foreground/40" : ""
+                                )} />
+                              </Button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                      
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ delay: 0.3, duration: 0.3 }}
+                        className="flex justify-start mt-4"
+                      >
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="text-xs h-auto p-0 text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={addCharge}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Add another deposit
+                        </Button>
+                      </motion.div>
+                    </motion.div>
+
+                    <div className="max-w-md mx-auto">
+                      <Button 
+                        variant="secondary"
+                        className="w-full h-[42px] bg-foreground hover:bg-foreground/90 text-background"
+                        onClick={() => handleAdvancedOptions(true)}
+                      >
+                        <Settings2 className="-ms-1 me-2 opacity-60" size={16} strokeWidth={2} aria-hidden="true" />
+                        Hide additional deposits
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
 
   const renderLateFeeForm = () => (
-    <div className="w-full max-w-[1200px] mx-auto space-y-8 flex flex-col items-center">
+    <div className="w-full max-w-[1200px] mx-auto space-y-8">
       <div className="space-y-4 w-full">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -1374,7 +1609,6 @@ export default function AddLeasePage() {
         <div className="flex flex-col items-center justify-center w-full">
           <RadioGroup 
             className="grid grid-cols-2 gap-4 max-w-md w-full" 
-            defaultValue="no"
             value={lease.late_fees.enabled ? "yes" : "no"}
             onValueChange={(value) => {
               setLease({
@@ -1421,26 +1655,27 @@ export default function AddLeasePage() {
                 animate={{ opacity: 1, height: "auto", y: 0 }}
                 exit={{ opacity: 0, height: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                className="w-full max-w-xl mt-8 space-y-6"
+                className="w-full max-w-xl mt-8"
               >
                 <RadioGroup 
-                  className="gap-4" 
+                  className="space-y-4" 
                   value={lease.late_fees.policy_type}
-                  onValueChange={(value: 'property' | 'custom') => 
+                  onValueChange={(value: 'property' | 'custom') => {
                     setLease({
                       ...lease,
                       late_fees: {
                         ...lease.late_fees,
                         policy_type: value
                       }
-                    })}
+                    });
+                  }}
                 >
                   {/* Property Policy Card */}
-                  <div className="relative flex w-full items-start gap-2 rounded-lg border border-input p-4 shadow-sm shadow-black/5 has-[[data-state=checked]]:border-ring">
+                  <div className="relative flex items-start gap-2 rounded-lg border border-input p-4 shadow-sm shadow-black/5 has-[[data-state=checked]]:border-ring">
                     <RadioGroupItem
                       value="property"
                       id="policy-property"
-                      className="order-1 after:absolute after:inset-0"
+                      className="mt-1"
                     />
                     <div className="flex grow items-start gap-3">
                       <div className="shrink-0 bg-[hsl(var(--success-light))] rounded-lg p-2">
@@ -1460,11 +1695,11 @@ export default function AddLeasePage() {
                   </div>
 
                   {/* Custom Policy Card */}
-                  <div className="relative flex w-full items-start gap-2 rounded-lg border border-input p-4 shadow-sm shadow-black/5 has-[[data-state=checked]]:border-ring">
+                  <div className="relative flex items-start gap-2 rounded-lg border border-input p-4 shadow-sm shadow-black/5 has-[[data-state=checked]]:border-ring">
                     <RadioGroupItem
                       value="custom"
                       id="policy-custom"
-                      className="order-1 after:absolute after:inset-0"
+                      className="mt-1"
                     />
                     <div className="flex grow items-center gap-3">
                       <div className="shrink-0 bg-[hsl(var(--success-light))] rounded-lg p-2">
@@ -1484,26 +1719,59 @@ export default function AddLeasePage() {
                   </div>
                 </RadioGroup>
 
-                {/* Property Info Card */}
-                <div className="w-full rounded-lg border border-input bg-card p-4 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="shrink-0 bg-[hsl(var(--success-light))] rounded-lg p-2">
-                      <div className="flex items-center justify-center w-8 h-8">
-                        <Home className="size-5 text-[hsl(var(--success))]" />
-                      </div>
-                    </div>
-                    <Label className="text-base font-medium">{lease.property_name || "No property selected"}</Label>
-                    {lease.property_name && (
-                      <div className="ml-auto flex items-center">
-                        <div className="flex items-center gap-2 rounded-md bg-[hsl(var(--success-light))] px-2 py-1">
-                          <span className="text-xs font-medium text-[hsl(var(--success))]"> Policy Activated</span>
+                {/* Property Info Card - Only show when property policy is selected */}
+                <AnimatePresence mode="sync">
+                  {lease.late_fees.policy_type === 'property' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <div className="rounded-lg border border-input bg-card p-4 shadow-sm mt-4">
+                        <div className="flex items-center gap-3">
+                          <div className="shrink-0 bg-[hsl(var(--success-light))] rounded-lg p-2">
+                            <div className="flex items-center justify-center w-8 h-8">
+                              <Home className="size-5 text-[hsl(var(--success))]" />
+                            </div>
+                          </div>
+                          <Label className="text-base font-medium">{lease.property_name || "No property selected"}</Label>
+                          {lease.property_name && (
+                            <div className="ml-auto flex items-center">
+                              {isLoadingLateFees ? (
+                                <div className="flex items-center gap-2 rounded-md bg-muted px-2 py-1">
+                                  <span className="text-xs font-medium text-muted-foreground">Loading...</span>
+                                </div>
+                              ) : propertyLateFeeSettings?.isEnabled ? (
+                                <div className="flex items-center gap-2 rounded-md bg-[hsl(var(--success-light))] px-2 py-1">
+                                  <span className="text-xs font-medium text-[hsl(var(--success))]">Policy Activated</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 rounded-md bg-red-50 px-2 py-1">
+                                  <span className="text-xs font-medium text-red-600">No Active Policy</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    )}
-                  </div>
-                </div>
 
-                {/* Rest of the custom policy form */}
+                      {/* Property Settings Link */}
+                      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mt-2">
+                        <p>You can update or change your property late fees in property settings</p>
+                        <Button 
+                          variant="link" 
+                          className="h-auto p-0 text-primary hover:text-primary/90"
+                          onClick={() => router.push(`/property/${lease.property_id}/settings?section=late-fees`)}
+                        >
+                          Property Settings
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Custom Policy Form */}
                 <AnimatePresence mode="sync">
                   {lease.late_fees.policy_type === 'custom' && (
                     <motion.div
@@ -1511,91 +1779,35 @@ export default function AddLeasePage() {
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="space-y-4 mt-6"
+                      className="space-y-4 mt-6 -mx-[calc((1200px-100%)/2)] px-6 w-[1200px] pb-12"
                     >
-                      <div className="grid gap-2">
-                        <Label>Late Fee Type</Label>
-                        <RadioGroup
-                          value={lease.late_fees.type}
-                          onValueChange={(value: 'fixed' | 'percentage') => 
-                            setLease({
-                              ...lease,
-                              late_fees: {
-                                ...lease.late_fees,
-                                type: value,
-                                amount: 0
-                              }
-                            })}
-                          className="grid grid-cols-2 gap-4"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="fixed" id="fixed" />
-                            <Label htmlFor="fixed">Fixed Amount</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="percentage" id="percentage" />
-                            <Label htmlFor="percentage">Percentage</Label>
-                          </div>
-                        </RadioGroup>
-                      </div>
-
-                      <div className="grid gap-2">
-                        <Label>Amount</Label>
-                        <div className="relative">
-                          {lease.late_fees.type === 'fixed' && (
-                            <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
-                          )}
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder={lease.late_fees.type === 'fixed' ? '0.00' : '0'}
-                            value={lease.late_fees.amount || ''}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              if (/^\d*\.?\d*$/.test(value)) {
-                                setLease({
-                                  ...lease,
-                                  late_fees: {
-                                    ...lease.late_fees,
-                                    amount: parseFloat(value) || 0
-                                  }
-                                });
-                              }
-                            }}
-                            className={cn(
-                              "h-[42px]",
-                              lease.late_fees.type === 'fixed' ? "pl-8" : "pl-3"
-                            )}
-                          />
-                          {lease.late_fees.type === 'percentage' && (
-                            <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">
-                              %
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="grid gap-2">
-                        <Label>Grace Period (Days)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={lease.late_fees.grace_period_days}
-                          onChange={(e) => {
-                            const value = parseInt(e.target.value);
-                            if (!isNaN(value) && value >= 0) {
-                              setLease({
-                                ...lease,
-                                late_fees: {
-                                  ...lease.late_fees,
-                                  grace_period_days: value
-                                }
-                              });
+                      <LateFeeContent
+                        isEnabled={true}
+                        lateFees={propertyLateFeeSettings?.lateFees || []}
+                        maxDailyFeesEnabled={propertyLateFeeSettings?.maxDailyFeesEnabled || false}
+                        maxMonthlyFeesEnabled={propertyLateFeeSettings?.maxMonthlyFeesEnabled || false}
+                        minBalanceEnabled={propertyLateFeeSettings?.minBalanceEnabled || false}
+                        applyToMostRecentEnabled={propertyLateFeeSettings?.applyToMostRecentEnabled || false}
+                        applyToSpecificEnabled={propertyLateFeeSettings?.applyToSpecificEnabled || false}
+                        maxDailyAmount={propertyLateFeeSettings?.maxDailyAmount || ""}
+                        maxMonthlyAmount={propertyLateFeeSettings?.maxMonthlyAmount || ""}
+                        minBalanceAmount={propertyLateFeeSettings?.minBalanceAmount || ""}
+                        selectedChargeTypes={propertyLateFeeSettings?.selectedChargeTypes || ""}
+                        onSettingsChange={async (settings) => {
+                          setLease(prevLease => ({
+                            ...prevLease,
+                            late_fees: {
+                              ...prevLease.late_fees,
+                              enabled: true,
+                              policy_type: 'custom',
+                              // Maintain the required properties while updating with new settings
+                              amount: settings.lateFees?.[0]?.amount || prevLease.late_fees.amount,
+                              type: (settings.lateFees?.[0]?.type === 'Fixed' ? 'fixed' : 'percentage') as 'fixed' | 'percentage',
+                              grace_period_days: settings.lateFees?.[0]?.gracePeriod || prevLease.late_fees.grace_period_days
                             }
-                          }}
-                          className="h-[42px]"
-                        />
-                      </div>
+                          }));
+                        }}
+                      />
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -1606,6 +1818,64 @@ export default function AddLeasePage() {
       </div>
     </div>
   );
+
+  const fetchPropertyLateFees = async (propertyId: string) => {
+    try {
+      setIsLoadingLateFees(true);
+      const response = await fetch(`/api/property/${propertyId}/late-fees`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Late fees fetch error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        throw new Error(`Failed to fetch late fees: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Fetched late fees:', data);
+      
+      setPropertyLateFeeSettings(data.late_fees || {
+        isEnabled: false,
+        lateFees: [],
+        maxDailyFeesEnabled: false,
+        maxMonthlyFeesEnabled: false,
+        minBalanceEnabled: false,
+        applyToMostRecentEnabled: false,
+        applyToSpecificEnabled: false,
+        maxDailyAmount: "",
+        maxMonthlyAmount: "",
+        minBalanceAmount: "",
+        selectedChargeTypes: "",
+        useCompanyPolicy: true
+      });
+    } catch (error) {
+      console.error('Error fetching late fees:', error);
+      toast.error('Failed to load late fee settings. Please try again.');
+    } finally {
+      setIsLoadingLateFees(false);
+    }
+  };
+
+  // Modify the property selection handler to fetch late fees
+  const handlePropertySelect = async (propertyId: string, propertyName: string) => {
+    // Clear previous unit selection when changing property
+    setLease({
+      ...lease,
+      property_id: propertyId === lease.property_id ? '' : propertyId,
+      property_name: propertyId === lease.property_id ? '' : propertyName,
+      unit_id: '',
+      unit_number: ''
+    });
+    
+    if (propertyId !== lease.property_id) {
+      fetchUnits(propertyId);
+      fetchPropertyLateFees(propertyId);
+    }
+    setPropertyOpen(false);
+  };
 
   return (
     <div className="mx-auto p-6">
@@ -1768,7 +2038,7 @@ export default function AddLeasePage() {
 
                     <div className="flex items-start justify-center flex-grow">
                       <div className="w-full overflow-y-auto">
-                        {renderLateFeeForm()}
+                        {renderDepositForm()}
                       </div>
                     </div>
                   </div>
@@ -1838,8 +2108,4 @@ export default function AddLeasePage() {
       </Card>
     </div>
   );
-}
-
-function cn(...classes: string[]) {
-  return classes.filter(Boolean).join(' ');
 } 

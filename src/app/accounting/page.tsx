@@ -320,6 +320,7 @@ export default function AccountingPage() {
                       />
                     </AreaChart>
                     
+                    
                   </ResponsiveContainer>
                 </ChartContainer>
               </CardContent>

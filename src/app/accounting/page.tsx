@@ -319,6 +319,7 @@ export default function AccountingPage() {
                         fillOpacity={0.4}
                       />
                     </AreaChart>
+                    
                   </ResponsiveContainer>
                 </ChartContainer>
               </CardContent>

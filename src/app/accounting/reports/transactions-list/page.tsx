@@ -1,9 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useId } from "react"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
+import { Button as ButtonUI } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -11,6 +10,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter,
 } from "@/components/ui/table"
 import {
   Select,
@@ -19,15 +19,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowLeft, CalendarIcon } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
+import {
+  Card,
+  CardContent,
+} from "@/components/ui/card"
+import { RangeCalendar } from "@/components/ui/calendar-rac"
+import { DateInput, dateInputStyle } from "@/components/ui/datefield-rac"
+import { Button, DateRangePicker, Dialog, Group, Label, Popover } from "react-aria-components"
 
 // Mock data for demonstration
 const transactions = [
@@ -37,9 +39,10 @@ const transactions = [
     type: "Deposit",
     account: "Operating Account 2",
     property: "500 Northwest 15th S",
-    lease: "(Prorated Rent) John",
     name: "",
+    description: "February Rent Payment",
     memo: "Automatically created",
+    runningBalance: "$1,000.00",
     amount: "$1,000.00"
   },
   {
@@ -48,9 +51,10 @@ const transactions = [
     type: "Deposit",
     account: "Operating Account 2",
     property: "698 Northwest 1st Ave",
-    lease: "(Random Charge) D.",
     name: "",
+    description: "Security Deposit",
     memo: "Automatically created",
+    runningBalance: "$11,000.00",
     amount: "$10,000.00"
   },
   {
@@ -59,17 +63,19 @@ const transactions = [
     type: "Deposit",
     account: "Bank E (Contra Accts)",
     property: "1900 North Bayshore",
-    lease: "Leslie Knope",
     name: "",
+    description: "Monthly Parking Fee",
     memo: "Automatically created",
+    runningBalance: "$13,000.00",
     amount: "$2,000.00"
   },
   // Add more mock data as needed
 ]
 
 export default function TransactionsListReport() {
-  const [date, setDate] = useState<Date>()
   const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set())
+  const tableId = useId()
+  const currentDateTime = new Date()
 
   const toggleTransaction = (id: number) => {
     const newSelected = new Set(selectedTransactions)
@@ -89,154 +95,154 @@ export default function TransactionsListReport() {
     }
   }
 
+  // Calculate totals
+  const totalAmount = transactions.reduce((sum, transaction) => {
+    const amount = parseFloat(transaction.amount.replace('$', '').replace(',', ''))
+    return sum + amount
+  }, 0)
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/accounting/reports">
-          <Button variant="ghost" size="icon" className="rounded-full">
+          <ButtonUI variant="ghost" size="icon" className="rounded-full">
             <ArrowLeft className="h-4 w-4" />
-          </Button>
+          </ButtonUI>
         </Link>
         <h1 className="text-xl font-semibold">Transactions List Report</h1>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-4 border-b pb-4">
-        <Select defaultValue="all-time">
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select period" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all-time">All Time</SelectItem>
-            <SelectItem value="this-month">This Month</SelectItem>
-            <SelectItem value="last-month">Last Month</SelectItem>
-            <SelectItem value="this-year">This Year</SelectItem>
-            <SelectItem value="last-year">Last Year</SelectItem>
-            <SelectItem value="custom">Custom</SelectItem>
-          </SelectContent>
-        </Select>
+      <Card>
+        <CardContent className="space-y-6 pt-6">
+          {/* Filters */}
+          <div className="flex items-center gap-4 border-b pb-4">
+            <Select defaultValue="all-time">
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select period" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all-time">All Time</SelectItem>
+                <SelectItem value="this-month">This Month</SelectItem>
+                <SelectItem value="last-month">Last Month</SelectItem>
+                <SelectItem value="this-year">This Year</SelectItem>
+                <SelectItem value="last-year">Last Year</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
 
-        <div className="flex items-center gap-2">
-          <p className="text-sm text-muted-foreground">From</p>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant={"outline"}
-                className={cn(
-                  "w-[200px] justify-start text-left font-normal",
-                  !date && "text-muted-foreground"
-                )}
+            <DateRangePicker className="flex items-center gap-2">
+              <Label className="text-sm text-muted-foreground">Date Range</Label>
+              <div className="flex">
+                <Group className={cn(dateInputStyle, "pe-9")}>
+                  <DateInput slot="start" unstyled />
+                  <span aria-hidden="true" className="px-2 text-muted-foreground/70">
+                    -
+                  </span>
+                  <DateInput slot="end" unstyled />
+                </Group>
+                <Button className="z-10 -me-px -ms-9 flex w-9 items-center justify-center rounded-e-lg text-muted-foreground/80 outline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none data-[focus-visible]:outline data-[focus-visible]:outline-2 data-[focus-visible]:outline-ring/70">
+                  <CalendarIcon size={16} strokeWidth={2} />
+                </Button>
+              </div>
+              <Popover
+                className="z-50 rounded-lg border border-border bg-background text-popover-foreground shadow-lg shadow-black/5 outline-none data-[entering]:animate-in data-[exiting]:animate-out data-[entering]:fade-in-0 data-[exiting]:fade-out-0 data-[entering]:zoom-in-95 data-[exiting]:zoom-out-95 data-[placement=bottom]:slide-in-from-top-2 data-[placement=left]:slide-in-from-right-2 data-[placement=right]:slide-in-from-left-2 data-[placement=top]:slide-in-from-bottom-2"
+                offset={4}
               >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {date ? format(date, "PPP") : "Pick a date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={setDate}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
+                <Dialog className="max-h-[inherit] overflow-auto p-2">
+                  <RangeCalendar />
+                </Dialog>
+              </Popover>
+            </DateRangePicker>
 
-        <div className="flex items-center gap-2">
-          <p className="text-sm text-muted-foreground">To</p>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant={"outline"}
-                className={cn(
-                  "w-[200px] justify-start text-left font-normal",
-                  !date && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {date ? format(date, "PPP") : "Pick a date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={setDate}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
+            <Select>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Group by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="type">Type</SelectItem>
+                <SelectItem value="account">Account</SelectItem>
+                <SelectItem value="property">Property</SelectItem>
+              </SelectContent>
+            </Select>
 
-        <Select>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Group by" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">None</SelectItem>
-            <SelectItem value="type">Type</SelectItem>
-            <SelectItem value="account">Account</SelectItem>
-            <SelectItem value="property">Property</SelectItem>
-          </SelectContent>
-        </Select>
+            <Select defaultValue="deposit">
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="deposit">Deposit</SelectItem>
+                <SelectItem value="payment">Payment</SelectItem>
+                <SelectItem value="charge">Charge</SelectItem>
+                <SelectItem value="credit">Credit</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        <Select defaultValue="deposit">
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="deposit">Deposit</SelectItem>
-            <SelectItem value="payment">Payment</SelectItem>
-            <SelectItem value="charge">Charge</SelectItem>
-            <SelectItem value="credit">Credit</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Table */}
-      <div className="border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[50px]">
-                <Checkbox
-                  checked={selectedTransactions.size === transactions.length}
-                  onCheckedChange={toggleAll}
-                />
-              </TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Account</TableHead>
-              <TableHead>Property</TableHead>
-              <TableHead>Lease</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Memo</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {transactions.map((transaction) => (
-              <TableRow key={transaction.id}>
-                <TableCell>
-                  <Checkbox
-                    checked={selectedTransactions.has(transaction.id)}
-                    onCheckedChange={() => toggleTransaction(transaction.id)}
-                  />
-                </TableCell>
-                <TableCell>{transaction.date}</TableCell>
-                <TableCell>{transaction.type}</TableCell>
-                <TableCell>{transaction.account}</TableCell>
-                <TableCell>{transaction.property}</TableCell>
-                <TableCell>{transaction.lease}</TableCell>
-                <TableCell>{transaction.name}</TableCell>
-                <TableCell>{transaction.memo}</TableCell>
-                <TableCell className="text-right">{transaction.amount}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+          {/* Table */}
+          <div className="space-y-2">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>
+                    <Checkbox 
+                      id={tableId}
+                      checked={selectedTransactions.size === transactions.length}
+                      onCheckedChange={toggleAll}
+                    />
+                  </TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Property</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Memo</TableHead>
+                  <TableHead className="text-right">Running Balance</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {transactions.map((transaction) => (
+                  <TableRow key={transaction.id} className="has-[[data-state=checked]]:bg-muted/50">
+                    <TableCell>
+                      <Checkbox 
+                        id={`table-checkbox-${transaction.id}`}
+                        checked={selectedTransactions.has(transaction.id)}
+                        onCheckedChange={() => toggleTransaction(transaction.id)}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">{transaction.date}</TableCell>
+                    <TableCell>{transaction.type}</TableCell>
+                    <TableCell>{transaction.account}</TableCell>
+                    <TableCell>{transaction.property}</TableCell>
+                    <TableCell>{transaction.name}</TableCell>
+                    <TableCell>{transaction.description}</TableCell>
+                    <TableCell>{transaction.memo}</TableCell>
+                    <TableCell className="text-right">{transaction.runningBalance}</TableCell>
+                    <TableCell className="text-right">{transaction.amount}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+              <TableFooter className="bg-transparent">
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={9}>Total</TableCell>
+                  <TableCell className="text-right">
+                    {new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: 'USD'
+                    }).format(totalAmount)}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
+            <p className="text-center text-sm text-muted-foreground">
+              Cash Basis • {format(currentDateTime, "MMM d, yyyy h:mm a")}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 } 

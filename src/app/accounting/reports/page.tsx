@@ -617,6 +617,7 @@ export default function ReportsPage() {
       icon: Building,
       id: createReportId("tasks", "Tasks by Property"),
     },
+    
     {
       title: "Tasks by Status",
       description: "View tasks organized by current status",

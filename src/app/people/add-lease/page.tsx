@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Check, DollarSign, ChevronsUpDown, CalendarClock, CalendarDays, Plus, Search, User, Mail, Phone, X,CircleCheck,Ban, MessageSquareMore, ShieldAlert, Settings2, CalendarRange, Info, Building2, Home, Upload, FileText, Lock } from "lucide-react";
+import { Check, DollarSign, ChevronsUpDown, CalendarClock, CalendarDays, Plus, Search, User, Mail, Phone, X, CircleCheck, Ban, MessageSquareMore, ShieldAlert, Settings2, CalendarRange, Info, Building2, Home, Upload, FileText, Lock, PenTool } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -109,6 +109,8 @@ interface LeaseForm {
     grace_period_days: number;
   };
   deposit_charges: Array<DepositCharge>;  // Add this new field
+  document_status?: 'signed' | 'not_signed';
+  document_action?: 'draft' | 'esign';
 }
 
 interface Property {
@@ -221,6 +223,8 @@ export default function AddLeasePage() {
       description: '',
       amount: ''
     }],
+    document_status: 'not_signed',
+    document_action: 'draft',
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [people, setPeople] = useState<Person[]>([]);
@@ -351,16 +355,35 @@ export default function AddLeasePage() {
 
   const handleSubmit = async () => {
     try {
+      // Validate document status and action
+      if (!lease.document_status) {
+        toast.error('Please select a document status');
+        return;
+      }
+
+      if (lease.document_status === 'not_signed' && !lease.document_action) {
+        toast.error('Please select what you would like to do with the documents');
+        return;
+      }
+
+      // For signed documents, ensure files are uploaded
+      if (lease.document_status === 'signed' && lease.additional_documents.length === 0) {
+        toast.error('Please upload the signed lease documents');
+        return;
+      }
+
       const response = await fetch('/api/leases', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',  // Add this line to include cookies
+        credentials: 'include',
         body: JSON.stringify({
           ...lease,
           rentIncrease: rentIncrease.type ? rentIncrease : null,
-          showSecurityDeposit
+          showSecurityDeposit,
+          document_status: lease.document_status,
+          document_action: lease.document_action
         })
       });
 
@@ -1873,85 +1896,165 @@ export default function AddLeasePage() {
       <div className="space-y-4 w-full">
         <div className="flex flex-col items-center justify-center w-full">
           <div className="w-full max-w-xl">
-            {/* Lease Document Upload */}
-            <div className="space-y-4">
-              <Label className="text-base">Lease Documents</Label>
-              <div className="relative flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer">
-                <input
-                  type="file"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  accept=".pdf,.doc,.docx"
-                  multiple
-                  onChange={(e) => {
-                    const files = e.target.files;
-                    if (files && files.length > 0) {
-                      setLease({
-                        ...lease,
-                        additional_documents: [...lease.additional_documents, ...Array.from(files)]
-                      });
-                    }
-                  }}
-                />
-                <div className="flex flex-col items-center justify-center pt-3 pb-4">
-                  <div className="shrink-0 bg-[hsl(var(--success-light))] rounded-lg p-2 mb-2">
-                    <div className="flex items-center justify-center w-6 h-6">
-                      <Upload className="size-4 text-[hsl(var(--success))]" />
-                    </div>
+            {/* Document Status Selection */}
+            <div className="space-y-4 mb-8">
+              <Label className="text-base">Document Status</Label>
+              <RadioGroup 
+                className="grid grid-cols-2 gap-4" 
+                value={lease.document_status}
+                onValueChange={(value: 'signed' | 'not_signed') => 
+                  setLease(prev => ({ ...prev, document_status: value }))
+                }
+              >
+                <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                  <RadioGroupItem 
+                    value="signed" 
+                    id="doc-signed" 
+                    className="sr-only after:absolute after:inset-0" 
+                  />
+                  <CircleCheck className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium leading-none">Signed</p>
+                    <p className="text-xs text-muted-foreground">Documents are already signed</p>
                   </div>
-                  <p className="mb-1 text-sm text-foreground">
-                    <span className="font-semibold">Click to upload</span> or drag and drop
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    PDF, DOC, or DOCX (MAX. 10MB)
-                  </p>
-                </div>
-              </div>
+                </label>
 
-              {/* Show uploaded files */}
-              {lease.additional_documents.length > 0 && (
-                <div className="mt-4 space-y-2 max-h-[300px] overflow-y-auto">
-                  <AnimatePresence mode="sync">
-                    {lease.additional_documents.map((doc, index) => (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                        className="flex items-center justify-between p-3 border rounded-lg bg-card"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="shrink-0 bg-[hsl(var(--success-light))] rounded-lg p-2">
-                            <FileText className="h-4 w-4 text-[hsl(var(--success))]" />
-                          </div>
-                          <div className="grid gap-1">
-                            <p className="text-sm font-medium truncate max-w-[300px]">
-                              {doc.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {(doc.size / 1024 / 1024).toFixed(2)} MB
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setLease({
-                              ...lease,
-                              additional_documents: lease.additional_documents.filter((_, i) => i !== index)
-                            });
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-              )}
+                <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                  <RadioGroupItem 
+                    value="not_signed" 
+                    id="doc-not-signed" 
+                    className="sr-only after:absolute after:inset-0" 
+                  />
+                  <Lock className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium leading-none">Not Signed</p>
+                    <p className="text-xs text-muted-foreground">Documents need signatures</p>
+                  </div>
+                </label>
+              </RadioGroup>
             </div>
+
+            {/* Action Selection - Only show when Not Signed is selected */}
+            {lease.document_status === 'not_signed' && (
+              <div className="space-y-4 mb-8">
+                <Label className="text-base">What would you like to do?</Label>
+                <RadioGroup 
+                  className="grid grid-cols-2 gap-4" 
+                  value={lease.document_action}
+                  onValueChange={(value: 'draft' | 'esign') => 
+                    setLease(prev => ({ ...prev, document_action: value }))
+                  }
+                >
+                  <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                    <RadioGroupItem 
+                      value="draft" 
+                      id="action-draft" 
+                      className="sr-only after:absolute after:inset-0" 
+                    />
+                    <FileText className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium leading-none">Save as Draft</p>
+                      <p className="text-xs text-muted-foreground">Save lease for later</p>
+                    </div>
+                  </label>
+
+                  <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                    <RadioGroupItem 
+                      value="esign" 
+                      id="action-esign" 
+                      className="sr-only after:absolute after:inset-0" 
+                    />
+                    <PenTool className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium leading-none">Send for eSignature</p>
+                      <p className="text-xs text-muted-foreground">Get documents signed electronically</p>
+                    </div>
+                  </label>
+                </RadioGroup>
+              </div>
+            )}
+
+            {/* Lease Document Upload - Only show when Signed is selected */}
+            {lease.document_status === 'signed' && (
+              <div className="space-y-4">
+                <Label className="text-base">Upload Signed Documents</Label>
+                <div className="relative flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer">
+                  <input
+                    type="file"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    accept=".pdf,.doc,.docx"
+                    multiple
+                    onChange={(e) => {
+                      const files = e.target.files;
+                      if (files && files.length > 0) {
+                        setLease({
+                          ...lease,
+                          additional_documents: [...lease.additional_documents, ...Array.from(files)]
+                        });
+                      }
+                    }}
+                  />
+                  <div className="flex flex-col items-center justify-center pt-3 pb-4">
+                    <div className="shrink-0 bg-[hsl(var(--success-light))] rounded-lg p-2 mb-2">
+                      <div className="flex items-center justify-center w-6 h-6">
+                        <Upload className="size-4 text-[hsl(var(--success))]" />
+                      </div>
+                    </div>
+                    <p className="mb-1 text-sm text-foreground">
+                      <span className="font-semibold">Click to upload</span> or drag and drop
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      PDF, DOC, or DOCX (MAX. 10MB)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Show uploaded files */}
+                {lease.additional_documents.length > 0 && (
+                  <div className="mt-4 space-y-2 max-h-[300px] overflow-y-auto">
+                    <AnimatePresence mode="sync">
+                      {lease.additional_documents.map((doc, index) => (
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.2 }}
+                          className="flex items-center justify-between p-3 border rounded-lg bg-card"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="shrink-0 bg-[hsl(var(--success-light))] rounded-lg p-2">
+                              <FileText className="h-4 w-4 text-[hsl(var(--success))]" />
+                            </div>
+                            <div className="grid gap-1">
+                              <p className="text-sm font-medium truncate max-w-[300px]">
+                                {doc.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {(doc.size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLease({
+                                ...lease,
+                                additional_documents: lease.additional_documents.filter((_, i) => i !== index)
+                              });
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </div>
+            )}           
           </div>
         </div>
       </div>

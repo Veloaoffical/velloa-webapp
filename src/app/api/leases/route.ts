@@ -87,7 +87,12 @@ export async function POST(request: Request) {
         grace_period_days: data.late_fees.grace_period_days
       } : null,
       created_by: user.id,
-      company_id: companyMember.company_id
+      company_id: companyMember.company_id,
+      documents: {
+        status: data.document_status,
+        action: data.document_action,
+        signed: data.document_status === 'signed'
+      }
     };
 
     console.log('📝 Attempting to create lease with data:', {
@@ -163,7 +168,9 @@ export async function POST(request: Request) {
             file_name: document.name,
             file_type: document.type,
             uploaded_by: user.id,
-            file_path: fileName
+            file_path: fileName,
+            status: data.document_status,
+            is_signed: data.document_status === 'signed'
           }]);
 
         if (docError) {
@@ -185,5 +192,126 @@ export async function POST(request: Request) {
     }, { status: 500 });
   } finally {
     console.log('🏁 ============= LEASE CREATION END =============');
+  }
+}
+
+export const dynamic = 'force-dynamic';
+
+interface Property {
+  id: string;
+  name: string;
+  address_line_1: string;
+  address_line_2: string | null;
+  city: string;
+  state: string;
+  zip: string;
+}
+
+interface Unit {
+  unit_id: string;
+  unit_name: string;
+}
+
+interface LeaseContract {
+  id: string;
+  created_at: string;
+  start_date: string;
+  end_date: string;
+  rent_amount: string | null;
+  lease_term: string | null;
+  deposit_amount: string | null;
+  property: Property | null;
+  unit: Unit | null;
+  tenant_id: string | null;
+}
+
+export async function GET() {
+  try {
+    const supabase = await createClient();
+
+    // Get the authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.error('Auth error:', userError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Get the company membership
+    const { data: companyMember, error: companyError } = await supabase
+      .from('company_members')
+      .select('company_id')
+      .eq('id', user.id)
+      .single();
+
+    if (companyError || !companyMember) {
+      console.error('Company error:', companyError);
+      return NextResponse.json({ error: 'Failed to get company' }, { status: 403 });
+    }
+
+    // Fetch leases with related data
+    const { data: leases, error: leasesError } = await supabase
+      .from('lease_contracts')
+      .select(`
+        id,
+        created_at,
+        start_date,
+        end_date,
+        rent_amount,
+        lease_term,
+        deposit_amount,
+        property:properties!lease_contracts_property_id_fkey (
+          id,
+          name,
+          address_line_1,
+          address_line_2,
+          city,
+          state,
+          zip
+        ),
+        unit:units!lease_contracts_unit_id_fkey (
+          unit_id,
+          unit_name
+        ),
+        tenant_id
+      `)
+      .eq('company_id', companyMember.company_id)
+      .order('created_at', { ascending: false })
+      .returns<LeaseContract[]>();
+
+    if (leasesError) {
+      console.error('Error fetching leases:', leasesError);
+      return NextResponse.json({ error: 'Failed to fetch leases' }, { status: 500 });
+    }
+
+    // Transform the data to match the frontend interface
+    const transformedLeases = leases.map(lease => ({
+      id: lease.id,
+      created_at: lease.created_at,
+      property: {
+        name: lease.property?.name || 'Unknown Property',
+        address: [
+          lease.property?.address_line_1,
+          lease.property?.address_line_2,
+          [lease.property?.city, lease.property?.state, lease.property?.zip].filter(Boolean).join(', ')
+        ].filter(Boolean).join(', ')
+      },
+      unit: {
+        unit_number: lease.unit?.unit_name || 'Unknown Unit'
+      },
+      tenant: lease.tenant_id ? JSON.parse(lease.tenant_id)[0] : null,
+      start_date: lease.start_date,
+      end_date: lease.end_date,
+      rent_amount: lease.rent_amount || '0',
+      lease_term: lease.lease_term,
+      deposit_amount: lease.deposit_amount || '0'
+    }));
+
+    return NextResponse.json(transformedLeases);
+  } catch (error) {
+    console.error('Error in leases route:', error);
+    return NextResponse.json(
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
   }
 } 

@@ -1,0 +1,209 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Plus, Search, ArrowUpDown, ArrowLeft, ChevronRight, ChevronDown } from "lucide-react"
+import { useRouter } from "next/navigation"
+import React from "react"
+
+interface Account {
+  id: string
+  account_name: string
+  account_type: string
+  account_subtype: string
+  balance: number
+  default_for: string | null
+  account_description: string | null
+  is_sub_account?: boolean
+  parent_account?: string
+  subAccounts?: Account[]
+}
+
+export default function ChartOfAccountsPage() {
+  const router = useRouter()
+  const [searchQuery, setSearchQuery] = useState("")
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set())
+
+  // Toggle expansion state of an account
+  const toggleAccountExpansion = (accountId: string) => {
+    setExpandedAccounts(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(accountId)) {
+        newSet.delete(accountId)
+      } else {
+        newSet.add(accountId)
+      }
+      return newSet
+    })
+  }
+
+  // Organize accounts into a hierarchical structure
+  const organizeAccounts = (accounts: Account[]) => {
+    const mainAccounts = accounts.filter(account => !account.is_sub_account)
+    const subAccounts = accounts.filter(account => account.is_sub_account)
+    
+    return mainAccounts.map(mainAccount => ({
+      ...mainAccount,
+      subAccounts: subAccounts.filter(subAccount => subAccount.parent_account === mainAccount.id)
+    }))
+  }
+
+  useEffect(() => {
+    fetchAccounts()
+  }, [])
+
+  async function fetchAccounts() {
+    try {
+      setIsLoading(true)
+      const response = await fetch("/api/accounting/chart-of-accounts")
+      if (!response.ok) {
+        throw new Error("Failed to fetch accounts")
+      }
+      const data = await response.json()
+      setAccounts(data)
+    } catch (error) {
+      console.error("Error fetching accounts:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const organizedAccounts = organizeAccounts(accounts)
+  const filteredAccounts = organizedAccounts.filter(account => 
+    (account.account_name?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+    (account.account_type?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+    (account.account_subtype?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+    (account.account_description?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+    account.subAccounts?.some(subAccount => 
+      (subAccount.account_name?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+      (subAccount.account_type?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+      (subAccount.account_subtype?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+      (subAccount.account_description?.toLowerCase() || "").includes(searchQuery.toLowerCase())
+    )
+  )
+
+  return (
+    <div className="p-6 space-y-6">
+      <div>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" className="p-2 hover:bg-transparent -ml-2" onClick={() => window.history.back()}>
+              <ArrowLeft className="h-10 w-10" />
+            </Button>
+            <h1 className="text-3xl font-bold tracking-tight">Chart of Accounts</h1>
+          </div>
+          <div className="ml-10">
+            <p className="text-muted-foreground">Organize your financial records with a structured chart of accounts.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Search and Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search accounts..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <Button 
+              className="gap-2" 
+              variant="default"
+              onClick={() => router.push("/accounting/chart-of-accounts/add-account")}
+            >
+              <Plus className="w-4 h-4" />
+              New Account
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <p className="text-muted-foreground">Loading accounts...</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[300px]">
+                    <Button variant="ghost" className="gap-1 -ml-4 h-8 data-[state=open]:bg-accent">
+                      Account Name
+                      <ArrowUpDown className="h-4 w-4" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" className="gap-1 -ml-4 h-8 data-[state=open]:bg-accent">
+                      Type
+                      <ArrowUpDown className="h-4 w-4" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>Default For</TableHead>
+                  <TableHead className="w-[300px]">Description</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredAccounts.map((account) => (
+                  <React.Fragment key={`account-group-${account.id}`}>
+                    <TableRow 
+                      key={account.id} 
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => account.subAccounts?.length ? toggleAccountExpansion(account.id) : null}
+                    >
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {account.subAccounts?.length ? (
+                            expandedAccounts.has(account.id) ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )
+                          ) : (
+                            <div className="w-4" /> /* Spacer for alignment */
+                          )}
+                          {account.account_name}
+                        </div>
+                      </TableCell>
+                      <TableCell>{account.account_type} → {account.account_subtype}</TableCell>
+                      <TableCell>{account.default_for}</TableCell>
+                      <TableCell className="text-muted-foreground">{account.account_description}</TableCell>
+                    </TableRow>
+                    {expandedAccounts.has(account.id) && account.subAccounts?.map((subAccount) => (
+                      <TableRow key={subAccount.id} className="cursor-pointer hover:bg-muted/50 bg-muted/30">
+                        <TableCell className="font-medium pl-11">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">└─</span>
+                            {subAccount.account_name}
+                          </div>
+                        </TableCell>
+                        <TableCell>{subAccount.account_type} → {subAccount.account_subtype}</TableCell>
+                        <TableCell>{subAccount.default_for}</TableCell>
+                        <TableCell className="text-muted-foreground">{subAccount.account_description}</TableCell>
+                      </TableRow>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+} 

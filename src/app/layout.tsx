@@ -6,6 +6,7 @@ import { AppSidebar } from '@/components/navbar/app-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { usePathname } from 'next/navigation';
 import { ThemeProvider } from "next-themes";
+import type { Metadata } from "next";
 
 function RootLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

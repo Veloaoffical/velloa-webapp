@@ -1,7 +1,6 @@
 'use client';
 
 import { ColumnDef } from "@tanstack/react-table";
-import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -72,27 +71,24 @@ type Lease = {
 export const columns: ColumnDef<Lease>[] = [
   {
     accessorKey: "property.name",
-    header: "Property",
+    header: "Name",
     cell: ({ row }) => {
       return (
         <div className="flex flex-col">
           <span className="font-medium">{row.original.property?.name}</span>
-          <span className="text-sm text-muted-foreground">{row.original.property?.address}</span>
         </div>
       );
     },
   },
   {
-    accessorKey: "unit.unit_number",
-    header: "Unit",
-    cell: ({ row }) => row.original.unit?.unit_number || "N/A",
-  },
-  {
-    accessorKey: "tenant.first_name",
-    header: "Tenant",
+    accessorKey: "property.address",
+    header: "Address",
     cell: ({ row }) => {
-      const tenant = row.original.tenant;
-      return tenant ? `${tenant.first_name} ${tenant.last_name}` : "N/A";
+      return (
+        <div className="flex flex-col">
+          <span className="text-sm">{row.original.property?.address}</span>
+        </div>
+      );
     },
   },
   {
@@ -114,13 +110,12 @@ export const columns: ColumnDef<Lease>[] = [
     }).format(parseFloat(row.original.rent_amount)) : "N/A",
   },
   {
-    accessorKey: "lease_term",
-    header: "Type",
-    cell: ({ row }) => (
-      <Badge variant="outline">
-        {row.original.lease_term || "N/A"}
-      </Badge>
-    ),
+    accessorKey: "deposit_amount",
+    header: "Deposit Balance",
+    cell: ({ row }) => row.original.deposit_amount ? new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(parseFloat(row.original.deposit_amount)) : "N/A",
   },
   {
     id: "actions",

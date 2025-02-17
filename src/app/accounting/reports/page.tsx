@@ -612,6 +612,7 @@ export default function ReportsPage() {
       id: createReportId("tasks", "Tasks by Priority"),
     },
     {
+      
       title: "Tasks by Property",
       description: "View tasks grouped by property",
       icon: Building,

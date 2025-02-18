@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CalendarIcon, FileText, X } from "lucide-react"
+import { CalendarIcon, FileText, X, Plus } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -65,7 +65,7 @@ function Placeholder() {
 function MemoEditor({ initialValue, onChange }: { initialValue: string; onChange: (value: string) => void }) {
   const initialConfig = {
     namespace: 'JournalEntryMemo',
-    editorState: initialValue ? JSON.parse(initialValue) : undefined,
+    editorState: initialValue,
     onError: (error: Error) => {
       console.error(error);
     },
@@ -147,7 +147,8 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
       version: 1,
     }
   });
-  const [memo, setMemo] = useState<string>("")
+  const [memo, setMemo] = useState<string>(emptyEditorState)
+  const [showMemo, setShowMemo] = useState(false)
   const [properties, setProperties] = useState<Property[]>([])
   const [categories, setCategories] = useState<AccountCategory[]>([])
   const [units, setUnits] = useState<Unit[]>([])
@@ -466,7 +467,7 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
 
           {/* Journal Entry Lines */}
           <div className="space-y-2">
-            <div className="grid grid-cols-[1fr,1fr,2fr,1fr,1fr,auto] gap-4 px-4">
+            <div className="grid grid-cols-[1fr,1fr,2fr,1fr,1fr,auto] gap-4 px-4 pb-2 border-b">
               <Label className="text-sm font-medium">Category</Label>
               <Label className="text-sm font-medium">Unit</Label>
               <Label className="text-sm font-medium">Description</Label>
@@ -544,8 +545,9 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
               </div>
             ))}
 
-            <Button variant="link" onClick={handleAddLine} className="text-primary">
-              + Add Line Item
+            <Button variant="link" onClick={handleAddLine} className="text-primary flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Add Line Item
             </Button>
           </div>
 
@@ -553,13 +555,18 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
           <div className="space-y-2">
             <Button 
               variant="ghost" 
-              onClick={() => setMemo(memo ? "" : emptyEditorState)} 
+              onClick={() => {
+                setShowMemo(!showMemo)
+                if (!showMemo) {
+                  setMemo(emptyEditorState)
+                }
+              }} 
               className="flex items-center gap-2 text-primary hover:text-primary/80 p-0"
             >
               <FileText className="h-4 w-4" />
-              {memo ? "Hide memo" : "Add memo"}
+              {showMemo ? "Hide memo" : "Add memo"}
             </Button>
-            {memo !== "" && (
+            {showMemo && (
               <div className="animate-in slide-in-from-top-2 duration-200">
                 <MemoEditor 
                   initialValue={memo} 

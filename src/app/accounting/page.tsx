@@ -20,7 +20,8 @@ import {
   ChevronDown, Wallet, ArrowLeftRight, Building2, User
 } from "lucide-react"
 import { motion, useInView, useMotionValue, useTransform, animate } from "framer-motion"
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useState } from "react"
+import { JournalEntryDialog } from "./components/JournalEntryDialog"
 
 const profitLossData = [
   { month: "Jan", revenue: 4500, costs: 3000, netIncome: 1500 },
@@ -100,6 +101,8 @@ function AnimatedNumber({ value, prefix = "", suffix = "" }: AnimatedNumberProps
 }
 
 export default function AccountingPage() {
+  const [showJournalEntryDialog, setShowJournalEntryDialog] = useState(false)
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -177,7 +180,7 @@ export default function AccountingPage() {
             <DropdownMenuSeparator />
             <DropdownMenuLabel>Other Transactions</DropdownMenuLabel>
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowJournalEntryDialog(true)}>
                 <FileText className="w-4 h-4 me-2 opacity-60" />
                 Journal Entry
               </DropdownMenuItem>
@@ -319,8 +322,6 @@ export default function AccountingPage() {
                         fillOpacity={0.4}
                       />
                     </AreaChart>
-                    
-                    
                   </ResponsiveContainer>
                 </ChartContainer>
               </CardContent>
@@ -569,6 +570,11 @@ export default function AccountingPage() {
           </CardContent>
         </Card>
       </div>
+
+      <JournalEntryDialog
+        open={showJournalEntryDialog}
+        onOpenChange={setShowJournalEntryDialog}
+      />
     </div>
   )
 } 

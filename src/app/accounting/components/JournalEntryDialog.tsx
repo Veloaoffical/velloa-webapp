@@ -6,14 +6,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CalendarIcon, FileText, X, Plus } from "lucide-react"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FileText, X, Plus } from "lucide-react"
 import { format } from "date-fns"
-import { cn } from "@/lib/utils"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
+import CalendarInput from "@/components/calendarwithmonthsinput"
 import { toast } from "sonner"
 import { customAlphabet } from "nanoid"
+import { Checkbox } from "@/components/ui/checkbox"
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -23,6 +22,16 @@ import { ListItemNode, ListNode } from '@lexical/list';
 import { ListPlugin } from '@lexical/react/LexicalListPlugin';
 import { ToolbarPlugin } from '@/components/editor/ToolbarPlugin';
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { motion, AnimatePresence } from "framer-motion"
+import React from "react"
 
 interface JournalEntryDialogProps {
   open: boolean
@@ -47,6 +56,11 @@ interface AccountCategory {
   account_name: string
   account_type: string
   account_subtype: string
+  sub_accounts?: {
+    id: string
+    account_name: string
+    account_subtype: string
+  }[]
 }
 
 interface Unit {
@@ -123,9 +137,10 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
   const [entryDate, setEntryDate] = useState<Date>()
   const [startDate, setStartDate] = useState<Date>()
   const [endDate, setEndDate] = useState<Date>()
-  const [frequency, setFrequency] = useState<string>("monthly")
+  const [frequency, setFrequency] = useState<string>("")
   const [repeatForever, setRepeatForever] = useState(false)
   const [lines, setLines] = useState<JournalEntryLine[]>([
+    { category: "", unit: "", description: "", debits: "", credits: "" },
     { category: "", unit: "", description: "", debits: "", credits: "" }
   ])
   const emptyEditorState = JSON.stringify({
@@ -192,12 +207,15 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
 
       try {
         const response = await fetch(`/api/property/${property}/units`)
-        if (!response.ok) throw new Error("Failed to fetch units")
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Failed to fetch units")
+        }
         const data = await response.json()
         setUnits(data)
       } catch (error) {
         console.error("Error fetching units:", error)
-        toast.error("Failed to load units")
+        toast.error(error instanceof Error ? error.message : "Failed to load units")
       }
     }
 
@@ -209,7 +227,7 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
   }
 
   const handleDeleteLine = (index: number) => {
-    if (lines.length > 1) {
+    if (lines.length > 2) {
       setLines(lines.filter((_, i) => i !== index))
     }
   }
@@ -311,8 +329,11 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
         <div className="space-y-6 flex-1 overflow-y-auto px-4">
           {/* Property Selection */}
           <div className="pt-4">
+            <Label className="text-sm text-muted-foreground mb-2 block">
+              Property <span className="text-destructive">*</span>
+            </Label>
             <Select value={property} onValueChange={handlePropertyChange}>
-              <SelectTrigger className="w-[300px] bg-background">
+              <SelectTrigger className="w-[300px] h-[42px] bg-background">
                 <SelectValue placeholder="Select property" />
               </SelectTrigger>
               <SelectContent>
@@ -344,208 +365,253 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
           </RadioGroup>
 
           {/* Entry Date for One Time / Recurring Options */}
-          {entryType === "one_time" ? (
-            <div className="animate-in fade-in duration-200">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-[300px] justify-start text-left font-normal bg-background",
-                      !entryDate && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {entryDate ? format(entryDate, "PPP") : "Select entry date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={entryDate}
-                    onSelect={setEntryDate}
-                    initialFocus
+          <div className="relative h-[120px]">
+            <AnimatePresence mode="wait">
+              {entryType === "one_time" ? (
+                <div className="absolute w-full">
+                  <Label className="text-sm text-muted-foreground mb-2 block">
+                    Entry date <span className="text-destructive">*</span>
+                  </Label>
+                  <CalendarInput
+                    value={entryDate}
+                    onChange={setEntryDate}
+                    className="w-[300px] h-[42px]"
+                    placeholder="Select entry date"
                   />
-                </PopoverContent>
-              </Popover>
-            </div>
-          ) : (
-            <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
-              <div className="flex gap-4">
-                {/* Start Date */}
-                <div>
-                  <Label className="text-sm text-muted-foreground mb-2 block">Start date</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-[200px] justify-start text-left font-normal bg-background",
-                          !startDate && "text-muted-foreground"
-                        )}
+                </div>
+              ) : (
+                <motion.div
+                  key="recurring"
+                  className="absolute w-full"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="space-y-4">
+                    <div className="flex gap-4">
+                      {/* Start Date */}
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.2, duration: 0.2 }}
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {startDate ? format(startDate, "PPP") : "Select start date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={startDate}
-                        onSelect={setStartDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
+                        <Label className="text-sm text-muted-foreground mb-2 block">
+                          Start date <span className="text-destructive">*</span>
+                        </Label>
+                        <CalendarInput
+                          value={startDate}
+                          onChange={setStartDate}
+                          className="w-[200px] h-[42px]"
+                          placeholder="Select start date"
+                        />
+                      </motion.div>
 
-                {/* End Date */}
-                <div>
-                  <Label className="text-sm text-muted-foreground mb-2 block">End date</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-[200px] justify-start text-left font-normal bg-background",
-                          !endDate && "text-muted-foreground"
-                        )}
-                        disabled={repeatForever}
+                      {/* End Date */}
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.3, duration: 0.2 }}
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {endDate ? format(endDate, "PPP") : "Select end date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={endDate}
-                        onSelect={setEndDate}
-                        initialFocus
+                        <Label className="text-sm text-muted-foreground mb-2 block">End date</Label>
+                        <CalendarInput
+                          value={endDate}
+                          onChange={setEndDate}
+                          className="w-[200px] h-[42px]"
+                          placeholder="Select end date"
+                          disabled={repeatForever}
+                        />
+                      </motion.div>
+
+                      {/* Frequency */}
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.4, duration: 0.2 }}
+                      >
+                        <Label className="text-sm text-muted-foreground mb-2 block">Frequency</Label>
+                        <Select value={frequency} onValueChange={setFrequency}>
+                          <SelectTrigger className={`w-[200px] h-[42px] bg-background ${!frequency ? 'text-muted-foreground' : ''}`}>
+                            <SelectValue placeholder="Select frequency" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="daily">Daily</SelectItem>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="quarterly">Quarterly</SelectItem>
+                            <SelectItem value="yearly">Yearly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </motion.div>
+                    </div>
+
+                    <motion.div
+                      className="flex items-center space-x-2"
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.5, duration: 0.2 }}
+                    >
+                      <Checkbox
+                        id="repeat-forever"
+                        checked={repeatForever}
+                        onCheckedChange={(checked) => {
+                          setRepeatForever(checked as boolean)
+                          if (checked) {
+                            setEndDate(undefined)
+                          }
+                        }}
+                        className="h-[18px] w-[18px]"
                       />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                {/* Frequency */}
-                <div>
-                  <Label className="text-sm text-muted-foreground mb-2 block">Frequency</Label>
-                  <Select value={frequency} onValueChange={setFrequency}>
-                    <SelectTrigger className="w-[200px] bg-background">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="daily">Daily</SelectItem>
-                      <SelectItem value="weekly">Weekly</SelectItem>
-                      <SelectItem value="monthly">Monthly</SelectItem>
-                      <SelectItem value="quarterly">Quarterly</SelectItem>
-                      <SelectItem value="yearly">Yearly</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="repeat-forever"
-                  checked={repeatForever}
-                  onChange={(e) => {
-                    setRepeatForever(e.target.checked)
-                    if (e.target.checked) {
-                      setEndDate(undefined)
-                    }
-                  }}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-                <Label htmlFor="repeat-forever" className="text-sm">Repeat forever</Label>
-              </div>
-            </div>
-          )}
+                      <Label htmlFor="repeat-forever" className="text-sm text-muted-foreground">Repeat forever</Label>
+                    </motion.div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           <div className="border-b" />
 
           {/* Journal Entry Lines */}
-          <div className="space-y-2">
-            <div className="grid grid-cols-[1fr,1fr,2fr,1fr,1fr,auto] gap-4 px-4 pb-2 border-b">
-              <Label className="text-sm font-medium">Category</Label>
-              <Label className="text-sm font-medium">Unit</Label>
-              <Label className="text-sm font-medium">Description</Label>
-              <Label className="text-sm font-medium">Debits</Label>
-              <Label className="text-sm font-medium">Credits</Label>
-              <div className="w-10" />
-            </div>
+          <div>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Category <span className="text-destructive">*</span></TableHead>
+                  <TableHead>Unit</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Debits</TableHead>
+                  <TableHead>Credits</TableHead>
+                  <TableHead className="w-10"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lines.map((line, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="py-2">
+                      <Select value={line.category} onValueChange={(value) => handleLineChange(index, "category", value)}>
+                        <SelectTrigger className={`bg-background h-[42px] ${!line.category ? 'text-muted-foreground' : ''}`}>
+                          <SelectValue placeholder="Select category">
+                            {line.category && categories.reduce((name, category) => {
+                              if (category.id === line.category) {
+                                return category.account_name;
+                              }
+                              if (category.sub_accounts) {
+                                const subAccount = category.sub_accounts.find(sub => sub.id === line.category);
+                                if (subAccount) {
+                                  return subAccount.account_name;
+                                }
+                              }
+                              return name;
+                            }, "")}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                          {Object.entries(
+                            categories.reduce((acc, category) => {
+                              if (!acc[category.account_type]) {
+                                acc[category.account_type] = [];
+                              }
+                              acc[category.account_type].push(category);
+                              return acc;
+                            }, {} as Record<string, AccountCategory[]>)
+                          ).map(([type, cats]) => (
+                            <SelectGroup key={type}>
+                              <SelectLabel>{type}</SelectLabel>
+                              {cats.map((category) => (
+                                <React.Fragment key={category.id}>
+                                  <SelectItem value={category.id}>
+                                    <div className="flex flex-col">
+                                      <span>{category.account_name}</span>
+                                      <span className="text-xs text-muted-foreground">{category.account_subtype}</span>
+                                    </div>
+                                  </SelectItem>
+                                  {category.sub_accounts && category.sub_accounts.length > 0 && (
+                                    <SelectGroup>
+                                      <SelectLabel className="pl-4 text-xs">
+                                        {category.account_name} Sub-accounts
+                                      </SelectLabel>
+                                      {category.sub_accounts.map((subAccount) => (
+                                        <SelectItem 
+                                          key={subAccount.id} 
+                                          value={subAccount.id}
+                                          className="pl-6"
+                                        >
+                                          <div className="flex flex-col">
+                                            <span>{subAccount.account_name}</span>
+                                            <span className="text-xs text-muted-foreground">{subAccount.account_subtype}</span>
+                                          </div>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectGroup>
+                                  )}
+                                </React.Fragment>
+                              ))}
+                            </SelectGroup>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <Select 
+                        value={line.unit} 
+                        onValueChange={(value) => handleLineChange(index, "unit", value)}
+                        disabled={!property}
+                      >
+                        <SelectTrigger className={`bg-background h-[42px] ${!line.unit ? 'text-muted-foreground' : ''}`}>
+                          <SelectValue placeholder={property ? "Select unit" : "Select property first"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {units.map((unit) => (
+                            <SelectItem key={unit.id} value={unit.id}>
+                              {unit.unit_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <Input
+                        placeholder="Description"
+                        value={line.description}
+                        onChange={(e) => handleLineChange(index, "description", e.target.value)}
+                        className="bg-background h-[42px]"
+                      />
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        value={line.debits}
+                        onChange={(e) => handleLineChange(index, "debits", e.target.value)}
+                        className="bg-background h-[42px]"
+                      />
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        value={line.credits}
+                        onChange={(e) => handleLineChange(index, "credits", e.target.value)}
+                        className="bg-background h-[42px]"
+                      />
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDeleteLine(index)}
+                        disabled={lines.length <= 2}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
 
-            {lines.map((line, index) => (
-              <div key={index} className="p-2 border-b">
-                <div className="grid grid-cols-[1fr,1fr,2fr,1fr,1fr,auto] gap-4">
-                  <Select value={line.category} onValueChange={(value) => handleLineChange(index, "category", value)}>
-                    <SelectTrigger className="bg-background">
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.account_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select 
-                    value={line.unit} 
-                    onValueChange={(value) => handleLineChange(index, "unit", value)}
-                    disabled={!property}
-                  >
-                    <SelectTrigger className="bg-background">
-                      <SelectValue placeholder={property ? "Select unit" : "Select property first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {units.map((unit) => (
-                        <SelectItem key={unit.id} value={unit.id}>
-                          {unit.unit_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Input
-                    placeholder="Description"
-                    value={line.description}
-                    onChange={(e) => handleLineChange(index, "description", e.target.value)}
-                    className="bg-background"
-                  />
-
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={line.debits}
-                    onChange={(e) => handleLineChange(index, "debits", e.target.value)}
-                    className="bg-background"
-                  />
-
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={line.credits}
-                    onChange={(e) => handleLineChange(index, "credits", e.target.value)}
-                    className="bg-background"
-                  />
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground hover:text-destructive"
-                    onClick={() => handleDeleteLine(index)}
-                    disabled={lines.length <= 1}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-
-            <Button variant="link" onClick={handleAddLine} className="text-primary flex items-center gap-2">
+            <Button variant="link" onClick={handleAddLine} className="text-primary flex items-center gap-2 mt-2">
               <Plus className="h-4 w-4" />
               Add Line Item
             </Button>
@@ -566,14 +632,20 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
               <FileText className="h-4 w-4" />
               {showMemo ? "Hide memo" : "Add memo"}
             </Button>
-            {showMemo && (
-              <div className="animate-in slide-in-from-top-2 duration-200">
+            <div className="overflow-hidden">
+              <div 
+                className={`transform transition-all duration-200 ease-out ${
+                  showMemo 
+                    ? 'translate-y-0 opacity-100 h-auto visible' 
+                    : 'translate-y-4 opacity-0 h-0 invisible'
+                }`}
+              >
                 <MemoEditor 
                   initialValue={memo} 
                   onChange={(value) => setMemo(value)} 
                 />
               </div>
-            )}
+            </div>
           </div>
 
           {/* File Upload */}

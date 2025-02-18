@@ -55,6 +55,7 @@ import {
   Wallet,
   DollarSign,
   Bed,
+  ArrowLeft,
 } from "lucide-react"
 
 interface Report {
@@ -612,13 +613,11 @@ export default function ReportsPage() {
       id: createReportId("tasks", "Tasks by Priority"),
     },
     {
-      
       title: "Tasks by Property",
       description: "View tasks grouped by property",
       icon: Building,
       id: createReportId("tasks", "Tasks by Property"),
     },
-    
     {
       title: "Tasks by Status",
       description: "View tasks organized by current status",
@@ -744,11 +743,18 @@ export default function ReportsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-        <p className="text-muted-foreground">
-          Generate and view detailed financial reports and analytics
-        </p>
+      <div className="flex items-center gap-4 mb-4">
+        <Link href="/accounting">
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
+          <p className="text-muted-foreground">
+            Generate and view detailed financial reports and analytics
+          </p>
+        </div>
       </div>
 
       <div className="space-y-8">

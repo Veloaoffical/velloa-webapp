@@ -6,21 +6,22 @@ import { AppSidebar } from '@/components/navbar/app-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { usePathname } from 'next/navigation';
 import { ThemeProvider } from "next-themes";
-import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
+
 
 function RootLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname === '/forgot-password' || pathname === '/reset-password';
 
   return (
-    <html lang="en" suppressHydrationWarning={true}>
+    <html lang="en" className={`${GeistSans.variable}`} suppressHydrationWarning={true}>
       <head>
         <title>Velloa - Property Management</title>
         <link rel="icon" href="/favicon.ico" sizes="any" />
 
         <meta name="theme-color" content="#1DB954" />
       </head>
-      <body suppressHydrationWarning={true}>
+      <body>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

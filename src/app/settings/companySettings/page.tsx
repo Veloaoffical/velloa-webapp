@@ -13,26 +13,11 @@ import {
   FileText,
   Building2,
   Calendar,
-  CheckCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { DefaultAccountsForm } from "./components/DefaultAccountsForm";
-
-interface QuickBooksSettings {
-  isConnected: boolean;
-  autoSync: boolean;
-  syncFrequency: string;
-  lastSyncDate?: string;
-  accountMappings: {
-    [key: string]: string;
-  };
-}
 
 interface DefaultAccountsData {
   operatingBankAccount: string;
@@ -104,38 +89,16 @@ const settings = [
 export default function CompanySettingsPage() {
   const [activeSection, setActiveSection] = useState("Company Info");
   const [isClient, setIsClient] = useState(false);
-  const [qbEnabled, setQbEnabled] = useState(false);
-  const [qbSettings, setQbSettings] = useState<QuickBooksSettings>({
-    isConnected: false,
-    autoSync: false,
-    syncFrequency: 'daily',
-    accountMappings: {}
-  });
   const [defaultAccounts, setDefaultAccounts] = useState<DefaultAccountsData | undefined>(undefined);
 
   useEffect(() => {
     setIsClient(true);
-    // Fetch initial QuickBooks settings
+    // Fetch initial settings
     const fetchSettings = async () => {
       try {
-        const [qbResponse, defaultAccountsResponse] = await Promise.all([
-          fetch('/api/company/settings/quickbooks'),
-          fetch('/api/company/settings/default-accounts')
-        ]);
-
-        if (!qbResponse.ok) throw new Error('Failed to fetch QuickBooks settings');
+        const defaultAccountsResponse = await fetch('/api/company/settings/default-accounts');
         if (!defaultAccountsResponse.ok) throw new Error('Failed to fetch default accounts settings');
-
-        const qbData = await qbResponse.json();
         const defaultAccountsData = await defaultAccountsResponse.json();
-        
-        setQbEnabled(qbData.isEnabled || false);
-        setQbSettings(qbData.settings || {
-          isConnected: false,
-          autoSync: false,
-          syncFrequency: 'daily',
-          accountMappings: {}
-        });
         setDefaultAccounts(defaultAccountsData);
       } catch (error) {
         console.error('Error fetching settings:', error);
@@ -144,53 +107,6 @@ export default function CompanySettingsPage() {
     };
     fetchSettings();
   }, []);
-
-  const handleToggleEnabled = async (enabled: boolean) => {
-    setQbEnabled(enabled);
-    try {
-      const response = await fetch('/api/company/settings/quickbooks', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          isEnabled: enabled,
-          settings: qbSettings
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to update settings');
-      toast.success('QuickBooks settings updated successfully');
-    } catch (error) {
-      console.error('Error updating QuickBooks settings:', error);
-      toast.error('Failed to update QuickBooks settings');
-      setQbEnabled(!enabled); // Revert on error
-    }
-  };
-
-  const handleQuickBooksSettingsChange = async (newSettings: Partial<QuickBooksSettings>) => {
-    try {
-      const updatedSettings = { ...qbSettings, ...newSettings };
-      setQbSettings(updatedSettings);
-
-      const response = await fetch('/api/company/settings/quickbooks', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          isEnabled: qbEnabled,
-          settings: updatedSettings
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to update settings');
-      toast.success('QuickBooks settings updated successfully');
-    } catch (error) {
-      console.error('Error updating QuickBooks settings:', error);
-      toast.error('Failed to update QuickBooks settings');
-    }
-  };
 
   const scrollToSection = (label: string) => {
     setActiveSection(label);
@@ -252,86 +168,13 @@ export default function CompanySettingsPage() {
                           <p className="text-sm text-muted-foreground">{setting.description}</p>
                         </div>
                       </div>
-                      {setting.label === "QuickBooks Sync" && (
-                        <Switch 
-                          checked={qbEnabled}
-                          onCheckedChange={handleToggleEnabled}
-                        />
-                      )}
                     </div>
-                    {setting.label === "QuickBooks Sync" && <Separator className="mt-6" />}
                   </div>
 
-                  {setting.label === "QuickBooks Sync" ? (
-                    <div className={cn(!qbEnabled && "opacity-50 pointer-events-none")}>
-                      <div className="space-y-8">
-                        <div className="space-y-4">
-                          <h3 className="text-lg font-medium">Connection Status</h3>
-                          {qbSettings.isConnected ? (
-                            <div className="flex items-center gap-2 text-green-600">
-                              <CheckCircle className="w-5 h-5" />
-                              <span>Connected to QuickBooks</span>
-                            </div>
-                          ) : (
-                            <Button onClick={() => handleQuickBooksSettingsChange({ isConnected: true })}>
-                              Connect to QuickBooks
-                            </Button>
-                          )}
-                        </div>
-
-                        <div className="space-y-4">
-                          <h3 className="text-lg font-medium">Sync Settings</h3>
-                          <div className="flex items-center gap-4">
-                            <Switch
-                              checked={qbSettings.autoSync}
-                              onCheckedChange={(checked) => handleQuickBooksSettingsChange({ autoSync: checked })}
-                            />
-                            <span>Enable automatic synchronization</span>
-                          </div>
-                          
-                          <div className="flex items-center gap-4">
-                            <Select
-                              value={qbSettings.syncFrequency}
-                              onValueChange={(value) => handleQuickBooksSettingsChange({ syncFrequency: value })}
-                            >
-                              <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Select frequency" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="hourly">Hourly</SelectItem>
-                                <SelectItem value="daily">Daily</SelectItem>
-                                <SelectItem value="weekly">Weekly</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <span>Sync frequency</span>
-                          </div>
-                        </div>
-
-                        {qbSettings.lastSyncDate && (
-                          <div className="text-sm text-muted-foreground">
-                            Last synced: {new Date(qbSettings.lastSyncDate).toLocaleString()}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : setting.label === "Default Account" ? (
+                  {setting.label === "Default Account" ? (
                     <div>
                       <DefaultAccountsForm 
                         initialData={defaultAccounts}
-                        onSave={async (data) => {
-                          const response = await fetch('/api/company/settings/default-accounts', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(data)
-                          });
-                          
-                          if (!response.ok) {
-                            throw new Error('Failed to save default accounts');
-                          }
-                          setDefaultAccounts(data);
-                        }}
                       />
                     </div>
                   ) : (

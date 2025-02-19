@@ -2,13 +2,13 @@
 
 import {
   CircleHelp,
-  Bell,
   ChevronsUpDown,
   LogOut,
   Settings,
   BookText,
   Sun,
   Moon,
+  Gift,
 } from "lucide-react"
 
 import {
@@ -46,10 +46,12 @@ export function NavUser({
     avatar: string
   }
 }) {
-  const { isMobile } = useSidebar()
+  const { isMobile, state } = useSidebar()
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   const [showNotifications, setShowNotifications] = useState(false)
+
+  const isCollapsed = state === "collapsed"
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark")
@@ -92,19 +94,23 @@ export function NavUser({
             <DropdownMenuTrigger asChild>
               <SidebarMenuButton
                 size="lg"
-                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                className="hover:bg-accent/50 data-[state=open]:bg-accent"
               >
-                <Avatar className="h-8 w-8 rounded-lg ">
+                <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg font-normal text-foreground">
+                  <AvatarFallback className="rounded-lg font-normal text-foreground bg-muted">
                     {getInitials(user.name)}
                   </AvatarFallback>
                 </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">{user.name}</span>
-                  <span className="truncate text-xs">{user.email}</span>
-                </div>
-                <ChevronsUpDown className="ml-auto size-4" />
+                {!isCollapsed && (
+                  <>
+                    <div className="grid flex-1 text-left text-sm leading-tight">
+                      <span className="truncate font-semibold text-foreground">{user.name}</span>
+                      <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+                    </div>
+                    <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
+                  </>
+                )}
               </SidebarMenuButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent
@@ -117,44 +123,47 @@ export function NavUser({
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                   <Avatar className="h-8 w-8 rounded-lg">
                     <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback className="rounded-lg">
+                    <AvatarFallback className="rounded-lg bg-muted">
                       {getInitials(user.name)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">{user.name}</span>
-                    <span className="truncate text-xs">{user.email}</span>
+                    <span className="truncate font-semibold text-foreground">{user.name}</span>
+                    <span className="truncate text-xs text-muted-foreground">{user.email}</span>
                   </div>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem onClick={() => router.push('/settings')}>
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
+                  <Settings className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <span className="text-foreground">Settings</span>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem onClick={() => window.open('https://velloa.tawk.help/', '_blank')}>
-                  <CircleHelp className="h-4 w-4 mr-2" />
-                  Help
+                  <CircleHelp className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <span className="text-foreground">Help</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => window.open('https://velloa.ca/', '_blank')}>
-                  <BookText className="h-4 w-4 mr-2" />
-                  Forms
+                  <BookText className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <span className="text-foreground">Forms</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShowNotifications(true)}>
-                  <Bell className="h-4 w-4 mr-2" />
-                  Notifications
+                <DropdownMenuItem onClick={() => window.open('https://velloa.ca/whats-new', '_blank')}>
+                  <Gift className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <span className="text-foreground">What&apos;s New</span>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem className="p-2" onSelect={(e) => e.preventDefault()}>
                   <div className="flex w-full items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {theme === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                    <div className="flex items-center gap-2 text-foreground">
+                      {theme === "dark" ? 
+                        <Moon className="h-4 w-4 text-muted-foreground" /> : 
+                        <Sun className="h-4 w-4 text-muted-foreground" />
+                      }
                       Theme
                     </div>
                     <Switch
@@ -168,8 +177,8 @@ export function NavUser({
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Log out
+                <LogOut className="h-4 w-4 mr-2 text-muted-foreground" />
+                <span className="text-foreground">Log out</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

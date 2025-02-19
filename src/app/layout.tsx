@@ -8,7 +8,6 @@ import { usePathname } from 'next/navigation';
 import { ThemeProvider } from "next-themes";
 import { GeistSans } from "geist/font/sans";
 
-
 function RootLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname === '/forgot-password' || pathname === '/reset-password';
@@ -18,7 +17,6 @@ function RootLayoutContent({ children }: { children: React.ReactNode }) {
       <head>
         <title>Velloa - Property Management</title>
         <link rel="icon" href="/favicon.ico" sizes="any" />
-
         <meta name="theme-color" content="#1DB954" />
       </head>
       <body>
@@ -30,14 +28,10 @@ function RootLayoutContent({ children }: { children: React.ReactNode }) {
         >
           <SidebarProvider>
             <div className="flex min-h-screen w-full">
-              {!isAuthPage && (
-                <div>
-                  <AppSidebar className="bg-[#1DB954] text-white" />
-                </div>
-              )}
-              <div className="flex-1 w-0 min-w-0">
+              {!isAuthPage && <AppSidebar />}
+              <main className="flex-1 w-0 min-w-0 md:group-data-[collapsible=icon]:pl-6">
                 {children}
-              </div>
+              </main>
             </div>
           </SidebarProvider>
           <Toaster position="top-right" />

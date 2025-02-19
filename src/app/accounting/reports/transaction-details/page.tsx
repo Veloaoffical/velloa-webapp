@@ -31,6 +31,7 @@ import { RangeCalendar } from "@/components/ui/calendar-rac"
 import { DateInput, dateInputStyle } from "@/components/ui/datefield-rac"
 import { Button, DateRangePicker, Dialog, Group, Popover } from "react-aria-components"
 import { parseDate, type CalendarDate } from "@internationalized/date"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface Account {
   id: string
@@ -89,6 +90,7 @@ export default function TransactionDetailsReport() {
   const [loading, setLoading] = useState(false)
   const [realTransactions, setRealTransactions] = useState<Transaction[]>([])
   const [properties, setProperties] = useState<{ [key: string]: Property }>({})
+  const [propertiesLoading, setPropertiesLoading] = useState(true)
   const tableId = useId()
   const currentDateTime = new Date()
   
@@ -167,6 +169,7 @@ export default function TransactionDetailsReport() {
   useEffect(() => {
     const fetchProperties = async () => {
       try {
+        setPropertiesLoading(true)
         const response = await fetch('/api/property')
         if (!response.ok) throw new Error('Failed to fetch properties')
         const data = await response.json()
@@ -177,6 +180,8 @@ export default function TransactionDetailsReport() {
         setProperties(propertiesMap)
       } catch (error) {
         console.error('Error fetching properties:', error)
+      } finally {
+        setPropertiesLoading(false)
       }
     }
     fetchProperties()
@@ -486,12 +491,22 @@ export default function TransactionDetailsReport() {
                   <Select
                     value={selectedProperty}
                     onValueChange={setSelectedProperty}
+                    disabled={propertiesLoading}
                   >
                     <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="Property" />
+                      {propertiesLoading ? (
+                        <Skeleton className="h-4 w-[120px]" />
+                      ) : (
+                        <SelectValue placeholder="Property" />
+                      )}
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Properties</SelectItem>
+                      {Object.values(properties).map((property) => (
+                        <SelectItem key={property.id} value={property.id}>
+                          {property.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
 
@@ -606,41 +621,105 @@ export default function TransactionDetailsReport() {
 
           {/* Table */}
           <div className="space-y-2">
-            <Table>
-              <TableHeader className="bg-muted">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>
-                    <Checkbox 
-                      id={tableId}
-                      checked={selectedTransactions.size === realTransactions.length}
-                      onCheckedChange={toggleAll}
-                    />
-                  </TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Property</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Memo</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="text-right">Running Balance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-4">
-                      Loading...
-                    </TableCell>
+            {loading ? (
+              <Table>
+                <TableHeader className="bg-muted">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>
+                      <Checkbox 
+                        id={tableId}
+                        checked={false}
+                        onCheckedChange={() => {}}
+                        disabled
+                      />
+                    </TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Account</TableHead>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Memo</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Running Balance</TableHead>
                   </TableRow>
-                ) : realTransactions.length === 0 ? (
+                </TableHeader>
+                <TableBody>
+                  {[...Array(18)].map((_, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Skeleton className="h-4 w-4" />
+                      </TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-4 w-28 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter className="bg-muted">
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={7}>Total</TableCell>
+                    <TableCell className="text-right">-</TableCell>
+                    <TableCell className="text-right">-</TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            ) : realTransactions.length === 0 ? (
+              <Table>
+                <TableHeader className="bg-muted">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>
+                      <Checkbox 
+                        id={tableId}
+                        checked={false}
+                        onCheckedChange={() => {}}
+                      />
+                    </TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Account</TableHead>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Memo</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Running Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   <TableRow>
                     <TableCell colSpan={9} className="text-center py-4">
                       No transactions found
                     </TableCell>
                   </TableRow>
-                ) : (
-                  realTransactions.map((transaction, index) => {
+                </TableBody>
+              </Table>
+            ) : (
+              <Table>
+                <TableHeader className="bg-muted">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>
+                      <Checkbox 
+                        id={tableId}
+                        checked={selectedTransactions.size === realTransactions.length}
+                        onCheckedChange={toggleAll}
+                      />
+                    </TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Account</TableHead>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Memo</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Running Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {realTransactions.map((transaction, index) => {
                     // Calculate running balance
                     const runningBalance = realTransactions
                       .slice(0, index + 1)
@@ -715,30 +794,30 @@ export default function TransactionDetailsReport() {
                         }).format(runningBalance)}</TableCell>
                       </TableRow>
                     )
-                  })
-                )}
-              </TableBody>
-              <TableFooter className="bg-muted">
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={7}>Total</TableCell>
-                  <TableCell className="text-right">{new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD',
-                    signDisplay: 'auto'
-                  }).format(realTransactions.reduce((sum, t) => {
-                    return sum + (t.data.lines?.reduce((s, line) => {
-                      const debitAmount = line.debit_amount || 0
-                      const creditAmount = line.credit_amount || 0
-                      return s + debitAmount - creditAmount
-                    }, 0) || 0)
-                  }, 0))}</TableCell>
-                  <TableCell className="text-right">{new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD'
-                  }).format(totalAmount)}</TableCell>
-                </TableRow>
-              </TableFooter>
-            </Table>
+                  })}
+                </TableBody>
+                <TableFooter className="bg-muted">
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={7}>Total</TableCell>
+                    <TableCell className="text-right">{new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: 'USD',
+                      signDisplay: 'auto'
+                    }).format(realTransactions.reduce((sum, t) => {
+                      return sum + (t.data.lines?.reduce((s, line) => {
+                        const debitAmount = line.debit_amount || 0
+                        const creditAmount = line.credit_amount || 0
+                        return s + debitAmount - creditAmount
+                      }, 0) || 0)
+                    }, 0))}</TableCell>
+                    <TableCell className="text-right">{new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: 'USD'
+                    }).format(totalAmount)}</TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            )}
             <p className="text-center text-sm text-muted-foreground">
               {selectedAccountingMethod === 'cash' ? 'Cash' : 'Accrual'} • {format(currentDateTime, "MMM d, yyyy h:mm a")}
             </p>

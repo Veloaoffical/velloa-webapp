@@ -28,14 +28,14 @@
     --ring: 142.1 76.2% 36.3%;
     --radius: 0.5rem;
 
-    --sidebar-background: 142.1 76.2% 36.3%;
-    --sidebar-foreground: 355.7 100% 97.3%;
-    --sidebar-primary: 142.1 70% 45%;
-    --sidebar-primary-foreground: 355.7 100% 97.3%;
-    --sidebar-accent: 142.1 65% 33%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 142.1 76.2% 30%;
-    --sidebar-ring: 142.1 76.2% 36.3%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 240 10% 3.9%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 240 5.9% 90%;
+    --sidebar-ring: 240 5.9% 90%;
     /* colors for the chart */
     --color-not-started: hsl(217, 91%, 60%);
     --color-in-progress: hsl(271, 91%, 65%)
@@ -99,14 +99,14 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 142.1 76.2% 36.3%;
-    --sidebar-foreground: 355.7 100% 97.3%;
-    --sidebar-primary: 142.1 70% 45%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 142.1 65% 40%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 142.1 76.2% 30%;
-    --sidebar-ring: 142.1 76.2% 36.3%;
+    --sidebar-background: 24 9.8% 10%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 240 5.9% 10%;
+    --sidebar-accent: 12 6.5% 15.1%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 240 3.7% 15.9%;
     /* New success/info variables for dark mode */
     --success-light: 142 30% 15%;
     --success-light-foreground: 142 70% 55%;

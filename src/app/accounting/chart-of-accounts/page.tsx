@@ -29,10 +29,25 @@ interface Account {
   subAccounts?: Account[]
 }
 
+interface DefaultAccountsData {
+  operatingBankAccount: string
+  trustBankAccount: string
+  clearingAccount: string
+  rentalIncome: string
+  applicationFee: string
+  lateFees: string
+  convenienceFeeIncome: string
+  securityDeposit: string
+  managementFees: string
+  ownerContribution: string
+  ownerDistribution: string
+}
+
 export default function ChartOfAccountsPage() {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [defaultAccounts, setDefaultAccounts] = useState<DefaultAccountsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set())
 
@@ -61,20 +76,50 @@ export default function ChartOfAccountsPage() {
   }
 
   useEffect(() => {
-    fetchAccounts()
+    fetchData()
   }, [])
 
-  async function fetchAccounts() {
+  async function fetchData() {
     try {
       setIsLoading(true)
-      const response = await fetch("/api/accounting/chart-of-accounts")
-      if (!response.ok) {
+      const [accountsResponse, defaultAccountsResponse] = await Promise.all([
+        fetch("/api/accounting/chart-of-accounts"),
+        fetch("/api/company/settings/default-accounts")
+      ])
+
+      if (!accountsResponse.ok) {
         throw new Error("Failed to fetch accounts")
       }
-      const data = await response.json()
-      setAccounts(data)
+      if (!defaultAccountsResponse.ok) {
+        throw new Error("Failed to fetch default accounts")
+      }
+
+      const accountsData = await accountsResponse.json()
+      const defaultAccountsData = await defaultAccountsResponse.json()
+
+      // Map default accounts to their purposes
+      const updatedAccounts = accountsData.map((account: Account) => {
+        let defaultFor = null
+        if (defaultAccountsData) {
+          const defaultPurposes = Object.entries(defaultAccountsData).reduce((acc: { [key: string]: string }, [key, value]) => {
+            if (value === account.id) {
+              // Convert camelCase to Title Case with spaces
+              const formattedKey = key
+                .replace(/([A-Z])/g, ' $1')
+                .replace(/^./, str => str.toUpperCase())
+              acc[account.id] = formattedKey
+            }
+            return acc
+          }, {})
+          defaultFor = defaultPurposes[account.id] || null
+        }
+        return { ...account, default_for: defaultFor }
+      })
+
+      setAccounts(updatedAccounts)
+      setDefaultAccounts(defaultAccountsData)
     } catch (error) {
-      console.error("Error fetching accounts:", error)
+      console.error("Error fetching data:", error)
     } finally {
       setIsLoading(false)
     }

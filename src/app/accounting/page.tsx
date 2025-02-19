@@ -22,6 +22,7 @@ import {
 import { motion, useInView, useMotionValue, useTransform, animate } from "framer-motion"
 import { useRef, useEffect, useState } from "react"
 import { JournalEntryDialog } from "./components/JournalEntryDialog"
+import { BankTransferDialog } from "./components/BankTransferDialog"
 
 const profitLossData = [
   { month: "Jan", revenue: 4500, costs: 3000, netIncome: 1500 },
@@ -102,6 +103,7 @@ function AnimatedNumber({ value, prefix = "", suffix = "" }: AnimatedNumberProps
 
 export default function AccountingPage() {
   const [showJournalEntryDialog, setShowJournalEntryDialog] = useState(false)
+  const [showBankTransferDialog, setShowBankTransferDialog] = useState(false)
 
   return (
     <div className="p-6 space-y-6">
@@ -184,7 +186,7 @@ export default function AccountingPage() {
                 <FileText className="w-4 h-4 me-2 opacity-60" />
                 Journal Entry
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowBankTransferDialog(true)}>
                 <ArrowLeftRight className="w-4 h-4 me-2 opacity-60" />
                 Bank Transfer
               </DropdownMenuItem>
@@ -574,6 +576,10 @@ export default function AccountingPage() {
       <JournalEntryDialog
         open={showJournalEntryDialog}
         onOpenChange={setShowJournalEntryDialog}
+      />
+      <BankTransferDialog
+        open={showBankTransferDialog}
+        onOpenChange={setShowBankTransferDialog}
       />
     </div>
   )

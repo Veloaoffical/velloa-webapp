@@ -1,0 +1,9 @@
+{
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.validate.enable": true,
+  "typescript.disableAutomaticTypeAcquisition": false,
+  "typescript.exclude": {
+    "**/node_modules": true,
+    "**/node_modules/@supabase/auth-helpers-nextjs": true
+  }
+}

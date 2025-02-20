@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useId, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Button as ButtonUI } from "@/components/ui/button"
 import {
@@ -19,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowLeft, CalendarIcon, Printer, FileSpreadsheet, SlidersHorizontal, X } from "lucide-react"
 import { format, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -85,13 +84,11 @@ interface Property {
 }
 
 export default function TransactionDetailsReport() {
-  const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set())
   const [showFilters, setShowFilters] = useState(false)
   const [loading, setLoading] = useState(false)
   const [realTransactions, setRealTransactions] = useState<Transaction[]>([])
   const [properties, setProperties] = useState<{ [key: string]: Property }>({})
   const [propertiesLoading, setPropertiesLoading] = useState(true)
-  const tableId = useId()
   const currentDateTime = new Date()
   
   const formatTransactionType = (type: string) => {
@@ -149,6 +146,67 @@ export default function TransactionDetailsReport() {
   const [selectedTenant, setSelectedTenant] = useState<string>('')
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('')
   const [selectedBeginningBalance, setSelectedBeginningBalance] = useState<string>('')
+  const [beginningBalance, setBeginningBalance] = useState<number>(0)
+
+  // Calculate beginning balance from accounts
+  const calculateBeginningBalance = useCallback((accountsToCalculate: Account[]) => {
+    console.log('Calculating beginning balance from accounts:', accountsToCalculate)
+    
+    let bankTotal = 0
+    let equityTotal = 0
+    
+    if (selectedProperty && selectedProperty !== 'all') {
+      // For property-specific view:
+      // 1. Sum property-specific bank balances
+      accountsToCalculate.forEach(account => {
+        if (!account.active_account) {
+          console.log(`Skipping inactive account: ${account.account_name}`)
+          return
+        }
+
+        if (account.account_type.toLowerCase() === 'asset' && account.account_subtype.toLowerCase() === 'bank') {
+          const propertyBalance = account.property_balance?.find(pb => pb.property_id === selectedProperty)?.balance || 0
+          console.log(`Bank balance for ${account.account_name} (Property: ${selectedProperty}): ${propertyBalance}`)
+          bankTotal += propertyBalance
+        }
+      })
+
+      // 2. Always add ALL equity account balances (not property-specific)
+      accountsToCalculate.forEach(account => {
+        if (!account.active_account) return
+
+        if (account.account_type.toLowerCase() === 'equity') {
+          const balance = Number(account.account_balance || 0)
+          console.log(`Adding full equity account balance: ${account.account_name}: ${balance}`)
+          equityTotal += balance
+        }
+      })
+    } else {
+      // For all properties view, use standard calculation
+      accountsToCalculate.forEach(account => {
+        if (!account.active_account) {
+          console.log(`Skipping inactive account: ${account.account_name}`)
+          return
+        }
+
+        if (account.account_type.toLowerCase() === 'asset' && account.account_subtype.toLowerCase() === 'bank') {
+          const balance = Number(account.account_balance || 0)
+          console.log(`Adding bank account balance: ${balance}`)
+          bankTotal += balance
+        } else if (account.account_type.toLowerCase() === 'equity') {
+          const balance = Number(account.account_balance || 0)
+          console.log(`Adding equity account balance: ${balance}`)
+          equityTotal += balance
+        }
+      })
+    }
+
+    console.log('Total bank balance:', bankTotal)
+    console.log('Total equity:', equityTotal)
+    const finalBalance = bankTotal + equityTotal
+    console.log('Final beginning balance:', finalBalance)
+    return finalBalance
+  }, [selectedProperty])
 
   // Fetch chart of accounts
   useEffect(() => {
@@ -157,13 +215,17 @@ export default function TransactionDetailsReport() {
         const response = await fetch('/api/accounting/chart-of-accounts')
         if (!response.ok) throw new Error('Failed to fetch accounts')
         const data = await response.json()
+        console.log('Fetched accounts:', data)
         setAccounts(data)
+        const calculatedBalance = calculateBeginningBalance(data)
+        console.log('Setting beginning balance to:', calculatedBalance)
+        setBeginningBalance(calculatedBalance)
       } catch (error) {
         console.error('Error fetching accounts:', error)
       }
     }
     fetchAccounts()
-  }, [])
+  }, [calculateBeginningBalance])
 
   // Fetch properties
   useEffect(() => {
@@ -186,6 +248,15 @@ export default function TransactionDetailsReport() {
     }
     fetchProperties()
   }, [])
+
+  // Recalculate beginning balance when property filter changes
+  useEffect(() => {
+    if (accounts.length > 0) {
+      const calculatedBalance = calculateBeginningBalance(accounts)
+      console.log('Recalculating beginning balance after property change:', calculatedBalance)
+      setBeginningBalance(calculatedBalance)
+    }
+  }, [selectedProperty, accounts, calculateBeginningBalance])
 
   // Fetch transactions when filters change
   useEffect(() => {
@@ -278,24 +349,6 @@ export default function TransactionDetailsReport() {
     }
   }
 
-  const toggleTransaction = (id: number) => {
-    const newSelected = new Set(selectedTransactions)
-    if (newSelected.has(id)) {
-      newSelected.delete(id)
-    } else {
-      newSelected.add(id)
-    }
-    setSelectedTransactions(newSelected)
-  }
-
-  const toggleAll = () => {
-    if (selectedTransactions.size === realTransactions.length) {
-      setSelectedTransactions(new Set())
-    } else {
-      setSelectedTransactions(new Set(realTransactions.map(t => Number(t.id))))
-    }
-  }
-
   const downloadFileSpreadsheet = () => {
     // Create CSV content
     const headers = ['Date', 'Type', 'Account', 'Property', 'Name', 'Memo', 'Amount', 'Running Balance']
@@ -338,12 +391,6 @@ export default function TransactionDetailsReport() {
     link.click()
     document.body.removeChild(link)
   }
-
-  // Calculate totals from real transactions
-  const totalAmount = realTransactions.reduce((sum, transaction) => {
-    const amount = transaction.data.total_amount || 0
-    return sum + amount
-  }, 0)
 
   return (
     <div className="p-6 space-y-6">
@@ -625,14 +672,6 @@ export default function TransactionDetailsReport() {
               <Table>
                 <TableHeader className="bg-muted">
                   <TableRow className="hover:bg-transparent">
-                    <TableHead>
-                      <Checkbox 
-                        id={tableId}
-                        checked={false}
-                        onCheckedChange={() => {}}
-                        disabled
-                      />
-                    </TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Account</TableHead>
@@ -646,9 +685,6 @@ export default function TransactionDetailsReport() {
                 <TableBody>
                   {[...Array(18)].map((_, index) => (
                     <TableRow key={index}>
-                      <TableCell>
-                        <Skeleton className="h-4 w-4" />
-                      </TableCell>
                       <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-32" /></TableCell>
@@ -662,7 +698,7 @@ export default function TransactionDetailsReport() {
                 </TableBody>
                 <TableFooter className="bg-muted">
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={7}>Total</TableCell>
+                    <TableCell colSpan={6}>Total</TableCell>
                     <TableCell className="text-right">-</TableCell>
                     <TableCell className="text-right">-</TableCell>
                   </TableRow>
@@ -672,13 +708,6 @@ export default function TransactionDetailsReport() {
               <Table>
                 <TableHeader className="bg-muted">
                   <TableRow className="hover:bg-transparent">
-                    <TableHead>
-                      <Checkbox 
-                        id={tableId}
-                        checked={false}
-                        onCheckedChange={() => {}}
-                      />
-                    </TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Account</TableHead>
@@ -691,7 +720,7 @@ export default function TransactionDetailsReport() {
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-4">
+                    <TableCell colSpan={8} className="text-center py-4">
                       No transactions found
                     </TableCell>
                   </TableRow>
@@ -701,13 +730,6 @@ export default function TransactionDetailsReport() {
               <Table>
                 <TableHeader className="bg-muted">
                   <TableRow className="hover:bg-transparent">
-                    <TableHead>
-                      <Checkbox 
-                        id={tableId}
-                        checked={selectedTransactions.size === realTransactions.length}
-                        onCheckedChange={toggleAll}
-                      />
-                    </TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Account</TableHead>
@@ -719,24 +741,42 @@ export default function TransactionDetailsReport() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {/* Beginning Balance Row */}
+                  <TableRow>
+                    <TableCell className="font-medium">
+                      {format(new Date(dateRange.start.toString()), "MM/dd/yyyy")}
+                    </TableCell>
+                    <TableCell>Beginning Balance</TableCell>
+                    <TableCell>-</TableCell>
+                    <TableCell>-</TableCell>
+                    <TableCell>-</TableCell>
+                    <TableCell>-</TableCell>
+                    <TableCell className="text-right">-</TableCell>
+                    <TableCell className="text-right">
+                      {new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD'
+                      }).format(beginningBalance)}
+                    </TableCell>
+                  </TableRow>
+                  {/* Existing Transaction Rows */}
                   {realTransactions.map((transaction, index) => {
-                    // Calculate running balance
-                    const runningBalance = realTransactions
+                    // Calculate running balance including beginning balance
+                    const runningBalance = beginningBalance + realTransactions
                       .slice(0, index + 1)
-                      .reduce((sum, t) => sum + t.data.total_amount, 0)
+                      .reduce((sum, t) => {
+                        if (t.data.lines) {
+                          return sum + t.data.lines.reduce((lineSum, line) => {
+                            return lineSum + (line.debit_amount || 0) - (line.credit_amount || 0)
+                          }, 0)
+                        }
+                        return sum + (t.data.total_amount || 0)
+                      }, 0)
 
                     return transaction.data.lines?.map((line, lineIndex) => (
                       <TableRow 
-                        key={`${transaction.id}-${lineIndex}`} 
-                        className="has-[[data-state=checked]]:bg-muted/50"
+                        key={`${transaction.id}-${lineIndex}`}
                       >
-                        <TableCell>
-                          <Checkbox 
-                            id={`table-checkbox-${transaction.id}`}
-                            checked={selectedTransactions.has(Number(transaction.id))}
-                            onCheckedChange={() => toggleTransaction(Number(transaction.id))}
-                          />
-                        </TableCell>
                         <TableCell className="font-medium">
                           {format(new Date(transaction.start_date), "MM/dd/yyyy")}
                         </TableCell>
@@ -765,14 +805,7 @@ export default function TransactionDetailsReport() {
                         </TableCell>
                       </TableRow>
                     )) || (
-                      <TableRow key={transaction.id} className="has-[[data-state=checked]]:bg-muted/50">
-                        <TableCell>
-                          <Checkbox 
-                            id={`table-checkbox-${transaction.id}`}
-                            checked={selectedTransactions.has(Number(transaction.id))}
-                            onCheckedChange={() => toggleTransaction(Number(transaction.id))}
-                          />
-                        </TableCell>
+                      <TableRow key={transaction.id}>
                         <TableCell className="font-medium">{format(new Date(transaction.start_date), "MM/dd/yyyy")}</TableCell>
                         <TableCell>{formatTransactionType(transaction.transaction_type)}</TableCell>
                         <TableCell>
@@ -798,7 +831,7 @@ export default function TransactionDetailsReport() {
                 </TableBody>
                 <TableFooter className="bg-muted">
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={7}>Total</TableCell>
+                    <TableCell colSpan={6}>Total</TableCell>
                     <TableCell className="text-right">{new Intl.NumberFormat('en-US', {
                       style: 'currency',
                       currency: 'USD',
@@ -810,10 +843,7 @@ export default function TransactionDetailsReport() {
                         return s + debitAmount - creditAmount
                       }, 0) || 0)
                     }, 0))}</TableCell>
-                    <TableCell className="text-right">{new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'USD'
-                    }).format(totalAmount)}</TableCell>
+                    <TableCell className="text-right"></TableCell>
                   </TableRow>
                 </TableFooter>
               </Table>

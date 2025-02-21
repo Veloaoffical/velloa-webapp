@@ -976,16 +976,18 @@ export default function AddAccountPage() {
                                   What was your total account balance on {new Date(account.opening_balance_date).toLocaleDateString()}? <span className="text-red-500">*</span>
                                 </Label>
                                 <div className="relative">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
                                   <Input
                                     id="opening_balance"
-                                    type="number"
+                                    type="text"
                                     step="0.01"
-                                    placeholder="Account Balance"
-                                    className="h-[42px] bg-background pl-7"
-                                    value={account.opening_balance || ''}
+                                    placeholder="0.00"
+                                    className="peer ps-6 h-[42px] bg-background"
+                                    value={account.opening_balance}
                                     onChange={(e) => setAccount({...account, opening_balance: parseFloat(e.target.value) || 0})}
                                   />
+                                  <span className="text-muted-foreground pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm peer-disabled:opacity-50">
+                                    $
+                                  </span>
                                 </div>
                               </div>
                             </motion.div>

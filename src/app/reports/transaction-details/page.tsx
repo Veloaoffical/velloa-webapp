@@ -40,10 +40,12 @@ interface Account {
   active_account: boolean
   sub_account: boolean
   account_balance: string
+  start_balance: string
   property_balance: Array<{
     property_id: string
     property_name: string
     balance: number
+    start_balance: number
   }>
 }
 
@@ -165,7 +167,7 @@ export default function TransactionDetailsReport() {
         }
 
         if (account.account_type.toLowerCase() === 'asset' && account.account_subtype.toLowerCase() === 'bank') {
-          const propertyBalance = account.property_balance?.find(pb => pb.property_id === selectedProperty)?.balance || 0
+          const propertyBalance = account.property_balance?.find(pb => pb.property_id === selectedProperty)?.start_balance || 0
           console.log(`Bank balance for ${account.account_name} (Property: ${selectedProperty}): ${propertyBalance}`)
           bankTotal += propertyBalance
         }
@@ -176,7 +178,7 @@ export default function TransactionDetailsReport() {
         if (!account.active_account) return
 
         if (account.account_type.toLowerCase() === 'equity') {
-          const balance = Number(account.account_balance || 0)
+          const balance = Number(account.start_balance || 0)
           console.log(`Adding full equity account balance: ${account.account_name}: ${balance}`)
           equityTotal += balance
         }
@@ -190,11 +192,11 @@ export default function TransactionDetailsReport() {
         }
 
         if (account.account_type.toLowerCase() === 'asset' && account.account_subtype.toLowerCase() === 'bank') {
-          const balance = Number(account.account_balance || 0)
+          const balance = Number(account.start_balance || 0)
           console.log(`Adding bank account balance: ${balance}`)
           bankTotal += balance
         } else if (account.account_type.toLowerCase() === 'equity') {
-          const balance = Number(account.account_balance || 0)
+          const balance = Number(account.start_balance || 0)
           console.log(`Adding equity account balance: ${balance}`)
           equityTotal += balance
         }
@@ -396,7 +398,7 @@ export default function TransactionDetailsReport() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href="/accounting/reports">
+        <Link href="/reports">
           <ButtonUI variant="ghost" size="icon" className="rounded-full">
             <ArrowLeft className="h-4 w-4" />
           </ButtonUI>

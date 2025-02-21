@@ -18,6 +18,7 @@ function RootLayoutContent({ children }: { children: React.ReactNode }) {
         <title>Velloa - Property Management</title>
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <meta name="theme-color" content="#1DB954" />
+        <meta name="apple-mobile-web-app-title" content="Velloa" />
       </head>
       <body>
         <ThemeProvider

@@ -4,7 +4,6 @@ import * as React from "react"
 import Image from "next/image"
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Poppins } from 'next/font/google'
 import {
   ScrollText,
   Users,
@@ -34,11 +33,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800', '900'],
-})
 
 // Updated sample data without groups
 const data = {
@@ -85,7 +79,7 @@ const data = {
     },
     {
       title: "Reports & Analytics",
-      url: "/accounting/reports",
+      url: "/reports",
       icon: ChartArea
     }
   ]
@@ -104,6 +98,30 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     email: ''
   });
   const [showNotifications, setShowNotifications] = React.useState(false);
+  const [isCollapsed, setIsCollapsed] = React.useState(false);
+
+  React.useEffect(() => {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'data-collapsible') {
+          const sidebarElement = mutation.target as HTMLElement;
+          setIsCollapsed(sidebarElement.getAttribute('data-collapsible') === 'icon');
+        }
+      });
+    });
+
+    const sidebarElement = document.querySelector('[data-collapsible]');
+    if (sidebarElement) {
+      observer.observe(sidebarElement, {
+        attributes: true,
+        attributeFilter: ['data-collapsible']
+      });
+      // Set initial state
+      setIsCollapsed(sidebarElement.getAttribute('data-collapsible') === 'icon');
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   React.useEffect(() => {
     const fetchUserData = async () => {
@@ -132,16 +150,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <div className="w-full flex items-center group-data-[collapsible=icon]:justify-center justify-start">
             <div className="flex items-center gap-0">
               <Image
-                src="/FF_VELLOA_green.png"
-                alt="Logo"
-                width={42}
-                height={42}
-                className="w-10 h-10 group-data-[collapsible=icon]:w-8 group-data-[collapsible-icon]:h-8 object-contain"
+                src={isCollapsed ? "/velloa-icon.png" : "/velloa-logo.png"}
+                alt="Velloa Logo"
+                width={isCollapsed ? 48 : 140}
+                height={isCollapsed ? 48 : 42}
+                className={`${isCollapsed ? 'w-12 h-12' : 'w-[140px] h-[42px]'}`}
+                style={{
+                  objectFit: 'contain',
+                }}
+                unoptimized
                 priority
               />
-              <span className={`text-xl font-bold tracking-wide text-foreground group-data-[collapsible=icon]:hidden ${poppins.className} translate-y-1.5`}>
-                Velloa
-              </span>
             </div>
           </div>
         </div>
@@ -161,8 +180,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
-                    className="group/menu-button font-light gap-3 h-9 rounded-lg hover:bg-accent/50 hover:text-accent-foreground data-[active=true]:bg-gradient-to-r data-[active=true]:from-primary/20 data-[active=true]:to-transparent [&>svg]:size-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:data-[active=true]:bg-gradient-to-r group-data-[collapsible=icon]:data-[active=true]:from-primary/20 group-data-[collapsible=icon]:data-[active=true]:via-primary/20 group-data-[collapsible=icon]:data-[active=true]:to-transparent"
-                    data-active={pathname === item.url ? true : false}
+                    className="group/menu-button font-light gap-3 h-9 rounded-lg hover:bg-accent/50 hover:text-accent-foreground data-[active=true]:bg-gradient-to-r data-[active=true]:from-primary/20 data-[active=true]:to-transparent group-data-[collapsible=icon]:data-[active=true]:bg-gradient-to-r group-data-[collapsible=icon]:data-[active=true]:from-primary/20 group-data-[collapsible=icon]:data-[active=true]:via-primary/20 group-data-[collapsible=icon]:data-[active=true]:to-transparent"
+                    data-active={pathname.startsWith(item.url) && item.url !== '/home' ? true : false}
                     tooltip={item.title}
                   >
                     <Link href={item.url} className="w-full flex items-center">

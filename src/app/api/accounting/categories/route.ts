@@ -31,10 +31,12 @@ export async function GET() {
         account_name,
         account_type,
         account_subtype,
+        account_balance,
         sub_accounts:chart_of_sub_accounts!chart_of_sub_accounts_parent_account_fkey(
           id,
           account_name,
           account_subtype,
+          account_balance,
           active_account
         )
       `)
@@ -54,12 +56,14 @@ export async function GET() {
       account_name: account.account_name,
       account_type: account.account_type,
       account_subtype: account.account_subtype,
+      account_balance: account.account_balance,
       sub_accounts: account.sub_accounts
         ?.filter(sub => sub.active_account)
         ?.map(sub => ({
           id: sub.id,
           account_name: sub.account_name,
-          account_subtype: sub.account_subtype
+          account_subtype: sub.account_subtype,
+          account_balance: sub.account_balance
         }))
     }))
 

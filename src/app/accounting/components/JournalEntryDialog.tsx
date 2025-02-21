@@ -365,7 +365,7 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
           </RadioGroup>
 
           {/* Entry Date for One Time / Recurring Options */}
-          <div className="relative h-[120px]">
+          <div className="relative h-[90px]">
             <AnimatePresence mode="wait">
               {entryType === "one_time" ? (
                 <div className="absolute w-full">

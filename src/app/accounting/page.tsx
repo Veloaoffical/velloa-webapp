@@ -23,6 +23,8 @@ import { motion, useInView, useMotionValue, useTransform, animate } from "framer
 import { useRef, useEffect, useState } from "react"
 import { JournalEntryDialog } from "./components/JournalEntryDialog"
 import { BankTransferDialog } from "./components/BankTransferDialog"
+import { PostChargeDialog } from "./components/PostChargeDialog"
+import { ExpenseDialog } from "./components/ExpenseDialog"
 
 const profitLossData = [
   { month: "Jan", revenue: 4500, costs: 3000, netIncome: 1500 },
@@ -104,6 +106,8 @@ function AnimatedNumber({ value, prefix = "", suffix = "" }: AnimatedNumberProps
 export default function AccountingPage() {
   const [showJournalEntryDialog, setShowJournalEntryDialog] = useState(false)
   const [showBankTransferDialog, setShowBankTransferDialog] = useState(false)
+  const [showPostChargeDialog, setShowPostChargeDialog] = useState(false)
+  const [showExpenseDialog, setShowExpenseDialog] = useState(false)
 
   return (
     <div className="p-6 space-y-6">
@@ -123,7 +127,7 @@ export default function AccountingPage() {
           <DropdownMenuContent align="end" className="w-[240px]">
             <DropdownMenuLabel>Tenant Transactions</DropdownMenuLabel>
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowPostChargeDialog(true)}>
                 <User className="w-4 h-4 me-2 opacity-60" />
                 Post Charge
               </DropdownMenuItem>
@@ -194,7 +198,7 @@ export default function AccountingPage() {
                 <Wallet className="w-4 h-4 me-2 opacity-60" />
                 Bank Deposit
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowExpenseDialog(true)}>
                 <Receipt className="w-4 h-4 me-2 opacity-60" />
                 Expense
               </DropdownMenuItem>
@@ -471,21 +475,20 @@ export default function AccountingPage() {
             </div>
           </CardContent>
         </Card>
-        <Link href="/accounting/reports">
-
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <FileCheck className="h-5 w-5 text-primary" />
+        <Link href="/reports">
+          <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
+            <CardContent className="p-6">
+              <div className="flex items-start space-x-4">
+                <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                  <FileCheck className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-medium leading-none mb-1">Reports</h3>
+                  <p className="text-sm text-muted-foreground">View and generate reports</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Reports</h3>
-                <p className="text-sm text-muted-foreground">View and generate reports</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
         </Link>
 
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
@@ -580,6 +583,14 @@ export default function AccountingPage() {
       <BankTransferDialog
         open={showBankTransferDialog}
         onOpenChange={setShowBankTransferDialog}
+      />
+      <PostChargeDialog 
+        open={showPostChargeDialog}
+        onOpenChange={setShowPostChargeDialog}
+      />
+      <ExpenseDialog
+        open={showExpenseDialog}
+        onOpenChange={setShowExpenseDialog}
       />
     </div>
   )

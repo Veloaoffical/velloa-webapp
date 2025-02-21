@@ -66,6 +66,61 @@ export async function POST(request: Request) {
       )
     }
 
+    // Update account balances for each line
+    for (const line of lines) {
+      const { category, debits, credits } = line;
+      const amount = parseFloat(debits) || -parseFloat(credits); // Positive for debits, negative for credits
+
+      // First try to find and update sub-account
+      const { data: subAccount, error: subAccountError } = await supabase
+        .from('chart_of_sub_accounts')
+        .select('id, account_balance')
+        .eq('id', category)
+        .single();
+
+      if (!subAccountError && subAccount) {
+        // Update sub-account balance
+        const currentBalance = parseFloat(subAccount.account_balance) || 0;
+        const newBalance = currentBalance + amount;
+
+        const { error: updateError } = await supabase
+          .from('chart_of_sub_accounts')
+          .update({ account_balance: newBalance.toString() })
+          .eq('id', category);
+
+        if (updateError) {
+          console.error('❌ Error updating sub-account balance:', updateError);
+          throw new Error('Failed to update account balance');
+        }
+      } else {
+        // If not found in sub-accounts, try main accounts
+        const { data: mainAccount, error: mainAccountError } = await supabase
+          .from('chart_of_accounts')
+          .select('id, account_balance')
+          .eq('id', category)
+          .single();
+
+        if (mainAccountError || !mainAccount) {
+          console.error('❌ Error finding account:', mainAccountError);
+          throw new Error('Account not found');
+        }
+
+        // Update main account balance
+        const currentBalance = parseFloat(mainAccount.account_balance) || 0;
+        const newBalance = currentBalance + amount;
+
+        const { error: updateError } = await supabase
+          .from('chart_of_accounts')
+          .update({ account_balance: newBalance.toString() })
+          .eq('id', category);
+
+        if (updateError) {
+          console.error('❌ Error updating main account balance:', updateError);
+          throw new Error('Failed to update account balance');
+        }
+      }
+    }
+
     // Get the authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser()
     console.log('👤 Auth User:', {

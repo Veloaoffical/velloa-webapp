@@ -25,6 +25,7 @@ import { JournalEntryDialog } from "./components/JournalEntryDialog"
 import { BankTransferDialog } from "./components/BankTransferDialog"
 import { PostChargeDialog } from "./components/PostChargeDialog"
 import { ExpenseDialog } from "./components/ExpenseDialog"
+import { CheckDialog } from "./components/CheckDialog"
 
 const profitLossData = [
   { month: "Jan", revenue: 4500, costs: 3000, netIncome: 1500 },
@@ -108,6 +109,7 @@ export default function AccountingPage() {
   const [showBankTransferDialog, setShowBankTransferDialog] = useState(false)
   const [showPostChargeDialog, setShowPostChargeDialog] = useState(false)
   const [showExpenseDialog, setShowExpenseDialog] = useState(false)
+  const [showCheckDialog, setShowCheckDialog] = useState(false)
 
   return (
     <div className="p-6 space-y-6">
@@ -202,7 +204,7 @@ export default function AccountingPage() {
                 <Receipt className="w-4 h-4 me-2 opacity-60" />
                 Expense
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowCheckDialog(true)}>
                 <CreditCard className="w-4 h-4 me-2 opacity-60" />
                 Check
               </DropdownMenuItem>
@@ -519,19 +521,21 @@ export default function AccountingPage() {
           </CardContent>
         </Card>
 
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <Printer className="h-5 w-5 text-primary" />
+        <Link href="/accounting/print-checks">
+          <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
+            <CardContent className="p-6">
+              <div className="flex items-start space-x-4">
+                <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                  <Printer className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-medium leading-none mb-1">Print Checks</h3>
+                  <p className="text-sm text-muted-foreground">Print and manage checks</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Print Checks</h3>
-                <p className="text-sm text-muted-foreground">Print and manage checks</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Link>
 
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">
@@ -591,6 +595,10 @@ export default function AccountingPage() {
       <ExpenseDialog
         open={showExpenseDialog}
         onOpenChange={setShowExpenseDialog}
+      />
+      <CheckDialog
+        open={showCheckDialog}
+        onOpenChange={setShowCheckDialog}
       />
     </div>
   )

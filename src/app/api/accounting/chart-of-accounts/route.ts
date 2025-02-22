@@ -220,6 +220,7 @@ export async function POST(req: Request) {
           account_balance: parseFloat(data.opening_balance?.toString() || '0'),
           start_balance: parseFloat(data.opening_balance?.toString() || '0'),
           property_balance: property_balance,
+          start_property_balance: property_balance,
           is_for_lease_charges: data.lease_integration,
           is_for_deposits: data.auto_post_rent,
           default_memo: data.auto_post_fees,

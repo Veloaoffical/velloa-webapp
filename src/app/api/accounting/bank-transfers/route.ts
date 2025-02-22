@@ -16,11 +16,8 @@ interface BankTransferRequest {
 
 export async function POST(request: Request) {
   try {
-    console.log('🚀 ============= BANK TRANSFER CREATION START =============');
     const supabase = await createClient()
     const body = await request.json() as BankTransferRequest
-
-    console.log('📥 Received data:', JSON.stringify(body, null, 2));
 
     const {
       source_property_id,
@@ -35,172 +32,216 @@ export async function POST(request: Request) {
       reference
     } = body
 
-    // Validate required fields
-    if (!source_property_id || !source_account_id || !receiving_property_id || !receiving_account_id || !transfer_date || !amount || !reference) {
-      console.error('❌ Missing required fields:', { source_property_id, source_account_id, receiving_property_id, receiving_account_id, transfer_date, amount, reference });
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      )
-    }
-
     // Get the authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-    console.log('👤 Auth User:', {
-      id: user?.id,
-      email: user?.email,
-      role: user?.role
-    });
-
-    if (userError || !user) {
-      console.error('❌ Auth error:', userError);
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      )
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get the user's profile
-    console.log('🔍 Getting user profile...');
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', user.id)
-      .single();
-
-    console.log('👤 Profile:', {
-      exists: !!profile,
-      data: profile,
-      error: profileError
-    });
-
-    if (profileError || !profile) {
-      console.error('❌ Error fetching profile:', profileError);
-      return NextResponse.json(
-        { error: "User profile not found" },
-        { status: 404 }
-      )
-    }
-
-    // Get the user's company member record using profile ID
-    console.log('🔍 Getting company membership with profile ID:', profile.id);
+    // Get the company membership
     const { data: companyMember, error: companyError } = await supabase
-      .from("company_members")
-      .select("id, company_id")
-      .eq("id", profile.id)
+      .from('company_members')
+      .select('company_id')
+      .eq('id', user.id)
       .single()
 
-    console.log('🏢 Company Member:', {
-      exists: !!companyMember,
-      data: companyMember,
-      error: companyError,
-      profileId: profile.id
-    });
-
     if (companyError || !companyMember) {
-      console.error('❌ Error fetching company member:', companyError);
-      return NextResponse.json(
-        { error: "User is not a member of any company" },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'Failed to get company' }, { status: 403 })
     }
 
-    // Create two transactions - one for each property
-    console.log('📝 Creating source transaction...');
-    const { data: sourceTransaction, error: sourceTransactionError } = await supabase
+    // Create transaction lines with debit and credit
+    const transactionLines = [
+      {
+        unit: source_unit_id || "",
+        category: source_account_id,
+        description: "Transfer to account",
+        debit_amount: 0,
+        credit_amount: amount // Source account gets credited (money leaves)
+      },
+      {
+        unit: receiving_unit_id || "",
+        category: receiving_account_id,
+        description: "Transfer from account",
+        debit_amount: amount, // Receiving account gets debited (money comes in)
+        credit_amount: 0
+      }
+    ]
+
+    // Create the transaction
+    const { data: transaction, error: transactionError } = await supabase
       .from("transaction")
       .insert({
         transaction_type: "bank_transfer",
         property: source_property_id,
-        company: companyMember.company_id,
-        created_by: companyMember.id,
         start_date: transfer_date,
         memo: memo ? JSON.parse(memo) : null,
+        created_by: user.id,
+        company: companyMember.company_id,
+        reference: reference,
+        payee: null,
         data: {
-          reference,
           total_amount: amount,
-          direction: "outgoing",
-          source_account_id,
-          source_unit_id,
-          receiving_property_id,
-          receiving_account_id,
-          receiving_unit_id
+          lines: transactionLines,
+          payment_method: "bank_transfer"
         }
       })
       .select()
       .single()
 
-    if (sourceTransactionError) {
-      console.error('❌ Error creating source transaction:', {
-        error: sourceTransactionError,
-        message: sourceTransactionError.message,
-        details: sourceTransactionError.details,
-        hint: sourceTransactionError.hint,
-        code: sourceTransactionError.code
-      });
-      throw sourceTransactionError;
+    if (transactionError) {
+      throw new Error(transactionError.message)
     }
 
-    console.log('📝 Creating receiving transaction...');
-    const { data: receivingTransaction, error: receivingTransactionError } = await supabase
-      .from("transaction")
-      .insert({
-        transaction_type: "bank_transfer",
-        property: receiving_property_id,
-        company: companyMember.company_id,
-        created_by: companyMember.id,
-        start_date: transfer_date,
-        memo: memo ? JSON.parse(memo) : null,
-        data: {
-          reference,
-          total_amount: amount,
-          direction: "incoming",
-          source_property_id,
-          source_account_id,
-          source_unit_id,
-          receiving_account_id,
-          receiving_unit_id
-        }
-      })
-      .select()
-      .single()
+    // Update account balances
+    for (const line of transactionLines) {
+      const { category, debit_amount, credit_amount } = line
+      const amount = debit_amount - credit_amount // Positive for debits, negative for credits
+      const property_id = category === source_account_id ? source_property_id : receiving_property_id
 
-    if (receivingTransactionError) {
-      console.error('❌ Error creating receiving transaction:', {
-        error: receivingTransactionError,
-        message: receivingTransactionError.message,
-        details: receivingTransactionError.details,
-        hint: receivingTransactionError.hint,
-        code: receivingTransactionError.code
-      });
-      
-      // Try to rollback the source transaction
-      if (sourceTransaction) {
-        await supabase
-          .from("transaction")
-          .delete()
-          .eq("id", sourceTransaction.id)
+      // First try to find and update sub-account
+      const { data: subAccount, error: subAccountError } = await supabase
+        .from('chart_of_sub_accounts')
+        .select('id, account_balance, property_balance, parent_account')
+        .eq('id', category)
+        .single()
+
+      if (!subAccountError && subAccount) {
+        // Update sub-account balance
+        const currentBalance = parseFloat(subAccount.account_balance) || 0
+        const newBalance = currentBalance + amount
+
+        // Update property balance in the property_balance JSONB array
+        const propertyBalance = subAccount.property_balance || []
+        const propertyIndex = propertyBalance.findIndex((pb: { property_id: string }) => pb.property_id === property_id)
+        
+        if (propertyIndex >= 0) {
+          // Update existing property balance
+          propertyBalance[propertyIndex] = {
+            ...propertyBalance[propertyIndex],
+            balance: parseFloat(propertyBalance[propertyIndex].balance) + amount
+          }
+        } else {
+          // Get property name
+          const { data: property } = await supabase
+            .from('properties')
+            .select('name')
+            .eq('id', property_id)
+            .single()
+
+          // Add new property balance
+          propertyBalance.push({
+            balance: amount,
+            property_id,
+            property_name: property?.name
+          })
+        }
+
+        // Update both account_balance and property_balance
+        const { error: updateError } = await supabase
+          .from('chart_of_sub_accounts')
+          .update({ 
+            account_balance: newBalance.toString(), // Convert to string to match numeric type
+            property_balance: propertyBalance
+          })
+          .eq('id', category)
+
+        if (updateError) {
+          console.error('Error updating sub-account balance:', updateError)
+          throw new Error('Failed to update account balance')
+        }
+
+        // Also update the parent account's account_balance if it exists
+        if (subAccount.parent_account) {
+          const { data: parentAccount, error: parentError } = await supabase
+            .from('chart_of_accounts')
+            .select('account_balance')
+            .eq('id', subAccount.parent_account)
+            .single()
+
+          if (!parentError && parentAccount) {
+            const parentCurrentBalance = parseFloat(parentAccount.account_balance) || 0
+            const parentNewBalance = parentCurrentBalance + amount
+
+            const { error: parentUpdateError } = await supabase
+              .from('chart_of_accounts')
+              .update({ 
+                account_balance: parentNewBalance.toString()
+              })
+              .eq('id', subAccount.parent_account)
+
+            if (parentUpdateError) {
+              console.error('Error updating parent account balance:', parentUpdateError)
+              throw new Error('Failed to update parent account balance')
+            }
+          }
+        }
+
+        continue // Skip main account update if sub-account was found and updated
       }
+
+      // If not found in sub-accounts, try main accounts
+      const { data: mainAccount, error: mainAccountError } = await supabase
+        .from('chart_of_accounts')
+        .select('id, account_balance, property_balance')
+        .eq('id', category)
+        .single()
+
+      if (mainAccountError || !mainAccount) {
+        console.error('Error finding account:', mainAccountError)
+        throw new Error('Account not found')
+      }
+
+      // Update main account balance
+      const currentBalance = parseFloat(mainAccount.account_balance) || 0
+      const newBalance = currentBalance + amount
+
+      // Update property balance in the property_balance JSONB array
+      const propertyBalance = mainAccount.property_balance || []
+      const propertyIndex = propertyBalance.findIndex((pb: { property_id: string }) => pb.property_id === property_id)
       
-      throw receivingTransactionError;
+      if (propertyIndex >= 0) {
+        // Update existing property balance
+        propertyBalance[propertyIndex] = {
+          ...propertyBalance[propertyIndex],
+          balance: parseFloat(propertyBalance[propertyIndex].balance) + amount
+        }
+      } else {
+        // Get property name
+        const { data: property } = await supabase
+          .from('properties')
+          .select('name')
+          .eq('id', property_id)
+          .single()
+
+        // Add new property balance
+        propertyBalance.push({
+          balance: amount,
+          property_id,
+          property_name: property?.name
+        })
+      }
+
+      // Update both account_balance and property_balance
+      const { error: updateError } = await supabase
+        .from('chart_of_accounts')
+        .update({ 
+          account_balance: newBalance.toString(), // Convert to string to match numeric type
+          property_balance: propertyBalance
+        })
+        .eq('id', category)
+
+      if (updateError) {
+        console.error('Error updating main account balance:', updateError)
+        throw new Error('Failed to update account balance')
+      }
     }
 
-    console.log('✅ Bank transfer created successfully:', {
-      sourceTransaction,
-      receivingTransaction
-    });
-    
-    return NextResponse.json({
-      source_transaction: sourceTransaction,
-      receiving_transaction: receivingTransaction
-    })
+    return NextResponse.json(transaction)
   } catch (error) {
-    console.error("❌ Error creating bank transfer:", error)
+    console.error("Error creating bank transfer:", error)
     return NextResponse.json(
-      { error: "Failed to create bank transfer", details: error instanceof Error ? error.message : "Unknown error" },
+      { error: error instanceof Error ? error.message : "Failed to create bank transfer" },
       { status: 500 }
     )
-  } finally {
-    console.log('🏁 ============= BANK TRANSFER CREATION END =============');
   }
 } 

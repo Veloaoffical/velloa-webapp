@@ -661,7 +661,13 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
 
         <DialogFooter className="mt-2 border-t pt-4 px-6">
           <div className="flex items-center justify-between w-full">
-            <div className="flex gap-8">
+            <div className="text-sm text-muted-foreground">
+                Ref: <span className="font-medium">{reference}</span>
+              
+            </div>
+            <div className="flex items-center gap-4">
+              
+              <div className="flex gap-8">
               <div>
                 <div className="text-sm text-muted-foreground">Total Debit</div>
                 <div className="font-medium">${getTotalDebits().toFixed(2)}</div>
@@ -671,10 +677,6 @@ export function JournalEntryDialog({ open, onOpenChange }: JournalEntryDialogPro
                 <div className="font-medium">${getTotalCredits().toFixed(2)}</div>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-muted-foreground">
-                Ref: <span className="font-medium">{reference}</span>
-              </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Cancel

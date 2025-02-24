@@ -36,6 +36,7 @@ export async function GET(request: Request) {
         property,
         start_date,
         memo,
+        payee,
         data,
         created_at,
         created_by

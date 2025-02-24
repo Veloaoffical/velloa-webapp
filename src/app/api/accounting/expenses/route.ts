@@ -12,16 +12,16 @@ interface ExpenseLine {
   property: string
   unit: string
   description: string
-  amount: string
+  credit_amount: number
 }
 
 interface TransactionLine {
   unit: string;
   category: string;
+  property: string;
   description: string;
   debit_amount: number;
   credit_amount: number;
-  property: string;
 }
 
 export async function POST(request: Request) {
@@ -61,11 +61,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to get company' }, { status: 403 })
     }
 
-    // Calculate total amount
-    const totalAmount = lines.reduce((sum: number, line: ExpenseLine) => {
-      return sum + (parseFloat(line.amount) || 0)
-    }, 0)
-
     // Get the property ID from the first line
     const property_id = lines[0]?.property
     if (!property_id || property_id.trim() === '') {
@@ -75,24 +70,37 @@ export async function POST(request: Request) {
       )
     }
 
-    // Transform expense lines into transaction lines with debit and credit
-    const transactionLines: TransactionLine[] = lines.map((line: ExpenseLine) => ({
-      unit: line.unit || "",
-      category: line.category,
-      description: line.description,
-      debit_amount: parseFloat(line.amount) || 0, // Expense categories get debited
-      credit_amount: 0,
-      property: property_id // Add property ID to each line
-    }))
+    // Calculate total amount from expense lines
+    const totalAmount = lines.reduce((sum: number, line: ExpenseLine) => {
+      return sum + (line.credit_amount || 0)
+    }, 0)
 
-    // Add the bank account line (credit)
-    transactionLines.unshift({
+    // Transform expense lines into transaction lines with debit and credit
+    const transactionLines: TransactionLine[] = []
+
+    // Add bank account line (credit entry - money going out)
+    transactionLines.push({
       unit: "",
       category: pay_from_account,
+      property: property_id,
       description: "Payment from account",
       debit_amount: 0,
-      credit_amount: totalAmount, // Bank account gets credited
-      property: property_id // Add property ID to bank account line
+      credit_amount: totalAmount // Bank account gets credited
+    })
+
+    // Add expense lines (debit entries - money being spent)
+    lines.forEach((line: ExpenseLine) => {
+      const lineAmount = line.credit_amount || 0
+      if (lineAmount > 0 && line.category !== pay_from_account) {
+        transactionLines.push({
+          unit: line.unit || "",
+          category: line.category,
+          property: property_id,
+          description: line.description || "",
+          debit_amount: lineAmount, // Expense gets debited
+          credit_amount: 0
+        })
+      }
     })
 
     // Create the transaction
@@ -129,24 +137,7 @@ export async function POST(request: Request) {
       const { category, debit_amount, credit_amount } = line
       const amount = debit_amount - credit_amount // Positive for debits, negative for credits
       
-      console.log('Processing line for property:', property_id)
-      console.log('Line details:', { category, debit_amount, credit_amount, amount, property_id })
-
-      // Determine if this is a bank account being credited
-      const isBankAccount = category === pay_from_account
-      // For property balances:
-      // - For bank accounts (pay from account): Subtract the credit amount (money going out)
-      // - For expense accounts: Add the debit amount (money being spent)
-      const propertyBalanceAmount = isBankAccount ? -credit_amount : debit_amount
-      console.log('Property balance adjustment:', {
-        isBankAccount,
-        credit_amount,
-        debit_amount,
-        propertyBalanceAmount,
-        category,
-        pay_from_account,
-        property_id
-      })
+      console.log('Processing line:', { category, debit_amount, credit_amount, amount, property_id })
 
       // First try to find and update sub-account
       const { data: subAccount, error: subAccountError } = await supabase
@@ -162,27 +153,13 @@ export async function POST(request: Request) {
 
         // Update property balance in the property_balance JSONB array
         let propertyBalance = Array.isArray(subAccount.property_balance) ? subAccount.property_balance : []
-        console.log('Before update - Property Balance:', propertyBalance)
         
-        const propertyIndex = propertyBalance.findIndex((pb: { property_id: string }) => pb.property_id === property_id)
+        const propertyIndex = propertyBalance.findIndex((pb: PropertyBalance) => pb.property_id === property_id)
         if (propertyIndex >= 0) {
           // Update existing property balance
-          const currentBalance = Number(propertyBalance[propertyIndex].balance) || 0
-          // For bank accounts, we subtract from the balance
-          // For expense accounts, we add to the balance
-          const newPropertyBalance = isBankAccount 
-            ? currentBalance - credit_amount  // Subtract for bank accounts
-            : currentBalance + debit_amount   // Add for expense accounts
+          const currentPropertyBalance = Number(propertyBalance[propertyIndex].balance) || 0
+          const newPropertyBalance = currentPropertyBalance + amount
           
-          console.log('Updating balance:', {
-            currentBalance,
-            operation: isBankAccount ? 'subtract' : 'add',
-            amount: isBankAccount ? credit_amount : debit_amount,
-            newPropertyBalance,
-            property_id
-          })
-          
-          // Create a new array with the updated balance
           propertyBalance = propertyBalance.map((pb: PropertyBalance) => 
             pb.property_id === property_id 
               ? { ...pb, balance: newPropertyBalance }
@@ -196,18 +173,15 @@ export async function POST(request: Request) {
             .eq('id', property_id)
             .single()
           
-          // For a new property balance entry
           propertyBalance = [
             ...propertyBalance,
             {
               property_id,
               property_name: property?.name || '',
-              balance: isBankAccount ? -credit_amount : debit_amount
+              balance: amount
             }
           ]
         }
-        
-        console.log('After update - Property Balance to save:', propertyBalance)
 
         const { error: updateError } = await supabase
           .from('chart_of_sub_accounts')
@@ -222,7 +196,7 @@ export async function POST(request: Request) {
           throw new Error('Failed to update account balance')
         }
 
-        // Also update the parent account's account_balance and property_balance if it exists
+        // Update parent account if it exists
         if (subAccount.parent_account) {
           const { data: parentAccount, error: parentError } = await supabase
             .from('chart_of_accounts')
@@ -234,54 +208,34 @@ export async function POST(request: Request) {
             const parentCurrentBalance = parseFloat(parentAccount.account_balance) || 0
             const parentNewBalance = parentCurrentBalance + amount
 
-            // Update parent's property balance
             let parentPropertyBalance = parentAccount.property_balance || []
-            console.log('Before update - Parent Property Balance:', parentPropertyBalance)
+            const propertyIndex = parentPropertyBalance.findIndex((pb: PropertyBalance) => pb.property_id === property_id)
             
-            const propertyIndex = parentPropertyBalance.findIndex((pb: { property_id: string }) => pb.property_id === property_id)
             if (propertyIndex >= 0) {
-              // Update existing property balance
-              const currentBalance = Number(parentPropertyBalance[propertyIndex].balance) || 0
-              // For bank accounts, we subtract from the balance
-              // For expense accounts, we add to the balance
-              const newPropertyBalance = isBankAccount 
-                ? currentBalance - credit_amount  // Subtract for bank accounts
-                : currentBalance + debit_amount   // Add for expense accounts
+              const currentPropertyBalance = Number(parentPropertyBalance[propertyIndex].balance) || 0
+              const newPropertyBalance = currentPropertyBalance + amount
               
-              console.log('Updating parent balance:', {
-                currentBalance,
-                operation: isBankAccount ? 'subtract' : 'add',
-                amount: isBankAccount ? credit_amount : debit_amount,
-                newPropertyBalance,
-                property_id
-              })
-              
-              // Create a new array with the updated balance
               parentPropertyBalance = parentPropertyBalance.map((pb: PropertyBalance) => 
                 pb.property_id === property_id 
                   ? { ...pb, balance: newPropertyBalance }
                   : pb
               )
             } else {
-              // Get property name
               const { data: property } = await supabase
                 .from('properties')
                 .select('name')
                 .eq('id', property_id)
                 .single()
               
-              // For a new property balance entry
               parentPropertyBalance = [
                 ...parentPropertyBalance,
                 {
                   property_id,
                   property_name: property?.name || '',
-                  balance: isBankAccount ? -credit_amount : debit_amount
+                  balance: amount
                 }
               ]
             }
-            
-            console.log('After update - Parent Property Balance to save:', parentPropertyBalance)
 
             const { error: parentUpdateError } = await supabase
               .from('chart_of_accounts')
@@ -298,10 +252,10 @@ export async function POST(request: Request) {
           }
         }
 
-        continue // Skip main account update if sub-account was found and updated
+        continue
       }
 
-      // If not found in sub-accounts, try main accounts
+      // If not found in sub-accounts, update main account
       const { data: mainAccount, error: mainAccountError } = await supabase
         .from('chart_of_accounts')
         .select('id, account_balance, property_balance')
@@ -317,26 +271,13 @@ export async function POST(request: Request) {
       const currentBalance = parseFloat(mainAccount.account_balance) || 0
       const newBalance = currentBalance + amount
 
-      // Update property balance in the property_balance JSONB array
+      // Update property balance
       let propertyBalance = Array.isArray(mainAccount.property_balance) ? mainAccount.property_balance : []
-      console.log('Before update - Main Account Property Balance:', propertyBalance)
-      const propertyIndex = propertyBalance.findIndex((pb: { property_id: string }) => pb.property_id === property_id)
+      const propertyIndex = propertyBalance.findIndex((pb: PropertyBalance) => pb.property_id === property_id)
+      
       if (propertyIndex >= 0) {
-        // Update existing property balance
-        const currentBalance = Number(propertyBalance[propertyIndex].balance) || 0
-        // For bank accounts, we subtract from the balance
-        // For expense accounts, we add to the balance
-        const newPropertyBalance = isBankAccount 
-          ? currentBalance - credit_amount  // Subtract for bank accounts
-          : currentBalance + debit_amount   // Add for expense accounts
-        
-        console.log('Updating main account balance:', {
-          currentBalance,
-          operation: isBankAccount ? 'subtract' : 'add',
-          amount: isBankAccount ? credit_amount : debit_amount,
-          newPropertyBalance,
-          property_id
-        })
+        const currentPropertyBalance = Number(propertyBalance[propertyIndex].balance) || 0
+        const newPropertyBalance = currentPropertyBalance + amount
         
         propertyBalance = propertyBalance.map((pb: PropertyBalance) => 
           pb.property_id === property_id 
@@ -344,24 +285,21 @@ export async function POST(request: Request) {
             : pb
         )
       } else {
-        // Get property name
         const { data: property } = await supabase
           .from('properties')
           .select('name')
           .eq('id', property_id)
           .single()
         
-        // For a new property balance entry
         propertyBalance = [
           ...propertyBalance,
           {
             property_id,
             property_name: property?.name || '',
-            balance: isBankAccount ? -credit_amount : debit_amount
+            balance: amount
           }
         ]
       }
-      console.log('After update - Main Account Property Balance to save:', propertyBalance)
 
       const { error: updateError } = await supabase
         .from('chart_of_accounts')

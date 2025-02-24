@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button as ButtonUI } from "@/components/ui/button"
@@ -10,7 +11,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  TableFooter,
 } from "@/components/ui/table"
 import {
   Select,
@@ -18,6 +18,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
 } from "@/components/ui/select"
 import { ArrowLeft, CalendarIcon, SlidersHorizontal, X, Settings } from "lucide-react"
 import { format, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns"
@@ -33,38 +35,93 @@ import { parseDate, type CalendarDate } from "@internationalized/date"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Checkbox } from "@/components/ui/checkbox"
 
-interface Account {
+interface TransactionData {
+  lines: {
+    unit: string
+    category: string
+    description: string
+    debit_amount: number
+    credit_amount: number
+  }[]
+  total_amount: number
+  payment_method: string
+  memo?: string
+  check_number?: string
+}
+
+interface PayeeDetails {
+  id: string
+  full_name: string
+  company_name?: string
+}
+
+interface RawTransaction {
+  id: string
+  created_at: string
+  transaction_type: string | null
+  property: string | null
+  nano: string | null
+  payee: string | null
+  start_date: string | null
+  due_date: string | null
+  repeat_infinite: boolean | null
+  data: TransactionData
+  frequency: string | null
+  created_by: string | null
+  company: string | null
+  memo: Record<string, unknown> | null
+  frequency_type: string | null
+  reference: string | null
+}
+
+interface Transaction extends RawTransaction {
+  payeeDetails?: PayeeDetails
+}
+
+interface ChartOfAccount {
   id: string
   account_name: string
   account_type: string
   account_subtype: string
+  account_description?: string
+  account_balance: number
   active_account: boolean
-  check_printing_enabled: boolean
-  transit_number?: string
-  institution_number?: string
-  account_number?: string
-  next_check_number?: string
-}
-
-interface CheckPayment {
-  id: string
-  payee: string
-  amount: number
-  date: string
-  status: 'pending' | 'printed' | 'voided'
-  memo?: string
-  account_id: string
-  check_number?: string
-  property?: string
+  sub_account?: boolean
+  parent_account?: string
 }
 
 export default function PrintChecksPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [loading, setLoading] = useState(false)
   const [selectedChecks, setSelectedChecks] = useState<string[]>([])
-  const [checkPayments, setCheckPayments] = useState<CheckPayment[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [accounts, setAccounts] = useState<ChartOfAccount[]>([])
+  const [accountsLoading, setAccountsLoading] = useState(false)
   const currentDateTime = new Date()
   
+  // Fetch chart of accounts
+  const fetchChartOfAccounts = async () => {
+    try {
+      setAccountsLoading(true)
+      const response = await fetch('/api/accounting/chart-of-accounts')
+      if (!response.ok) {
+        throw new Error('Failed to fetch chart of accounts')
+      }
+      const data = await response.json()
+      setAccounts(data)
+    } catch (error) {
+      console.error('Error fetching chart of accounts:', error)
+      setAccounts([])
+    } finally {
+      setAccountsLoading(false)
+    }
+  }
+
+  // Fetch accounts when component mounts
+  useEffect(() => {
+    fetchChartOfAccounts()
+  }, [])
+
   const getDateRangeForPeriod = (period: string) => {
     switch (period) {
       case 'day':
@@ -97,19 +154,19 @@ export default function PrintChecksPage() {
 
   const [selectedPeriod, setSelectedPeriod] = useState('last-7-days')
   const [dateRange, setDateRange] = useState(getDateRangeForPeriod('last-7-days'))
-  const [accounts] = useState<Account[]>([])
   const [selectedAccount, setSelectedAccount] = useState<string>('')
   const [selectedProperty, setSelectedProperty] = useState<string>('')
   const [selectedStatus, setSelectedStatus] = useState<string>('pending')
 
-  // Fetch check payments when filters change
-  const fetchCheckPayments = async () => {
+  // Fetch transactions when filters change
+  const fetchTransactions = async () => {
     try {
       setLoading(true)
       const params = new URLSearchParams()
       
       if (selectedAccount && selectedAccount !== 'all') {
-        params.append('account_id', selectedAccount)
+        // Add category filter for the debit amount
+        params.append('data->lines->category', selectedAccount)
       }
       
       if (dateRange.start) {
@@ -128,12 +185,58 @@ export default function PrintChecksPage() {
         params.append('status', selectedStatus)
       }
 
-      const response = await fetch(`/api/accounting/checks?${params.toString()}`)
-      if (!response.ok) throw new Error('Failed to fetch check payments')
-      const data = await response.json()
-      setCheckPayments(data)
+      // Add payment method filter
+      params.append('data->payment_method', 'check_inapp')
+
+      const response = await fetch(`/api/accounting/transactions?${params.toString()}`)
+      if (!response.ok) {
+        console.error('API Response not OK:', response.status, response.statusText)
+        throw new Error('Failed to fetch transactions')
+      }
+      
+      const rawData = await response.json()
+      console.log('Raw API response:', rawData)
+      
+      try {
+        // Handle both data.data and direct data array formats
+        const data = rawData.data || rawData
+        console.log('Extracted data:', data)
+        
+        if (!Array.isArray(data)) {
+          console.error('Data is not an array:', data)
+          throw new Error('Invalid data format')
+        }
+
+        const parsedData: Transaction[] = data.map((item: RawTransaction) => ({
+          ...item,
+          data: {
+            ...item.data,
+            payment_method: item.data?.payment_method || 'unknown'
+          }
+        }))
+        
+        console.log('Parsed transaction data:', parsedData)
+        
+        const checkTransactions = parsedData.filter((transaction: Transaction) => {
+          const paymentMethod = transaction?.data?.payment_method
+          console.log('Checking transaction:', transaction.id, 'payment method:', paymentMethod)
+          return paymentMethod === 'check_inapp'
+        })
+        
+        console.log('Filtered check transactions:', checkTransactions)
+
+        // Fetch payee details for filtered transactions
+        const transactionsWithPayees = await fetchPayeeDetails(checkTransactions)
+        
+        console.log('Transactions with payee details:', transactionsWithPayees)
+        setTransactions(transactionsWithPayees)
+      } catch (error) {
+        console.error('Error parsing transaction data:', error)
+        setTransactions([])
+      }
     } catch (error) {
-      console.error('Error fetching check payments:', error)
+      console.error('Error fetching transactions:', error)
+      setTransactions([])
     } finally {
       setLoading(false)
     }
@@ -141,8 +244,55 @@ export default function PrintChecksPage() {
 
   // Fetch data when component mounts and when filters change
   useEffect(() => {
-    fetchCheckPayments()
+    fetchTransactions()
   }, [selectedAccount, dateRange, selectedProperty, selectedStatus])
+
+  // Fetch payee details for a list of transactions
+  const fetchPayeeDetails = async (transactions: Transaction[]): Promise<Transaction[]> => {
+    try {
+      // Get unique payee IDs
+      const payeeIds = [...new Set(transactions.filter(t => t.payee).map(t => t.payee))]
+      
+      if (payeeIds.length === 0) return transactions
+
+      // Create a map to store payee details
+      const payeeMap = new Map<string, PayeeDetails>()
+
+      // Fetch from each role-based endpoint
+      const endpoints = [
+        '/api/people/owner/search',
+        '/api/people/vendor/search',
+        '/api/people/tenants/search'
+      ]
+
+      // Fetch from all endpoints in parallel
+      const responses = await Promise.all(endpoints.map(endpoint => fetch(endpoint)))
+      const results = await Promise.all(responses.map(r => r.json()))
+
+      // Combine all results
+      const allPeople = results.flat()
+
+      // Create a map of payee details
+      allPeople.forEach(person => {
+        if (payeeIds.includes(person.id)) {
+          payeeMap.set(person.id, {
+            id: person.id,
+            full_name: `${person.first_name || ''} ${person.last_name || ''}`.trim(),
+            company_name: person.company
+          })
+        }
+      })
+
+      // Add payee details to transactions
+      return transactions.map(transaction => ({
+        ...transaction,
+        payeeDetails: transaction.payee ? payeeMap.get(transaction.payee) : undefined
+      }))
+    } catch (error) {
+      console.error('Error fetching payee details:', error)
+      return transactions
+    }
+  }
 
   const handlePeriodChange = (period: string) => {
     setSelectedPeriod(period)
@@ -230,14 +380,67 @@ export default function PrintChecksPage() {
                   onValueChange={setSelectedAccount}
                 >
                   <SelectTrigger className="w-[180px] bg-background">
-                    <SelectValue placeholder="Account" />
+                    <SelectValue placeholder={accountsLoading ? "Loading..." : "Account"}>
+                      {selectedAccount && accounts.reduce((name, account) => {
+                        if (account.id === selectedAccount) {
+                          return account.account_name;
+                        }
+                        return name;
+                      }, "")}
+                    </SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-[300px]">
                     <SelectItem value="all">All Accounts</SelectItem>
-                    {accounts.filter(a => a.check_printing_enabled).map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.account_name}
-                      </SelectItem>
+                    {Object.entries(
+                      accounts.reduce((acc, account) => {
+                        if (!account.sub_account) {
+                          if (!acc[account.account_type]) {
+                            acc[account.account_type] = [];
+                          }
+                          // Add main account with its sub-accounts
+                          const subAccounts = accounts.filter(a => 
+                            a.sub_account && a.parent_account === account.id
+                          );
+                          acc[account.account_type].push({
+                            ...account,
+                            subAccounts
+                          });
+                        }
+                        return acc;
+                      }, {} as Record<string, (ChartOfAccount & { subAccounts: ChartOfAccount[] })[]>)
+                    ).map(([type, mainAccounts]) => (
+                      <SelectGroup key={type}>
+                        <SelectLabel>{type}</SelectLabel>
+                        {mainAccounts.map((mainAccount) => (
+                          <React.Fragment key={mainAccount.id}>
+                            <SelectItem value={mainAccount.id}>
+                              <div className="flex flex-col">
+                                <span>{mainAccount.account_name}</span>
+                                <span className="text-xs text-muted-foreground">{mainAccount.account_subtype}</span>
+                              </div>
+                            </SelectItem>
+                            {mainAccount.subAccounts.length > 0 && (
+                              <SelectGroup>
+                                <SelectLabel className="pl-4 text-xs">
+                                  {mainAccount.account_name} Sub-accounts
+                                </SelectLabel>
+                                {mainAccount.subAccounts.map((subAccount) => (
+                                  <SelectItem 
+                                    key={subAccount.id} 
+                                    value={subAccount.id}
+                                    className="pl-6"
+                                  >
+                                    <div className="flex flex-col">
+                                      <span>{subAccount.account_name}</span>
+                                      <span className="text-xs text-muted-foreground">{subAccount.account_subtype}</span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </SelectGroup>
                     ))}
                   </SelectContent>
                 </Select>
@@ -318,6 +521,7 @@ export default function PrintChecksPage() {
                     <TableHead>Check Number</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Payee</TableHead>
+                    <TableHead>Description</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Memo</TableHead>
                   </TableRow>
@@ -329,21 +533,15 @@ export default function PrintChecksPage() {
                       <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                       <TableCell className="text-right"><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
-                <TableFooter className="bg-muted">
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={5}>Total</TableCell>
-                    <TableCell className="text-right">-</TableCell>
-                    <TableCell></TableCell>
-                  </TableRow>
-                </TableFooter>
               </Table>
-            ) : checkPayments.length === 0 ? (
+            ) : transactions.length === 0 ? (
               <Table>
                 <TableHeader className="bg-muted">
                   <TableRow className="hover:bg-transparent">
@@ -357,6 +555,7 @@ export default function PrintChecksPage() {
                     <TableHead>Check Number</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Payee</TableHead>
+                    <TableHead>Description</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Memo</TableHead>
                   </TableRow>
@@ -375,10 +574,10 @@ export default function PrintChecksPage() {
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="w-[30px]">
                       <Checkbox
-                        checked={selectedChecks.length === checkPayments.length}
+                        checked={selectedChecks.length === transactions.length}
                         onCheckedChange={(checked) => {
                           if (checked) {
-                            setSelectedChecks(checkPayments.map(p => p.id))
+                            setSelectedChecks(transactions.map(t => t.id))
                           } else {
                             setSelectedChecks([])
                           }
@@ -389,51 +588,66 @@ export default function PrintChecksPage() {
                     <TableHead>Check Number</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Payee</TableHead>
+                    <TableHead>Description</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Memo</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {checkPayments.map((payment) => (
-                    <TableRow key={payment.id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedChecks.includes(payment.id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedChecks([...selectedChecks, payment.id])
-                            } else {
-                              setSelectedChecks(selectedChecks.filter(id => id !== payment.id))
-                            }
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>{format(new Date(payment.date), "MM/dd/yyyy")}</TableCell>
-                      <TableCell>{payment.check_number || '-'}</TableCell>
-                      <TableCell>Check</TableCell>
-                      <TableCell>{payment.payee}</TableCell>
-                      <TableCell className="text-right">
-                        {new Intl.NumberFormat('en-US', {
-                          style: 'currency',
-                          currency: 'USD'
-                        }).format(payment.amount)}
-                      </TableCell>
-                      <TableCell>{payment.memo || '-'}</TableCell>
-                    </TableRow>
-                  ))}
+                  {transactions.map((transaction) => {
+                    // Safely format the date from start_date
+                    let formattedDate = '-'
+                    try {
+                      if (transaction.start_date) {
+                        // Parse the timestampz
+                        const date = new Date(transaction.start_date)
+                        if (!isNaN(date.getTime())) {
+                          formattedDate = format(date, "MM/dd/yyyy")
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Error formatting date:', error)
+                    }
+
+                    return (
+                      <TableRow key={transaction.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedChecks.includes(transaction.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedChecks([...selectedChecks, transaction.id])
+                              } else {
+                                setSelectedChecks(selectedChecks.filter(id => id !== transaction.id))
+                              }
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>{formattedDate}</TableCell>
+                        <TableCell>{transaction.data.check_number || '-'}</TableCell>
+                        <TableCell>Check</TableCell>
+                        <TableCell>
+                          {transaction.payeeDetails ? (
+                            <div>
+                              <div className="font-medium">{transaction.payeeDetails.full_name}</div>
+                              {transaction.payeeDetails.company_name && (
+                                <div className="text-sm text-muted-foreground">{transaction.payeeDetails.company_name}</div>
+                              )}
+                            </div>
+                          ) : '-'}
+                        </TableCell>
+                        <TableCell>{transaction.data.lines[0]?.description || '-'}</TableCell>
+                        <TableCell className="text-right">
+                          {new Intl.NumberFormat('en-US', {
+                            style: 'currency',
+                            currency: 'USD'
+                          }).format(transaction.data.total_amount)}
+                        </TableCell>
+                        <TableCell>{transaction.data.memo || '-'}</TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
-                <TableFooter className="bg-muted">
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={5}>Total</TableCell>
-                    <TableCell className="text-right">
-                      {new Intl.NumberFormat('en-US', {
-                        style: 'currency',
-                        currency: 'USD'
-                      }).format(checkPayments.reduce((sum, p) => sum + p.amount, 0))}
-                    </TableCell>
-                    <TableCell></TableCell>
-                  </TableRow>
-                </TableFooter>
               </Table>
             )}
             <p className="text-center text-sm text-muted-foreground">

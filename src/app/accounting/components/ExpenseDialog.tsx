@@ -44,7 +44,7 @@ interface ExpenseLine {
   property: string
   unit: string
   description: string
-  amount: string
+  credit_amount: string
 }
 
 interface Property {
@@ -166,7 +166,7 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
   const [paymentMethod, setPaymentMethod] = useState<string>("")
   const [payFromAccount, setPayFromAccount] = useState<string>("")
   const [lines, setLines] = useState<ExpenseLine[]>([
-    { category: "", property: "", unit: "", description: "", amount: "" }
+    { category: "", property: "", unit: "", description: "", credit_amount: "" }
   ])
   const emptyEditorState = JSON.stringify({
     root: {
@@ -207,7 +207,7 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
     setFrequency("")
     setPaymentMethod("")
     setPayFromAccount("")
-    setLines([{ category: "", property: "", unit: "", description: "", amount: "" }])
+    setLines([{ category: "", property: "", unit: "", description: "", credit_amount: "" }])
     setMemo(emptyEditorState)
     setShowMemo(false)
     setReference(generateReference())
@@ -330,7 +330,7 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
   }, [lines, categories, payFromAccount]);
 
   const handleAddLine = () => {
-    setLines([...lines, { category: "", property: "", unit: "", description: "", amount: "" }])
+    setLines([...lines, { category: "", property: "", unit: "", description: "", credit_amount: "" }])
   }
 
   const handleDeleteLine = (index: number) => {
@@ -341,15 +341,34 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
 
   const handleLineChange = (index: number, field: keyof ExpenseLine, value: string) => {
     const newLines = [...lines]
-    newLines[index] = { ...newLines[index], [field]: value }
+    
+    if (field === 'credit_amount') {
+      // Ensure amount is a valid number
+      const numValue = value === '' ? '0' : value
+      if (!isNaN(Number(numValue))) {
+        newLines[index] = { ...newLines[index], [field]: value }
+      }
+    } else {
+      newLines[index] = { ...newLines[index], [field]: value }
+    }
+
+    // If changing property of first line, update all lines to use the same property
+    if (field === 'property' && index === 0) {
+      newLines.forEach(line => {
+        line.property = value
+      })
+    }
+
     setLines(newLines)
   }
 
   const getTotalAmount = () => {
-    return lines.reduce((sum, line) => {
-      const amount = parseFloat(line.amount) || 0
+    const total = lines.reduce((sum, line) => {
+      const amount = Number(line.credit_amount) || 0
       return sum + amount
     }, 0)
+    console.log('getTotalAmount calculation:', { lines, total }) // Debug log
+    return total
   }
 
   // Reset form when dialog is closed
@@ -363,7 +382,7 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
     // Required fields validation
     if (!payee) {
       toast.error("Please select a payee")
-      setStep("form") // Ensure we stay on form step
+      setStep("form")
       return false
     }
 
@@ -403,30 +422,38 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
       return false
     }
 
-    // Check if property is selected
+    // Check if property is selected (only need to check first line as all lines share the same property)
     if (!lines[0]?.property) {
       toast.error("Please select a property for this expense")
       setStep("form")
       return false
     }
 
-    // Validate lines
-    const hasEmptyLine = lines.some(line => !line.category || !line.amount || !line.property)
-    if (hasEmptyLine) {
-      toast.error("Please fill in all required fields in the expense lines")
-      setStep("form")
-      return false
-    }
+    // Validate each expense line
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      
+      // Check category
+      if (!line.category) {
+        toast.error(`Please select a category for line ${i + 1}`)
+        setStep("form")
+        return false
+      }
 
-    // Validate amounts are positive numbers
-    const hasInvalidAmount = lines.some(line => {
-      const amount = parseFloat(line.amount)
-      return isNaN(amount) || amount <= 0
-    })
-    if (hasInvalidAmount) {
-      toast.error("All amounts must be positive numbers")
-      setStep("form")
-      return false
+      // Check amount
+      if (!line.credit_amount || line.credit_amount.trim() === '') {
+        toast.error(`Please enter an amount for line ${i + 1}`)
+        setStep("form")
+        return false
+      }
+
+      // Validate amount is a positive number
+      const amount = parseFloat(line.credit_amount)
+      if (isNaN(amount) || amount <= 0) {
+        toast.error(`Amount must be a positive number for line ${i + 1}`)
+        setStep("form")
+        return false
+      }
     }
 
     return true
@@ -439,7 +466,12 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
       }
 
       setIsLoading(true)
-      const totalAmount = getTotalAmount()
+      
+      // Filter out lines with valid amounts and categories
+      const expenseLines = lines.filter(line => {
+        const amount = parseFloat(line.credit_amount || '0')
+        return !isNaN(amount) && amount > 0 && line.category
+      })
 
       const expenseData = {
         payee,
@@ -451,17 +483,18 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
         repeat_forever: expenseType === "recurring" ? repeatForever : undefined,
         payment_method: paymentMethod,
         pay_from_account: payFromAccount,
-        lines: lines.map(line => ({
+        lines: expenseLines.map(line => ({
           category: line.category,
           property: line.property,
-          unit: line.unit || undefined,
-          description: line.description,
-          amount: parseFloat(line.amount)
+          unit: line.unit || "",
+          description: line.description || "",
+          credit_amount: parseFloat(line.credit_amount || '0')
         })),
         memo: memo || undefined,
-        reference,
-        total_amount: totalAmount
+        reference
       }
+
+      console.log('Final expense data:', JSON.stringify(expenseData, null, 2))
 
       const response = await fetch("/api/accounting/expenses", {
         method: "POST",
@@ -473,16 +506,19 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
 
       if (!response.ok) {
         const error = await response.json()
+        console.error('API error response:', error) // Debug log
         throw new Error(error.error || "Failed to create expense")
       }
 
-      await response.json()
+      const responseData = await response.json()
+      console.log('API success response:', responseData) // Debug log
+      
       toast.success("Expense created successfully")
       setStep("confirmation")
     } catch (error) {
       console.error("Error saving expense:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create expense")
-      setStep("form") // Reset to form step if there's an error
+      setStep("form")
     } finally {
       setIsLoading(false)
     }
@@ -981,9 +1017,11 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
                         <TableCell className="py-2">
                           <Input
                             type="number"
+                            step="0.01"
+                            min="0"
                             placeholder="0.00"
-                            value={line.amount}
-                            onChange={(e) => handleLineChange(index, "amount", e.target.value)}
+                            value={line.credit_amount}
+                            onChange={(e) => handleLineChange(index, "credit_amount", e.target.value)}
                             className="bg-background h-[42px]"
                           />
                         </TableCell>

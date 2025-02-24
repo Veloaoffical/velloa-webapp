@@ -39,7 +39,8 @@ export async function GET(request: Request) {
         payee,
         data,
         created_at,
-        created_by
+        created_by,
+        reference
       `)
       .eq('company', companyMember.company_id)
 

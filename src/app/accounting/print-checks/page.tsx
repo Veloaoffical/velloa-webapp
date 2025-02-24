@@ -34,6 +34,7 @@ import { Button, DateRangePicker, Dialog, Group, Popover } from "react-aria-comp
 import { parseDate, type CalendarDate } from "@internationalized/date"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useRouter } from "next/navigation"
 
 interface TransactionData {
   lines: {
@@ -98,6 +99,7 @@ export default function PrintChecksPage() {
   const [accounts, setAccounts] = useState<ChartOfAccount[]>([])
   const [accountsLoading, setAccountsLoading] = useState(false)
   const currentDateTime = new Date()
+  const router = useRouter()
   
   // Fetch chart of accounts
   const fetchChartOfAccounts = async () => {
@@ -156,7 +158,7 @@ export default function PrintChecksPage() {
   const [dateRange, setDateRange] = useState(getDateRangeForPeriod('last-7-days'))
   const [selectedAccount, setSelectedAccount] = useState<string>('')
   const [selectedProperty, setSelectedProperty] = useState<string>('')
-  const [selectedStatus, setSelectedStatus] = useState<string>('pending')
+  const [selectedTransactionType, setSelectedTransactionType] = useState<string>('all')
 
   // Fetch transactions when filters change
   const fetchTransactions = async () => {
@@ -165,7 +167,6 @@ export default function PrintChecksPage() {
       const params = new URLSearchParams()
       
       if (selectedAccount && selectedAccount !== 'all') {
-        // Add category filter for the debit amount
         params.append('data->lines->category', selectedAccount)
       }
       
@@ -181,8 +182,8 @@ export default function PrintChecksPage() {
         params.append('property_id', selectedProperty)
       }
 
-      if (selectedStatus && selectedStatus !== 'all') {
-        params.append('status', selectedStatus)
+      if (selectedTransactionType && selectedTransactionType !== 'all') {
+        params.append('transaction_type', selectedTransactionType)
       }
 
       // Add payment method filter
@@ -245,7 +246,7 @@ export default function PrintChecksPage() {
   // Fetch data when component mounts and when filters change
   useEffect(() => {
     fetchTransactions()
-  }, [selectedAccount, dateRange, selectedProperty, selectedStatus])
+  }, [selectedAccount, dateRange, selectedProperty, selectedTransactionType])
 
   // Fetch payee details for a list of transactions
   const fetchPayeeDetails = async (transactions: Transaction[]): Promise<Transaction[]> => {
@@ -301,11 +302,22 @@ export default function PrintChecksPage() {
     }
   }
 
+  // Format transaction type helper
+  const formatTransactionType = (type: string | null): string => {
+    if (!type) return 'Check'
+    switch (type.toLowerCase()) {
+      case 'expense':
+        return 'Expense'
+      default:
+        return type.charAt(0).toUpperCase() + type.slice(1)
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href="/reports">
+        <Link href="/accounting">
           <ButtonUI variant="ghost" size="icon" className="rounded-full">
             <ArrowLeft className="h-4 w-4" />
           </ButtonUI>
@@ -313,6 +325,7 @@ export default function PrintChecksPage() {
         <h1 className="text-xl font-semibold">Print Checks</h1>
       </div>
 
+      {/* Main Card with Table */}
       <Card>
         <CardContent className="space-y-6 pt-6">
           {/* Filters */}
@@ -446,17 +459,19 @@ export default function PrintChecksPage() {
                 </Select>
 
                 <Select
-                  value={selectedStatus}
-                  onValueChange={setSelectedStatus}
+                  value={selectedTransactionType}
+                  onValueChange={setSelectedTransactionType}
                 >
                   <SelectTrigger className="w-[180px] bg-background">
-                    <SelectValue placeholder="Status" />
+                    <SelectValue placeholder="Type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="printed">Printed</SelectItem>
-                    <SelectItem value="voided">Voided</SelectItem>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="expense">Expense</SelectItem>
+                    <SelectItem value="bill">Bill</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
+                    <SelectItem value="payment">Payment</SelectItem>
+                    <SelectItem value="transfer">Transfer</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -479,6 +494,7 @@ export default function PrintChecksPage() {
                   variant="ghost"
                   size="icon"
                   className={cn(dateInputStyle, "w-9 h-9 p-0")}
+                  onClick={() => router.push('/accounting/print-checks/settings')}
                 >
                   <Settings className="h-4 w-4" />
                 </ButtonUI>
@@ -569,86 +585,88 @@ export default function PrintChecksPage() {
                 </TableBody>
               </Table>
             ) : (
-              <Table>
-                <TableHeader className="bg-muted">
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[30px]">
-                      <Checkbox
-                        checked={selectedChecks.length === transactions.length}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedChecks(transactions.map(t => t.id))
-                          } else {
-                            setSelectedChecks([])
+              <>
+                <Table>
+                  <TableHeader className="bg-muted">
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-[30px]">
+                        <Checkbox
+                          checked={selectedChecks.length === transactions.length}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedChecks(transactions.map(t => t.id))
+                            } else {
+                              setSelectedChecks([])
+                            }
+                          }}
+                        />
+                      </TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Check Number</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Payee</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Memo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {transactions.map((transaction) => {
+                      // Safely format the date from start_date
+                      let formattedDate = '-'
+                      try {
+                        if (transaction.start_date) {
+                          // Parse the timestampz
+                          const date = new Date(transaction.start_date)
+                          if (!isNaN(date.getTime())) {
+                            formattedDate = format(date, "MM/dd/yyyy")
                           }
-                        }}
-                      />
-                    </TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Check Number</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Payee</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Memo</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.map((transaction) => {
-                    // Safely format the date from start_date
-                    let formattedDate = '-'
-                    try {
-                      if (transaction.start_date) {
-                        // Parse the timestampz
-                        const date = new Date(transaction.start_date)
-                        if (!isNaN(date.getTime())) {
-                          formattedDate = format(date, "MM/dd/yyyy")
                         }
+                      } catch (error) {
+                        console.error('Error formatting date:', error)
                       }
-                    } catch (error) {
-                      console.error('Error formatting date:', error)
-                    }
 
-                    return (
-                      <TableRow key={transaction.id}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedChecks.includes(transaction.id)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedChecks([...selectedChecks, transaction.id])
-                              } else {
-                                setSelectedChecks(selectedChecks.filter(id => id !== transaction.id))
-                              }
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell>{formattedDate}</TableCell>
-                        <TableCell>{transaction.data.check_number || '-'}</TableCell>
-                        <TableCell>Check</TableCell>
-                        <TableCell>
-                          {transaction.payeeDetails ? (
-                            <div>
-                              <div className="font-medium">{transaction.payeeDetails.full_name}</div>
-                              {transaction.payeeDetails.company_name && (
-                                <div className="text-sm text-muted-foreground">{transaction.payeeDetails.company_name}</div>
-                              )}
-                            </div>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell>{transaction.data.lines[0]?.description || '-'}</TableCell>
-                        <TableCell className="text-right">
-                          {new Intl.NumberFormat('en-US', {
-                            style: 'currency',
-                            currency: 'USD'
-                          }).format(transaction.data.total_amount)}
-                        </TableCell>
-                        <TableCell>{transaction.data.memo || '-'}</TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+                      return (
+                        <TableRow key={transaction.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedChecks.includes(transaction.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedChecks([...selectedChecks, transaction.id])
+                                } else {
+                                  setSelectedChecks(selectedChecks.filter(id => id !== transaction.id))
+                                }
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>{formattedDate}</TableCell>
+                          <TableCell>{transaction.data.check_number || '-'}</TableCell>
+                          <TableCell>{formatTransactionType(transaction.transaction_type)}</TableCell>
+                          <TableCell>
+                            {transaction.payeeDetails ? (
+                              <div>
+                                <div className="font-medium">{transaction.payeeDetails.full_name}</div>
+                                {transaction.payeeDetails.company_name && (
+                                  <div className="text-sm text-muted-foreground">{transaction.payeeDetails.company_name}</div>
+                                )}
+                              </div>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell>{transaction.data.lines[0]?.description || '-'}</TableCell>
+                          <TableCell className="text-right">
+                            {new Intl.NumberFormat('en-US', {
+                              style: 'currency',
+                              currency: 'USD'
+                            }).format(transaction.data.total_amount)}
+                          </TableCell>
+                          <TableCell>{transaction.data.memo || '-'}</TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </>
             )}
             <p className="text-center text-sm text-muted-foreground">
               {format(currentDateTime, "MMM d, yyyy h:mm a")}
@@ -656,6 +674,50 @@ export default function PrintChecksPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Summary Card */}
+      {transactions.length > 0 && (
+        <Card>
+          <CardContent className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-8">
+              <div>
+                <div className="text-sm text-muted-foreground">Account Balance</div>
+                <div className="text-lg font-medium">
+                  {new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD'
+                  }).format(selectedAccount && selectedAccount !== 'all' 
+                    ? accounts.find(a => a.id === selectedAccount)?.account_balance || 0
+                    : 0)}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Checks Selected</div>
+                <div className="text-lg font-medium">{selectedChecks.length}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Selected Total</div>
+                <div className="text-lg font-medium">
+                  {new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD'
+                  }).format(transactions
+                    .filter(t => selectedChecks.includes(t.id))
+                    .reduce((sum, t) => sum + (t.data.total_amount || 0), 0)
+                  )}
+                </div>
+              </div>
+            </div>
+            <ButtonUI 
+              variant="default"
+              disabled={selectedChecks.length === 0}
+              onClick={() => router.push(`/accounting/print-checks/check-preview?checks=${selectedChecks.join(',')}`)}
+            >
+              Print Selected Checks
+            </ButtonUI>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 } 

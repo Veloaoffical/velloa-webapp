@@ -1,0 +1,235 @@
+import { createClient } from '@/utils/supabase/server';
+import { NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+
+interface Property {
+  id: string;
+  name: string;
+  address_line_1?: string;
+  address_line_2?: string | null;
+  city?: string;
+  state?: string;
+  zip?: string;
+}
+
+interface Unit {
+  unit_id: string;
+  unit_number?: string;
+  unit_name?: string;
+}
+
+interface TenantInfo {
+  id: string;
+  tenant_id?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone?: string;
+  name?: string;
+}
+
+export async function GET() {
+  try {
+    console.log('🔍 Fetching lease contracts for accounting');
+    const supabase = await createClient();
+
+    // Get the authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.error('❌ Auth error:', userError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Get the company membership
+    const { data: companyMember, error: companyError } = await supabase
+      .from('company_members')
+      .select('company_id')
+      .eq('id', user.id)
+      .single();
+
+    if (companyError || !companyMember) {
+      console.error('❌ Company error:', companyError);
+      return NextResponse.json({ error: 'Failed to get company' }, { status: 403 });
+    }
+
+    // Fetch lease contracts with related data
+    const { data: leases, error: leasesError } = await supabase
+      .from('lease_contracts')
+      .select(`
+        id,
+        created_at,
+        start_date,
+        end_date,
+        rent_amount,
+        lease_term,
+        deposit_amount,
+        property_id,
+        unit_id,
+        tenant_id,
+        property:properties(
+          id,
+          name,
+          address_line_1,
+          address_line_2,
+          city,
+          state,
+          zip
+        ),
+        unit:units(
+          unit_id,
+          unit_name
+        )
+      `)
+      .eq('company_id', companyMember.company_id)
+      .order('created_at', { ascending: false });
+
+    if (leasesError) {
+      console.error('❌ Error fetching lease contracts:', leasesError);
+      return NextResponse.json({ error: 'Failed to fetch lease contracts' }, { status: 500 });
+    }
+
+    // Collect all tenant IDs from the leases
+    const tenantIds: string[] = [];
+    leases.forEach(lease => {
+      if (lease.tenant_id) {
+        try {
+          const tenantData = typeof lease.tenant_id === 'string' 
+            ? JSON.parse(lease.tenant_id) 
+            : lease.tenant_id;
+          
+          if (Array.isArray(tenantData)) {
+            tenantData.forEach(tenant => {
+              if (tenant.id) {
+                tenantIds.push(tenant.id);
+              }
+            });
+          } else if (tenantData.id) {
+            tenantIds.push(tenantData.id);
+          }
+        } catch (e) {
+          console.error('Error parsing tenant data:', e);
+        }
+      }
+    });
+
+    // Fetch tenant details from the people table if we have tenant IDs
+    const tenantDetailsMap: Record<string, TenantInfo> = {};
+    
+    if (tenantIds.length > 0) {
+      const { data: tenants, error: tenantsError } = await supabase
+        .from('people')
+        .select('id, first_name, last_name, email, phone')
+        .in('id', tenantIds);
+      
+      if (tenantsError) {
+        console.error('❌ Error fetching tenant details:', tenantsError);
+      } else if (tenants) {
+        // Create a map of tenant ID to tenant details
+        tenants.forEach(tenant => {
+          tenantDetailsMap[tenant.id] = {
+            id: tenant.id,
+            first_name: tenant.first_name,
+            last_name: tenant.last_name,
+            email: tenant.email,
+            phone: tenant.phone
+          };
+        });
+      }
+    }
+
+    // Transform the data to match the frontend interface
+    const transformedLeases = leases.map(lease => {
+      // Parse tenant information from JSON string if it exists
+      let tenant: TenantInfo | null = null;
+      if (lease.tenant_id) {
+        try {
+          // The tenant_id field might be a JSON string or already a parsed object
+          const tenantData = typeof lease.tenant_id === 'string' 
+            ? JSON.parse(lease.tenant_id) 
+            : lease.tenant_id;
+          
+          // Handle both array and object formats
+          const tenantInfo = Array.isArray(tenantData) ? tenantData[0] : tenantData;
+          const tenantId = tenantInfo.id;
+          
+          // Use tenant details from the people table if available
+          if (tenantId && tenantDetailsMap[tenantId]) {
+            tenant = tenantDetailsMap[tenantId];
+          } else {
+            // Fallback to the data in the lease contract
+            tenant = {
+              id: tenantId,
+              name: tenantInfo.name,
+              first_name: tenantInfo.first_name,
+              last_name: tenantInfo.last_name
+            };
+          }
+        } catch (e) {
+          console.error('Error parsing tenant data:', e);
+        }
+      }
+
+      // Create a formatted address from the available address fields
+      let formattedAddress = '';
+      if (lease.property) {
+        // Type assertion to handle property as a single object, not an array
+        const propertyData = lease.property as unknown as Property;
+        
+        const addressParts = [
+          propertyData.address_line_1,
+          propertyData.address_line_2,
+          [
+            propertyData.city,
+            propertyData.state,
+            propertyData.zip
+          ].filter(Boolean).join(', ')
+        ].filter(Boolean);
+        
+        formattedAddress = addressParts.join(', ');
+      }
+
+      // Type assertion for unit data
+      const unitData = lease.unit as unknown as Unit;
+
+      // Determine tenant name from available data
+      let tenantName = 'Unknown Tenant';
+      if (tenant) {
+        if (tenant.first_name && tenant.last_name) {
+          tenantName = `${tenant.first_name} ${tenant.last_name}`.trim();
+        } else if (tenant.name) {
+          tenantName = tenant.name;
+        }
+      }
+
+      return {
+        id: lease.id,
+        tenant_name: tenantName,
+        property_name: lease.property ? (lease.property as unknown as Property).name || 'Unknown Property' : 'Unknown Property',
+        unit_name: unitData?.unit_name || 'Unknown Unit',
+        property: {
+          name: lease.property ? (lease.property as unknown as Property).name || 'Unknown Property' : 'Unknown Property',
+          address: formattedAddress
+        },
+        unit: {
+          unit_number: unitData?.unit_name || 'Unknown Unit'
+        },
+        tenant: tenant,
+        start_date: lease.start_date,
+        end_date: lease.end_date,
+        rent_amount: lease.rent_amount || '0',
+        lease_term: lease.lease_term,
+        deposit_amount: lease.deposit_amount || '0'
+      };
+    });
+
+    console.log(`✅ Successfully fetched ${transformedLeases.length} lease contracts`);
+    return NextResponse.json(transformedLeases);
+  } catch (error) {
+    console.error('❌ Error in lease contracts route:', error);
+    return NextResponse.json(
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+} 

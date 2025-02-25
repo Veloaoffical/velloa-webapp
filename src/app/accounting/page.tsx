@@ -17,7 +17,10 @@ import {
 import { 
   DollarSign, Receipt, FileText, CircleDollarSign, ArrowUpRight,
   ArrowRightLeft, FileSpreadsheet, Printer, CreditCard, Clock, Calculator, BanknoteIcon, FileCheck,
-  ChevronDown, Wallet, ArrowLeftRight, Building2, User
+  ChevronDown, Wallet, ArrowLeftRight,
+  Banknote,
+  HandCoins,
+  ChartPie
 } from "lucide-react"
 import { motion, useInView, useMotionValue, useTransform, animate } from "framer-motion"
 import { useRef, useEffect, useState } from "react"
@@ -26,6 +29,8 @@ import { BankTransferDialog } from "./components/BankTransferDialog"
 import { PostChargeDialog } from "./components/PostChargeDialog"
 import { ExpenseDialog } from "./components/ExpenseDialog"
 import { CheckDialog } from "./components/CheckDialog"
+import { BankDepositDialog } from "./components/BankDepositDialog"
+import { ReceivePaymentDialog } from "./components/ReceivePaymentDialog"
 
 const profitLossData = [
   { month: "Jan", revenue: 4500, costs: 3000, netIncome: 1500 },
@@ -110,7 +115,8 @@ export default function AccountingPage() {
   const [showPostChargeDialog, setShowPostChargeDialog] = useState(false)
   const [showExpenseDialog, setShowExpenseDialog] = useState(false)
   const [showCheckDialog, setShowCheckDialog] = useState(false)
-
+  const [showBankDepositDialog, setShowBankDepositDialog] = useState(false)
+  const [showReceivePaymentDialog, setShowReceivePaymentDialog] = useState(false)
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -130,11 +136,11 @@ export default function AccountingPage() {
             <DropdownMenuLabel>Tenant Transactions</DropdownMenuLabel>
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={() => setShowPostChargeDialog(true)}>
-                <User className="w-4 h-4 me-2 opacity-60" />
+                <Banknote className="w-4 h-4 me-2 opacity-60" />
                 Post Charge
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <DollarSign className="w-4 h-4 me-2 opacity-60" />
+              <DropdownMenuItem onClick={() => setShowReceivePaymentDialog(true)}>
+                <HandCoins className="w-4 h-4 me-2 opacity-60" />
                 Receive Payment
               </DropdownMenuItem>
               <DropdownMenuItem>
@@ -176,11 +182,11 @@ export default function AccountingPage() {
             <DropdownMenuLabel>Owner Transactions</DropdownMenuLabel>
             <DropdownMenuGroup>
               <DropdownMenuItem>
-                <Building2 className="w-4 h-4 me-2 opacity-60" />
+                <Banknote className="w-4 h-4 me-2 opacity-60" />
                 Owner Contribution
               </DropdownMenuItem>
               <DropdownMenuItem>
-                <ArrowLeftRight className="w-4 h-4 me-2 opacity-60" />
+                <ChartPie className="w-4 h-4 me-2 opacity-60" />
                 Owner Distribution
               </DropdownMenuItem>
             </DropdownMenuGroup>
@@ -196,7 +202,7 @@ export default function AccountingPage() {
                 <ArrowLeftRight className="w-4 h-4 me-2 opacity-60" />
                 Bank Transfer
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowBankDepositDialog(true)}>
                 <Wallet className="w-4 h-4 me-2 opacity-60" />
                 Bank Deposit
               </DropdownMenuItem>
@@ -599,6 +605,14 @@ export default function AccountingPage() {
       <CheckDialog
         open={showCheckDialog}
         onOpenChange={setShowCheckDialog}
+      />
+      <BankDepositDialog
+        open={showBankDepositDialog}
+        onOpenChange={setShowBankDepositDialog}
+      />
+      <ReceivePaymentDialog
+        open={showReceivePaymentDialog}
+        onOpenChange={setShowReceivePaymentDialog}
       />
     </div>
   )

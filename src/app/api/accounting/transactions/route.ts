@@ -10,6 +10,9 @@ export async function GET(request: Request) {
     const property_id = searchParams.get("property_id")
     const start_date = searchParams.get("start_date")
     const end_date = searchParams.get("end_date")
+    const lease_id = searchParams.get("lease_id")
+    const transaction_type = searchParams.get("transaction_type")
+    const status = searchParams.get("status")
 
     // Get the authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser()
@@ -58,9 +61,8 @@ export async function GET(request: Request) {
       query = query.contains('data', { unit: unit_id })
     }
 
-    const lease_id = searchParams.get("lease_id")
     if (lease_id) {
-      query = query.contains('data', { lease: lease_id })
+      query = query.contains('data', { lease_id: lease_id })
     }
 
     const portfolio_id = searchParams.get("portfolio_id")
@@ -109,6 +111,14 @@ export async function GET(request: Request) {
 
     if (end_date) {
       query = query.lte('start_date', end_date)
+    }
+
+    if (transaction_type) {
+      query = query.eq('transaction_type', transaction_type)
+    }
+
+    if (status) {
+      query = query.contains('data', { status: status })
     }
 
     // Order by date

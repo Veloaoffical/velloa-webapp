@@ -45,6 +45,7 @@ interface ExpenseLine {
   unit: string
   description: string
   credit_amount: string
+  reference: string
 }
 
 interface Property {
@@ -166,7 +167,7 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
   const [paymentMethod, setPaymentMethod] = useState<string>("")
   const [payFromAccount, setPayFromAccount] = useState<string>("")
   const [lines, setLines] = useState<ExpenseLine[]>([
-    { category: "", property: "", unit: "", description: "", credit_amount: "" }
+    { category: "", property: "", unit: "", description: "", credit_amount: "", reference: generateReference() }
   ])
   const emptyEditorState = JSON.stringify({
     root: {
@@ -207,7 +208,7 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
     setFrequency("")
     setPaymentMethod("")
     setPayFromAccount("")
-    setLines([{ category: "", property: "", unit: "", description: "", credit_amount: "" }])
+    setLines([{ category: "", property: "", unit: "", description: "", credit_amount: "", reference: generateReference() }])
     setMemo(emptyEditorState)
     setShowMemo(false)
     setReference(generateReference())
@@ -330,7 +331,7 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
   }, [lines, categories, payFromAccount]);
 
   const handleAddLine = () => {
-    setLines([...lines, { category: "", property: "", unit: "", description: "", credit_amount: "" }])
+    setLines([...lines, { category: "", property: "", unit: "", description: "", credit_amount: "", reference: generateReference() }])
   }
 
   const handleDeleteLine = (index: number) => {
@@ -488,7 +489,8 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
           property: line.property,
           unit: line.unit || "",
           description: line.description || "",
-          credit_amount: parseFloat(line.credit_amount || '0')
+          credit_amount: parseFloat(line.credit_amount || '0'),
+          reference: line.reference
         })),
         memo: memo || undefined,
         reference

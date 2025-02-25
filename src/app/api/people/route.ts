@@ -51,7 +51,8 @@ export async function GET() {
         email,
         phone,
         role,
-        status
+        status,
+        company
       `)
       .eq('company_id', companyMember.company_id);
 
@@ -76,8 +77,9 @@ export async function GET() {
       email: person.email,
       phone: person.phone,
       role: person.role,
-      status: person.status
-    }));
+      status: person.status,
+      company: person.company
+        }));
 
     console.log('Transformed people data:', {
       count: transformedPeople.length,

@@ -6,14 +6,22 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { FileText, X } from "lucide-react"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FileText, X, Banknote } from "lucide-react"
 import { format } from "date-fns"
 import CalendarInput from "@/components/calendarwithmonthsinput"
 import { toast } from "sonner"
 import { customAlphabet } from "nanoid"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 interface ReceivePaymentDialogProps {
   open: boolean
@@ -25,13 +33,38 @@ interface Lease {
   tenant_name: string
   unit_name: string
   property_name: string
-  tenant_id: string
+  tenant: {
+    id: string
+    first_name?: string
+    last_name?: string
+    email?: string
+    phone?: string
+    name?: string
+  } | null
+  property: {
+    name: string
+    address: string
+  }
+  unit: {
+    unit_number: string
+  }
+  start_date: string
+  end_date: string
+  rent_amount: string
+  lease_term: string
+  deposit_amount: string
 }
 
 interface BankAccount {
   id: string
   account_name: string
   account_type: string
+  account_subtype?: string
+  sub_accounts?: {
+    id: string
+    account_name: string
+    account_subtype?: string
+  }[]
 }
 
 interface Charge {
@@ -52,19 +85,6 @@ interface Tenant {
   role: string
 }
 
-interface Transaction {
-  id: string
-  transaction_type: string
-  start_date: string
-  data: {
-    description?: string
-    total_amount?: number
-    status?: string
-    balance?: number
-    [key: string]: unknown
-  }
-}
-
 export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialogProps) {
   const generateReference = () => {
     const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 8)
@@ -82,13 +102,13 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
   const [depositAccount, setDepositAccount] = useState<string>("")
   const [amountReceived, setAmountReceived] = useState<string>("")
   const [paymentMethod, setPaymentMethod] = useState<string>("")
-  const [checkNumber, setCheckNumber] = useState<string>("")
   const [memo, setMemo] = useState<string>("")
   const [showMemo, setShowMemo] = useState(false)
   const [leases, setLeases] = useState<Lease[]>([])
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [charges, setCharges] = useState<Charge[]>([])
   const [reference, setReference] = useState<string>(generateReference())
+  const [paymentReference, setPaymentReference] = useState<string>("")
   const [isLoading, setIsLoading] = useState(false)
   const [autoApplyPayments, setAutoApplyPayments] = useState(true)
   const [autoDepositFunds, setAutoDepositFunds] = useState(true)
@@ -96,25 +116,29 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [shareWithTenants, setShareWithTenants] = useState(false)
   const [selectedCharges, setSelectedCharges] = useState<Record<string, number>>({})
-  const [tenantDetails, setTenantDetails] = useState<Tenant | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [selectedTenant, setSelectedTenant] = useState<string>("")
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch leases
-        const leasesResponse = await fetch("/api/leases")
+        // Fetch leases from lease-contracts API
+        const leasesResponse = await fetch("/api/accounting/lease-contracts")
         if (leasesResponse.ok) {
           const leasesData = await leasesResponse.json()
           setLeases(leasesData)
         }
 
         // Fetch bank accounts
-        const accountsResponse = await fetch("/api/accounting/bank-accounts")
+        const accountsResponse = await fetch("/api/accounting/categories")
         if (accountsResponse.ok) {
           const accountsData = await accountsResponse.json()
-          setBankAccounts(accountsData)
+          // Filter to only include bank accounts
+          const filteredBankAccounts = accountsData.filter(
+            (account: BankAccount) => account.account_type === 'Asset' && 
+            (account.account_subtype === 'Bank' || account.account_subtype === 'Cash')
+          )
+          setBankAccounts(filteredBankAccounts)
         }
 
         // Fetch all tenants
@@ -130,78 +154,159 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
     }
 
     if (open) {
+      // Reset state when dialog opens
+      setSelectedLease("")
+      setPaymentDate(new Date())
+      setDepositAccount("")
+      setAmountReceived("")
+      setPaymentMethod("")
+      setMemo("")
+      setShowMemo(false)
+      setCharges([])
+      setReference(generateReference())
+      setPaymentReference("")
+      setAutoApplyPayments(true)
+      setAutoDepositFunds(true)
+      setEmailReceipt(true)
+      setUploadedFiles([])
+      setShareWithTenants(false)
+      setSelectedCharges({})
+      setSelectedTenant("")
+      
       fetchData()
     }
   }, [open])
 
   useEffect(() => {
     const fetchLeaseDetails = async () => {
-      if (!selectedLease) return
+      if (!selectedLease) {
+        // Clear charges when no lease is selected
+        setCharges([])
+        return
+      }
 
       try {
         // Fetch lease data
         const leaseData = leases.find(lease => lease.id === selectedLease)
         if (leaseData) {
-          // Set tenant ID from lease data
-          if (leaseData.tenant_id) {
-            setSelectedTenant(leaseData.tenant_id)
+          // Set tenant details from the lease data
+          if (leaseData.tenant && leaseData.tenant.id) {
+            setSelectedTenant(leaseData.tenant.id)
             
-            // Find tenant in the tenants array
-            const tenant = tenants.find(t => t.id === leaseData.tenant_id)
-            if (tenant) {
-              setTenantDetails(tenant)
-            } else {
-              // If tenant not found in the array, fetch from API
-              const tenantResponse = await fetch(`/api/people/${leaseData.tenant_id}`)
-              if (tenantResponse.ok) {
-                const tenantData = await tenantResponse.json()
-                setTenantDetails(tenantData)
+            // Set tenant details directly from the lease data
+            if (leaseData.tenant) {
+              const tenant: Tenant = {
+                id: leaseData.tenant.id,
+                first_name: leaseData.tenant.first_name || leaseData.tenant.name?.split(' ')[0] || '',
+                last_name: leaseData.tenant.last_name || leaseData.tenant.name?.split(' ').slice(1).join(' ') || '',
+                email: leaseData.tenant.email || '',
+                phone: leaseData.tenant.phone || '',
+                role: 'tenant'
+              }
+              
+              // Add this tenant to the tenants array if not already present
+              if (!tenants.some(t => t.id === tenant.id)) {
+                setTenants(prev => [...prev, tenant])
               }
             }
           }
         }
 
         // Fetch default bank account for the property
-        const propertyResponse = await fetch(`/api/property/${leaseData?.property_name}`)
-        if (propertyResponse.ok) {
-          const propertyData = await propertyResponse.json()
-          if (propertyData.default_operating_account) {
-            setDepositAccount(propertyData.default_operating_account)
+        if (leaseData?.property_name) {
+          const propertyResponse = await fetch(`/api/property/${leaseData.property_name}`)
+          if (propertyResponse.ok) {
+            const propertyData = await propertyResponse.json()
+            if (propertyData.default_operating_account) {
+              setDepositAccount(propertyData.default_operating_account)
+            }
           }
         }
 
-        // Fetch unpaid charges for the lease from transaction table
-        const chargesResponse = await fetch(`/api/accounting/transactions?lease_id=${selectedLease}&transaction_type=charge&status=unpaid`)
-        if (chargesResponse.ok) {
-          const transactionsData = await chargesResponse.json()
+        // Fetch unpaid charges for the lease using the dedicated charges API
+        console.log(`Fetching charges for lease: ${selectedLease}`)
+        const chargesUrl = `/api/accounting/charges?lease_id=${selectedLease}&status=unpaid`
+        console.log(`API URL: ${chargesUrl}`)
+        
+        try {
+          const chargesResponse = await fetch(chargesUrl)
           
-          // Transform transaction data to match the Charge interface
-          const chargesData = transactionsData.map((transaction: Transaction) => ({
-            id: transaction.id,
-            description: transaction.data?.description || 'Charge',
-            amount: transaction.data?.total_amount || 0,
-            due_date: transaction.start_date || new Date().toISOString(),
-            status: transaction.data?.status || 'unpaid',
-            balance: transaction.data?.balance || transaction.data?.total_amount || 0
-          }))
-          
-          setCharges(chargesData)
+          if (chargesResponse.ok) {
+            const chargesData = await chargesResponse.json()
+            console.log(`Received ${chargesData.length} charges:`, chargesData)
+            
+            if (Array.isArray(chargesData) && chargesData.length > 0) {
+              // Log the first charge to see its structure
+              console.log('First charge structure:', JSON.stringify(chargesData[0], null, 2))
+              
+              // Transform charges data to match the Charge interface
+              const processedCharges = chargesData.map((charge) => {
+                // Check if the charge has the expected data structure
+                const hasLines = charge.data && Array.isArray(charge.data.lines) && charge.data.lines.length > 0
+                const totalAmount = charge.data?.total_amount || 0
+                
+                // If the charge has lines, use the total amount from data
+                // Otherwise, try to find amount in other possible locations
+                return {
+                  id: charge.id,
+                  description: hasLines 
+                    ? charge.data.lines.map((line: { description: string }) => line.description).join(', ')
+                    : (charge.data?.description || 'Charge'),
+                  amount: totalAmount,
+                  due_date: charge.due_date || new Date().toISOString(),
+                  status: charge.status || 'unpaid',
+                  balance: totalAmount // Assuming balance is the same as amount for unpaid charges
+                }
+              })
+              
+              console.log('Processed charges:', processedCharges)
+              setCharges(processedCharges)
+              
+              // Initialize selected charges for manual allocation
+              if (!autoApplyPayments) {
+                const initialSelectedCharges: Record<string, number> = {};
+                processedCharges.forEach(charge => {
+                  initialSelectedCharges[charge.id] = 0;
+                });
+                setSelectedCharges(initialSelectedCharges);
+              }
+            } else {
+              console.log('No charges found or empty array returned')
+              setCharges([])
+              setSelectedCharges({})
+            }
+          } else {
+            console.error(`Failed to fetch charges: ${chargesResponse.status} ${chargesResponse.statusText}`)
+            
+            let errorText = 'Unknown error';
+            try {
+              errorText = await chargesResponse.text();
+            } catch {
+              // Ignore error parsing failures
+            }
+            console.error(`Error response: ${errorText}`);
+            
+            setCharges([])
+            setSelectedCharges({})
+          }
+        } catch (chargeError) {
+          console.error("Error fetching charges:", chargeError)
+          setCharges([])
+          setSelectedCharges({})
         }
       } catch (error) {
         console.error("Error fetching lease details:", error)
+        setCharges([])
+        setSelectedCharges({})
       }
     }
 
     fetchLeaseDetails()
-  }, [selectedLease, leases, tenants])
+  }, [selectedLease, leases, tenants, autoApplyPayments])
 
   // Handle tenant selection change
   const handleTenantChange = (tenantId: string) => {
     setSelectedTenant(tenantId)
-    const tenant = tenants.find(t => t.id === tenantId)
-    if (tenant) {
-      setTenantDetails(tenant)
-    }
   }
 
   const handleSave = async () => {
@@ -211,33 +316,46 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
       // Validate required fields
       if (!selectedLease) {
         toast.error("Please select a lease")
+        setIsLoading(false)
         return
       }
 
       if (!paymentDate) {
         toast.error("Please select a payment date")
+        setIsLoading(false)
         return
       }
 
       if (!amountReceived || parseFloat(amountReceived) <= 0) {
         toast.error("Please enter a valid amount")
+        setIsLoading(false)
         return
       }
 
       if (!depositAccount) {
         toast.error("Please select a deposit account")
+        setIsLoading(false)
         return
       }
 
       if (!paymentMethod) {
         toast.error("Please select a payment method")
+        setIsLoading(false)
+        return
+      }
+
+      // Get the selected lease data
+      const leaseData = leases.find(lease => lease.id === selectedLease)
+      if (!leaseData) {
+        toast.error("Selected lease not found")
+        setIsLoading(false)
         return
       }
 
       // Prepare payment allocation data
-      let allocations: Record<string, number> = {}
+      const allocations: Record<string, number> = {}
       
-      if (autoApplyPayments) {
+      if (autoApplyPayments && charges.length > 0) {
         // Auto-allocate to oldest charges first
         let remainingAmount = parseFloat(amountReceived)
         const sortedCharges = [...charges].sort((a, b) => 
@@ -248,12 +366,29 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
           if (remainingAmount <= 0) break
           
           const paymentAmount = Math.min(remainingAmount, charge.balance)
-          allocations[charge.id] = paymentAmount
-          remainingAmount -= paymentAmount
+          if (paymentAmount > 0) {
+            allocations[charge.id] = paymentAmount
+            remainingAmount -= paymentAmount
+          }
         }
-      } else {
-        // Use manually selected allocations
-        allocations = selectedCharges
+      } else if (!autoApplyPayments && Object.keys(selectedCharges).length > 0) {
+        // Use manually selected allocations, but only include non-zero amounts
+        Object.entries(selectedCharges).forEach(([chargeId, amount]) => {
+          if (amount > 0) {
+            allocations[chargeId] = amount
+          }
+        })
+      }
+
+      // Only proceed if we have allocations or the user has confirmed they want to proceed without allocations
+      if (Object.keys(allocations).length === 0) {
+        const confirmProceed = window.confirm(
+          "You haven't allocated this payment to any charges. Do you want to proceed anyway?"
+        )
+        if (!confirmProceed) {
+          setIsLoading(false)
+          return
+        }
       }
 
       // Generate a new reference before saving
@@ -270,7 +405,8 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
           payment_date: format(paymentDate, "yyyy-MM-dd"),
           amount: parseFloat(amountReceived),
           payment_method: paymentMethod,
-          check_number: paymentMethod === "check" ? checkNumber : undefined,
+          check_number: paymentMethod === "check" ? paymentReference : undefined,
+          payment_reference: ["check", "eft", "wire", "money_order"].includes(paymentMethod) ? paymentReference : undefined,
           deposit_account_id: depositAccount,
           memo: memo || undefined,
           reference: newReference,
@@ -318,10 +454,16 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
 
   const handleChargeAllocationChange = (chargeId: string, amount: string) => {
     const numAmount = parseFloat(amount) || 0
-    setSelectedCharges({
-      ...selectedCharges,
-      [chargeId]: numAmount
-    })
+    
+    // Ensure amount is not negative and not greater than the charge balance
+    const charge = charges.find(c => c.id === chargeId)
+    const maxAmount = charge ? charge.balance : 0
+    const validAmount = Math.min(Math.max(0, numAmount), maxAmount)
+    
+    setSelectedCharges(prev => ({
+      ...prev,
+      [chargeId]: validAmount
+    }))
   }
 
   const getTotalAllocated = () => {
@@ -410,7 +552,11 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
               <Label className="text-sm text-muted-foreground mb-2 block">
                 Received From
               </Label>
-              <Select value={selectedTenant} onValueChange={handleTenantChange}>
+              <Select 
+                value={selectedTenant} 
+                onValueChange={handleTenantChange}
+                disabled={!selectedLease}
+              >
                 <SelectTrigger className="w-full h-[42px] bg-background">
                   <SelectValue placeholder="Select tenant" />
                 </SelectTrigger>
@@ -422,28 +568,67 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
                   ))}
                 </SelectContent>
               </Select>
-              {tenantDetails && (
-                <div className="text-xs text-muted-foreground mt-1">
-                  {tenantDetails.email && `Email: ${tenantDetails.email}`}
-                  {tenantDetails.phone && tenantDetails.email && ' • '}
-                  {tenantDetails.phone && `Phone: ${tenantDetails.phone}`}
-                </div>
-              )}
             </div>
 
             <div className="w-[250px]">
               <Label className="text-sm text-muted-foreground mb-2 block">
                 Deposit Account <span className="text-destructive">*</span>
               </Label>
-              <Select value={depositAccount} onValueChange={setDepositAccount}>
+              <Select 
+                value={depositAccount} 
+                onValueChange={setDepositAccount}
+                disabled={!selectedLease}
+              >
                 <SelectTrigger className="w-full h-[42px] bg-background">
                   <SelectValue placeholder="Select deposit account" />
                 </SelectTrigger>
-                <SelectContent>
-                  {bankAccounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.account_name}
-                    </SelectItem>
+                <SelectContent className="max-h-[300px]">
+                  {Object.entries(
+                    bankAccounts.reduce((acc, account) => {
+                      const type = account.account_subtype || 'Other';
+                      if (!acc[type]) {
+                        acc[type] = [];
+                      }
+                      acc[type].push(account);
+                      return acc;
+                    }, {} as Record<string, BankAccount[]>)
+                  ).map(([type, accounts]) => (
+                    <SelectGroup key={type}>
+                      <SelectLabel>{type}</SelectLabel>
+                      {accounts.map((account) => (
+                        <React.Fragment key={account.id}>
+                          <SelectItem value={account.id}>
+                            <div className="flex flex-col">
+                              <span>{account.account_name}</span>
+                              {account.account_subtype && (
+                                <span className="text-xs text-muted-foreground">{account.account_subtype}</span>
+                              )}
+                            </div>
+                          </SelectItem>
+                          {account.sub_accounts && account.sub_accounts.length > 0 && (
+                            <SelectGroup>
+                              <SelectLabel className="pl-4 text-xs">
+                                {account.account_name} Sub-accounts
+                              </SelectLabel>
+                              {account.sub_accounts.map((subAccount) => (
+                                <SelectItem 
+                                  key={subAccount.id} 
+                                  value={subAccount.id}
+                                  className="pl-6"
+                                >
+                                  <div className="flex flex-col">
+                                    <span>{subAccount.account_name}</span>
+                                    {subAccount.account_subtype && (
+                                      <span className="text-xs text-muted-foreground">{subAccount.account_subtype}</span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </SelectGroup>
                   ))}
                 </SelectContent>
               </Select>
@@ -488,12 +673,26 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
             {paymentMethod === "check" && (
               <div className="w-[200px]">
                 <Label className="text-sm text-muted-foreground mb-2 block">
-                  Check Number
+                  Reference Number
                 </Label>
                 <Input
-                  placeholder="Check #"
-                  value={checkNumber}
-                  onChange={(e) => setCheckNumber(e.target.value)}
+                  placeholder="Reference #"
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
+                  className="w-full h-[42px] bg-background"
+                />
+              </div>
+            )}
+
+            {["eft", "wire", "money_order"].includes(paymentMethod) && (
+              <div className="w-[200px]">
+                <Label className="text-sm text-muted-foreground mb-2 block">
+                  Reference Number
+                </Label>
+                <Input
+                  placeholder="Reference #"
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
                   className="w-full h-[42px] bg-background"
                 />
               </div>
@@ -547,36 +746,67 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
             </div>
           </div>
 
-          {/* Manual Payment Allocation (shown only when autoApplyPayments is false) */}
-          {!autoApplyPayments && charges.length > 0 && (
-            <div className="border rounded-md p-4 space-y-4">
-              <h3 className="font-medium">Payment Allocation</h3>
-              <div className="space-y-2">
-                {charges.map(charge => (
-                  <div key={charge.id} className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{charge.description || 'Charge'}</div>
-                      <div className="text-sm text-muted-foreground">
-                        Due: {new Date(charge.due_date).toLocaleDateString()} - Balance: ${formatCurrency(charge.balance)}
-                      </div>
-                    </div>
-                    <Input
-                      type="number"
-                      placeholder="0.00"
-                      className="w-[120px]"
-                      value={selectedCharges[charge.id] || ''}
-                      onChange={(e) => handleChargeAllocationChange(charge.id, e.target.value)}
-                    />
-                  </div>
-                ))}
-                <div className="flex justify-between font-medium pt-2 border-t">
-                  <span>Total Allocated:</span>
-                  <span>${formatCurrency(getTotalAllocated())}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Unallocated Amount:</span>
-                  <span>${formatCurrency(parseFloat(amountReceived) - getTotalAllocated())}</span>
-                </div>
+          {/* Outstanding Charges (shown only when a lease is selected AND autoApplyPayments is OFF) */}
+          {selectedLease && charges.length > 0 && !autoApplyPayments && (
+            <div className="border rounded-md p-4 mt-4">
+              <h3 className="font-medium mb-3">Outstanding Transactions</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Charges <span className="text-destructive">*</span></TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Balance</TableHead>
+                    <TableHead>Payment Amount <span className="text-destructive">*</span></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {charges.map(charge => (
+                    <TableRow key={charge.id}>
+                      <TableCell className="py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-shrink-0 h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center">
+                            <Banknote className="h-4 w-4 text-primary" />
+                          </div>
+                          <div>
+                            <div className="font-medium">{charge.description || 'Charge'}</div>
+                            <div className="text-xs text-muted-foreground">Charge #{charge.id.substring(0, 6).toUpperCase()}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-2">
+                        {new Date(charge.due_date).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="py-2 font-medium">
+                        ${formatCurrency(charge.balance)}
+                      </TableCell>
+                      <TableCell className="py-2">
+                        <Input
+                          type="number"
+                          placeholder="0.00"
+                          className="bg-background h-[36px] w-[120px]"
+                          value={selectedCharges[charge.id] || ''}
+                          onChange={(e) => handleChargeAllocationChange(charge.id, e.target.value)}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {charges.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="h-24 text-center">
+                        No outstanding charges found for this lease
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {selectedLease && charges.length === 0 && !autoApplyPayments && (
+            <div className="border rounded-md p-4 mt-4">
+              <h3 className="font-medium mb-3">Outstanding Transactions</h3>
+              <div className="text-center py-4 text-muted-foreground">
+                No outstanding charges found for this lease
               </div>
             </div>
           )}
@@ -665,29 +895,30 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
 
         <DialogFooter className="mt-2 border-t pt-4 px-6">
           <div className="flex items-center justify-between w-full">
-            <div className="flex gap-6">
-              <div>
-                <div className="text-sm text-muted-foreground">Total Amount</div>
-                <div className="font-medium text-xl">${formatCurrency(amountReceived || "0")}</div>
-              </div>
-              {!autoApplyPayments && (
-                <div>
-                  <div className="text-sm text-muted-foreground">Allocated</div>
-                  <div className="font-medium text-xl">${formatCurrency(getTotalAllocated())}</div>
-                </div>
-              )}
-              {!autoApplyPayments && parseFloat(amountReceived || "0") > getTotalAllocated() && (
-                <div>
-                  <div className="text-sm text-muted-foreground">Unallocated</div>
-                  <div className="font-medium text-xl text-amber-500">
-                    ${formatCurrency(parseFloat(amountReceived || "0") - getTotalAllocated())}
-                  </div>
-                </div>
-              )}
+            <div>
+              <div className="text-sm text-muted-foreground">Reference</div>
+              <div className="font-medium">{reference}</div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-sm text-muted-foreground">
-                Ref: <span className="font-medium">{reference}</span>
+              <div className="flex gap-6 mr-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">Total Amount</div>
+                  <div className="font-medium text-xl">${formatCurrency(amountReceived || "0")}</div>
+                </div>
+                {!autoApplyPayments && (
+                  <div>
+                    <div className="text-sm text-muted-foreground">Allocated</div>
+                    <div className="font-medium text-xl">${formatCurrency(getTotalAllocated())}</div>
+                  </div>
+                )}
+                {!autoApplyPayments && parseFloat(amountReceived || "0") > getTotalAllocated() && (
+                  <div>
+                    <div className="text-sm text-muted-foreground">Unallocated</div>
+                    <div className="font-medium text-xl text-amber-500">
+                      ${formatCurrency(parseFloat(amountReceived || "0") - getTotalAllocated())}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>

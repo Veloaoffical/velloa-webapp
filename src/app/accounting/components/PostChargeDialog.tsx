@@ -510,6 +510,7 @@ export function PostChargeDialog({ open, onOpenChange }: PostChargeDialogProps) 
           resetForm()
         }
         onOpenChange(newOpen)
+        resetForm()
       }}
     >
       <DialogContent className={`${step === "form" ? "max-w-7xl" : "sm:max-w-md"} bg-card max-h-[95vh] flex flex-col`}>
@@ -677,13 +678,15 @@ export function PostChargeDialog({ open, onOpenChange }: PostChargeDialogProps) 
                           </SelectTrigger>
                           <SelectContent className="max-h-[300px]">
                             {Object.entries(
-                              categories.reduce((acc, category) => {
-                                if (!acc[category.account_type]) {
-                                  acc[category.account_type] = [];
-                                }
-                                acc[category.account_type].push(category);
-                                return acc;
-                              }, {} as Record<string, ChargeCategory[]>)
+                              categories
+                                .filter(category => category.account_type === "Revenue")
+                                .reduce((acc, category) => {
+                                  if (!acc[category.account_type]) {
+                                    acc[category.account_type] = [];
+                                  }
+                                  acc[category.account_type].push(category);
+                                  return acc;
+                                }, {} as Record<string, ChargeCategory[]>)
                             ).map(([type, cats]) => (
                               <SelectGroup key={type}>
                                 <SelectLabel>{type}</SelectLabel>
@@ -951,6 +954,7 @@ export function PostChargeDialog({ open, onOpenChange }: PostChargeDialogProps) 
             <Button 
               variant="outline" 
               onClick={() => {
+                resetForm()
                 onOpenChange(false)
               }}
             >

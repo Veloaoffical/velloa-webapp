@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { 
   DollarSign, Receipt, FileText, CircleDollarSign, ArrowUpRight,
-  ArrowRightLeft, FileSpreadsheet, Printer, CreditCard, Clock, Calculator, BanknoteIcon, FileCheck,
+  ArrowRightLeft, FileSpreadsheet, Printer, CreditCard, Clock, Calculator, BanknoteIcon,
   ChevronDown, Wallet, ArrowLeftRight,
   Banknote,
   HandCoins,
@@ -31,6 +31,7 @@ import { ExpenseDialog } from "./components/ExpenseDialog"
 import { CheckDialog } from "./components/CheckDialog"
 import { BankDepositDialog } from "./components/BankDepositDialog"
 import { ReceivePaymentDialog } from "./components/ReceivePaymentDialog"
+import { VendorBillDialog } from "./components/VendorBillDialog"
 
 const profitLossData = [
   { month: "Jan", revenue: 4500, costs: 3000, netIncome: 1500 },
@@ -117,6 +118,7 @@ export default function AccountingPage() {
   const [showCheckDialog, setShowCheckDialog] = useState(false)
   const [showBankDepositDialog, setShowBankDepositDialog] = useState(false)
   const [showReceivePaymentDialog, setShowReceivePaymentDialog] = useState(false)
+  const [showBillsDialog, setShowBillsDialog] = useState(false)
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -160,7 +162,7 @@ export default function AccountingPage() {
             <DropdownMenuSeparator />
             <DropdownMenuLabel>Vendor Transactions</DropdownMenuLabel>
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowBillsDialog(true)}>
                 <FileText className="w-4 h-4 me-2 opacity-60" />
                 Create Bill
               </DropdownMenuItem>
@@ -412,6 +414,7 @@ export default function AccountingPage() {
 
       {/* Quick Actions Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 1. Chart of Accounts */}
         <Link href="/accounting/chart-of-accounts">
           <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
             <CardContent className="p-6">
@@ -428,6 +431,7 @@ export default function AccountingPage() {
           </Card>
         </Link>
 
+        {/* 2. Banking */}
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">
             <div className="flex items-start space-x-4">
@@ -435,41 +439,14 @@ export default function AccountingPage() {
                 <ArrowRightLeft className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h3 className="font-medium leading-none mb-1">Incoming Payments</h3>
-                <p className="text-sm text-muted-foreground">Manage incoming payments</p>
+                <h3 className="font-medium leading-none mb-1">Banking</h3>
+                <p className="text-sm text-muted-foreground">Manage bank accounts</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <BanknoteIcon className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Outgoing Payments</h3>
-                <p className="text-sm text-muted-foreground">Manage outgoing payments</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <Receipt className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Transactions</h3>
-                <p className="text-sm text-muted-foreground">View and manage transactions</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
+        {/* 3. Reconciliation */}
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">
             <div className="flex items-start space-x-4">
@@ -483,22 +460,8 @@ export default function AccountingPage() {
             </div>
           </CardContent>
         </Card>
-        <Link href="/reports">
-          <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-            <CardContent className="p-6">
-              <div className="flex items-start space-x-4">
-                <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                  <FileCheck className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-medium leading-none mb-1">Reports</h3>
-                  <p className="text-sm text-muted-foreground">View and generate reports</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
 
+        {/* 4. Budgeting */}
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">
             <div className="flex items-start space-x-4">
@@ -513,20 +476,7 @@ export default function AccountingPage() {
           </CardContent>
         </Card>
 
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <CircleDollarSign className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Recurring Transactions</h3>
-                <p className="text-sm text-muted-foreground">Manage recurring payments</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
+        {/* 5. Print Checks */}
         <Link href="/accounting/print-checks">
           <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
             <CardContent className="p-6">
@@ -543,6 +493,7 @@ export default function AccountingPage() {
           </Card>
         </Link>
 
+        {/* 6. Bills & Expenses */}
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">
             <div className="flex items-start space-x-4">
@@ -557,6 +508,7 @@ export default function AccountingPage() {
           </CardContent>
         </Card>
 
+        {/* 7. Open Bills */}
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">
             <div className="flex items-start space-x-4">
@@ -571,6 +523,67 @@ export default function AccountingPage() {
           </CardContent>
         </Card>
 
+        {/* 8. Recurring Transactions */}
+        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
+          <CardContent className="p-6">
+            <div className="flex items-start space-x-4">
+              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                <CircleDollarSign className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-medium leading-none mb-1">Recurring Transactions</h3>
+                <p className="text-sm text-muted-foreground">Manage recurring payments</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 9. Incoming Payments */}
+        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
+          <CardContent className="p-6">
+            <div className="flex items-start space-x-4">
+              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                <ArrowRightLeft className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-medium leading-none mb-1">Incoming Payments</h3>
+                <p className="text-sm text-muted-foreground">Manage incoming payments</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 10. Outgoing Payments */}
+        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
+          <CardContent className="p-6">
+            <div className="flex items-start space-x-4">
+              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                <BanknoteIcon className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-medium leading-none mb-1">Outgoing Payments</h3>
+                <p className="text-sm text-muted-foreground">Manage outgoing payments</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 11. Unpaid Rent */}
+        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
+          <CardContent className="p-6">
+            <div className="flex items-start space-x-4">
+              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                <Receipt className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-medium leading-none mb-1">Unpaid Rent</h3>
+                <p className="text-sm text-muted-foreground">View and manage unpaid rent</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 12. Charge & Payments */}
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">
             <div className="flex items-start space-x-4">
@@ -578,7 +591,7 @@ export default function AccountingPage() {
                 <CreditCard className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h3 className="font-medium leading-none mb-1">Charge Payments</h3>
+                <h3 className="font-medium leading-none mb-1">Charge & Payments</h3>
                 <p className="text-sm text-muted-foreground">Manage charge payments</p>
               </div>
             </div>
@@ -613,6 +626,10 @@ export default function AccountingPage() {
       <ReceivePaymentDialog
         open={showReceivePaymentDialog}
         onOpenChange={setShowReceivePaymentDialog}
+      />
+      <VendorBillDialog
+        open={showBillsDialog}
+        onOpenChange={setShowBillsDialog}
       />
     </div>
   )

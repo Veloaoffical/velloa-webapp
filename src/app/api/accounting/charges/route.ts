@@ -173,6 +173,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (companyError || !companyMember) {
+      console.error('Failed to get company data:', companyError);
       return NextResponse.json(
         { error: 'Failed to get company data' }, 
         { status: 500 }
@@ -190,74 +191,87 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const category_id = searchParams.get('category_id');
 
-    // Build the query
-    let query = supabase
-      .from('charges')
-      .select(`
-        *,
-        leases (
-          tenant_name,
-          unit_name,
-          property_name
-        )
-      `)
-      .eq('company_id', company_id)
-      .order('due_date', { ascending: false });
+    console.log('Fetching charges with params:', { 
+      lease_id, property_id, unit_id, tenant_id, status, category_id, company_id 
+    });
 
-    // Apply filters if provided
-    if (lease_id) query = query.eq('lease_id', lease_id);
-    if (property_id) query = query.eq('property_id', property_id);
-    if (unit_id) query = query.eq('unit_id', unit_id);
-    if (tenant_id) query = query.eq('tenant_id', tenant_id);
-    if (status) query = query.eq('status', status);
-    if (category_id) query = query.eq('data->category_id', category_id);
+    try {
+      // Build the query - simplified to avoid join issues
+      let query = supabase
+        .from('charges')
+        .select('*')  // Just select all columns from charges table without joins
+        .eq('company_id', company_id);
 
-    // Execute the query
-    const { data: charges, error: chargesError } = await query;
+      // Apply filters if provided
+      if (lease_id) query = query.eq('lease_id', lease_id);
+      if (property_id) query = query.eq('property_id', property_id);
+      if (unit_id) query = query.eq('unit_id', unit_id);
+      if (tenant_id) query = query.eq('tenant_id', tenant_id);
+      if (status) query = query.eq('status', status);
+      if (category_id) query = query.eq('data->category_id', category_id);
 
-    if (chargesError) {
-      console.error('Error fetching charges:', chargesError);
+      // Order by due date if available
+      query = query.order('due_date', { ascending: false });
+
+      // Execute the query
+      const { data: charges, error: chargesError } = await query;
+
+      if (chargesError) {
+        console.error('Error fetching charges:', chargesError);
+        return NextResponse.json(
+          { error: 'Failed to fetch charges: ' + chargesError.message }, 
+          { status: 500 }
+        );
+      }
+
+      console.log('Charges fetched successfully:', charges ? charges.length : 0);
+      if (charges && charges.length > 0) {
+        console.log('Sample charge data:', charges[0]);
+      }
+      
+      // If we need to fetch category information separately
+      if (charges && charges.length > 0) {
+        // Get unique category IDs from the charges
+        const categoryIds = [...new Set(charges
+          .filter(charge => charge.data && charge.data.category_id)
+          .map(charge => charge.data.category_id))];
+        
+        if (categoryIds.length > 0) {
+          const { data: categories, error: categoriesError } = await supabase
+            .from('categories')
+            .select('id, account_name, account_type, account_subtype')
+            .in('id', categoryIds);
+          
+          if (!categoriesError && categories) {
+            // Create a map for quick lookup with proper typing
+            const categoryMap: Record<string, Category> = categories.reduce((acc: Record<string, Category>, cat: Category) => {
+              acc[cat.id] = cat;
+              return acc;
+            }, {});
+            
+            // Attach category information to each charge
+            charges.forEach((charge: Charge) => {
+              if (charge.data && charge.data.category_id && categoryMap[charge.data.category_id]) {
+                charge.category = categoryMap[charge.data.category_id];
+              }
+            });
+          }
+        }
+      }
+
+      // Return the charges even if empty
+      return NextResponse.json(charges || []);
+    } catch (queryError) {
+      console.error('Error in database query:', queryError);
       return NextResponse.json(
-        { error: 'Failed to fetch charges' }, 
+        { error: 'Database query error: ' + (queryError instanceof Error ? queryError.message : String(queryError)) }, 
         { status: 500 }
       );
     }
-
-    // If we need to fetch category information separately
-    if (charges && charges.length > 0) {
-      // Get unique category IDs from the charges
-      const categoryIds = [...new Set(charges
-        .filter(charge => charge.data && charge.data.category_id)
-        .map(charge => charge.data.category_id))];
-      
-      if (categoryIds.length > 0) {
-        const { data: categories, error: categoriesError } = await supabase
-          .from('categories')
-          .select('id, account_name, account_type, account_subtype')
-          .in('id', categoryIds);
-        
-        if (!categoriesError && categories) {
-          // Create a map for quick lookup with proper typing
-          const categoryMap: Record<string, Category> = categories.reduce((acc: Record<string, Category>, cat: Category) => {
-            acc[cat.id] = cat;
-            return acc;
-          }, {});
-          
-          // Attach category information to each charge
-          charges.forEach((charge: Charge) => {
-            if (charge.data && charge.data.category_id && categoryMap[charge.data.category_id]) {
-              charge.category = categoryMap[charge.data.category_id];
-            }
-          });
-        }
-      }
-    }
-
-    return NextResponse.json(charges);
   } catch (error) {
     console.error('Error in charges API:', error);
     return NextResponse.json(
-      { error: 'Internal server error' }, 
+      { error: 'Internal server error: ' + (error instanceof Error ? error.message : String(error)) }, 
       { status: 500 }
     );
   }

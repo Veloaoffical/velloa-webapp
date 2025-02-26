@@ -56,7 +56,8 @@ export async function GET(
     // Transform the response to match the expected interface
     const transformedData = data?.map(unit => ({
       id: unit.unit_id,
-      unit_name: unit.unit_name
+      unit_number: unit.unit_name,
+      property_id: params.id
     }))
 
     return NextResponse.json(transformedData)

@@ -22,7 +22,7 @@ interface Charge {
   lease_id: string;
   property_id: string;
   unit_id: string;
-  tenant_id: string;
+  people_id: string;
   data: ChargeData;
   due_date: string;
   memo: string | null;
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
         lease_id,  // Using the lease_id directly from the request
         property_id: null,  // We're not fetching property_id anymore
         unit_id: null,      // We're not fetching unit_id anymore
-        tenant_id: null,    // Not using tenant_id
+        people_id: null,    // Not using tenant_id
         transaction_id: null,
         data: {
           category_id,

@@ -185,7 +185,7 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
   const [showMemo, setShowMemo] = useState(false)
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [properties, setProperties] = useState<Property[]>([])
-  const [units, setUnits] = useState<Record<string, Unit[]>>({})
+  const [units, setUnits] = useState<Unit[]>([])
   const [categories, setCategories] = useState<ChargeCategory[]>([])
   const [reference, setReference] = useState<string>(generateReference())
   const [isLoading, setIsLoading] = useState(false)
@@ -207,6 +207,37 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
       loadCategories();
     }
   }, [open]);
+
+  // Fetch units when property changes
+  useEffect(() => {
+    const selectedProperty = lines[0]?.property;
+    const fetchUnits = async () => {
+      try {
+        if (!selectedProperty) {
+          setUnits([]);
+          return;
+        }
+
+        console.log(`Fetching units for property ${selectedProperty}...`);
+        const response = await fetch(`/api/property/${selectedProperty}/units`);
+        
+        if (!response.ok) {
+          console.warn(`Failed to load units: ${response.status} ${response.statusText}`);
+          setUnits([]);
+          return;
+        }
+        
+        const unitsData = await response.json();
+        console.log(`Loaded ${unitsData.length} units for property ${selectedProperty}:`, unitsData);
+        setUnits(unitsData);
+      } catch (error) {
+        console.error("Error loading units:", error);
+        setUnits([]);
+      }
+    };
+
+    fetchUnits();
+  }, [lines]);
 
   // Function to load vendors using the API
   const loadVendors = async () => {
@@ -302,31 +333,69 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
   // Function to load properties
   const loadProperties = async () => {
     try {
-      const response = await fetch("/api/properties");
-      if (response.ok) {
-        const data = await response.json();
-        setProperties(data);
+      setIsLoading(true);
+      console.log('Loading properties from API...');
+      
+      const response = await fetch("/api/property");
+      const responseData = await response.text(); // Get response as text first
+      
+      if (!response.ok) {
+        let errorData = { error: 'Unknown error' };
         
-        // Load units for each property
-        const unitsMap: Record<string, Unit[]> = {};
-        for (const property of data) {
-          try {
-            const unitsResponse = await fetch(`/api/property/${property.id}/units`);
-            if (unitsResponse.ok) {
-              const unitsData = await unitsResponse.json();
-              unitsMap[property.id] = unitsData;
-            }
-          } catch (error) {
-            console.error(`Error loading units for property ${property.id}:`, error);
-          }
+        try {
+          // Try to parse the error response
+          errorData = JSON.parse(responseData);
+        } catch {
+          // If parsing fails, keep the default error
         }
-        setUnits(unitsMap);
-      } else {
-        throw new Error("Failed to fetch properties");
+        
+        console.error('Property API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        
+        if (response.status === 401) {
+          throw new Error('Unauthorized: Your session may have expired');
+        } else if (response.status === 404) {
+          throw new Error('API endpoint not found. Please check your routing configuration.');
+        } else if (response.status === 500) {
+          throw new Error('Server error. Please try again later or contact support.');
+        }
+        
+        throw new Error(errorData.error || `Failed to fetch properties: ${response.status} ${response.statusText}`);
       }
+      
+      // Parse the successful response
+      let propertiesData;
+      try {
+        propertiesData = JSON.parse(responseData);
+      } catch (parseError) {
+        console.error('Error parsing properties data JSON:', parseError);
+        throw new Error('Failed to parse properties data from server');
+      }
+      
+      if (!Array.isArray(propertiesData)) {
+        console.error('Invalid properties data format:', propertiesData);
+        throw new Error('Received invalid properties data format from server');
+      }
+      
+      console.log(`Successfully loaded ${propertiesData.length} properties:`, propertiesData);
+      setProperties(propertiesData);
+      
+      // Units are now loaded in the useEffect when property changes
     } catch (error) {
       console.error("Error loading properties:", error);
-      toast.error("Failed to load properties");
+      
+      if (error instanceof Error && error.message.includes('Unauthorized')) {
+        toast.error("Session expired. Please refresh the page to log in again.");
+      } else {
+        toast.error(error instanceof Error ? error.message : "Failed to load properties. Please try again later.");
+      }
+      
+      setProperties([]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -552,6 +621,9 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
     // If property changes, reset unit
     if (field === 'property') {
       newLines[index].unit = ""
+      // Debug: Log units for the selected property
+      console.log(`Selected property: ${value}`)
+      console.log(`Units for property:`, units)
     }
     
     setLines(newLines)
@@ -750,18 +822,32 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                 </RadioGroup>
               </div>
               
-              <div className="flex items-start">
-                <div className="w-[200px]">
-                  <Label className="text-sm text-muted-foreground mb-2 block">
-                    Bill Date <span className="text-destructive">*</span>
-                  </Label>
-                  <CalendarInput
-                    value={billDate}
-                    onChange={setBillDate}
-                    className="w-full h-[42px]"
-                    placeholder="Select bill date"
-                  />
-                </div>
+              <motion.div 
+                className="flex items-start"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, ease: "easeInOut" }}
+              >
+                <AnimatePresence mode="wait">
+                  <motion.div 
+                    key={`bill-date-${billType}`}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    className="w-[200px]"
+                  >
+                    <Label className="text-sm text-muted-foreground mb-2 block">
+                      Bill Date <span className="text-destructive">*</span>
+                    </Label>
+                    <CalendarInput
+                      value={billDate}
+                      onChange={setBillDate}
+                      className="w-full h-[42px]"
+                      placeholder="Select bill date"
+                    />
+                  </motion.div>
+                </AnimatePresence>
 
                 <AnimatePresence mode="wait">
                   {billType === "one-time" ? (
@@ -770,7 +856,7 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -20 }}
-                      transition={{ duration: 0.3 }}
+                      transition={{ duration: 0.3, ease: "easeOut" }}
                       className="w-[200px] ml-4"
                     >
                       <Label className="text-sm text-muted-foreground mb-2 block">
@@ -786,16 +872,17 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                   ) : (
                     <motion.div 
                       key="recurring"
-                      initial={{ opacity: 0, x: -50 }}
+                      initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -50 }}
-                      transition={{ duration: 0.3, staggerChildren: 0.1 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.4, ease: "easeOut", staggerChildren: 0.1 }}
                       className="flex items-start gap-4 ml-4"
                     >
                       <motion.div 
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3, delay: 0.1 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.3, ease: "easeOut", delay: 0.1 }}
                         className="w-[180px]"
                       >
                         <Label className="text-sm text-muted-foreground mb-2 block">
@@ -811,7 +898,8 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                       <motion.div 
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3, delay: 0.2 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.3, ease: "easeOut", delay: 0.2 }}
                         className="w-[180px]"
                       >
                         <Label className="text-sm text-muted-foreground mb-2 block">
@@ -828,7 +916,8 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                       <motion.div 
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3, delay: 0.3 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.3, ease: "easeOut", delay: 0.3 }}
                         className="w-[180px]"
                       >
                         <Label className="text-sm text-muted-foreground mb-2 block">
@@ -854,7 +943,8 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                       <motion.div 
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3, delay: 0.4 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.3, ease: "easeOut", delay: 0.4 }}
                         className="flex items-end h-[42px] ml-2"
                       >
                         <div className="flex items-center space-x-2">
@@ -874,7 +964,7 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </div>
+              </motion.div>
             </div>
 
             <div className="border-b" />
@@ -918,22 +1008,24 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                         <Select
                           value={line.unit}
                           onValueChange={(value) => handleLineChange(index, "unit", value)}
-                          disabled={!line.property}
+                          disabled={!line.property || units.length === 0}
                         >
                           <SelectTrigger className={`bg-background h-[42px] ${!line.unit ? 'text-muted-foreground' : ''}`}>
                             <SelectValue placeholder="Select unit">
-                              {line.unit && units[line.property]?.find(u => u.id === line.unit)?.unit_number}
+                              {line.unit && units.find(u => u.id === line.unit)?.unit_number}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent className="max-h-[300px]">
-                            {line.property && units[line.property] ? (
-                              units[line.property].map((unit) => (
+                            {units.length > 0 ? (
+                              units.map((unit) => (
                                 <SelectItem key={unit.id} value={unit.id}>
-                                  {unit.unit_number}
+                                  {unit.unit_number || 'Unnamed Unit'}
                                 </SelectItem>
                               ))
                             ) : (
-                              <div className="py-2 px-2 text-sm text-muted-foreground">No units available</div>
+                              <div className="py-2 px-2 text-sm text-muted-foreground">
+                                {line.property ? "No units available for this property" : "Select a property first"}
+                              </div>
                             )}
                           </SelectContent>
                         </Select>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { customAlphabet } from "nanoid";
 import { z } from "zod";
+import { v4 as uuidv4 } from "uuid";
 
 // Create a custom nanoid that only uses capital letters and numbers
 const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 10);
@@ -102,93 +103,208 @@ export async function POST(request: NextRequest) {
     const validationResult = BillCreateSchema.safeParse(body);
     if (!validationResult.success) {
       return NextResponse.json(
-        { error: "Invalid request data", details: validationResult.error.format() },
+        { error: 'Invalid request data', details: validationResult.error.format() },
         { status: 400 }
       );
     }
 
     const billData = validationResult.data;
 
-    // Verify the vendor exists and belongs to the company
+    // Verify that the vendor exists and belongs to the company
     const { data: vendorData, error: vendorError } = await supabase
-      .from("people")
-      .select("id")
-      .eq("id", billData.people_id)
-      .eq("company_id", company_id)
-      .eq("role", "vendor")
+      .from('people')
+      .select('id')
+      .eq('id', billData.people_id)
+      .eq('company_id', company_id)
       .single();
 
     if (vendorError || !vendorData) {
+      console.error('Error verifying vendor:', vendorError);
       return NextResponse.json(
-        { error: "Vendor not found or does not belong to your company" },
+        { error: 'Vendor not found or does not belong to your company' },
         { status: 404 }
       );
     }
 
-    // Verify the unit exists if one is specified
-    const firstLine = billData.lines[0];
-    let validatedUnitId: string | null = null;
+    // Get company default accounts settings to find the accounts payable account
+    const { data: settings, error: settingsError } = await supabase
+      .from('company_settings')
+      .select('default_account')
+      .eq('companyid', company_id)
+      .single();
+
+    if (settingsError) {
+      console.error('Error fetching company settings:', settingsError);
+      return NextResponse.json(
+        { error: 'Failed to fetch company settings' },
+        { status: 500 }
+      );
+    }
+
+    // Get the accounts payable account ID from company settings
+    const accountsPayableId = settings?.default_account?.accountspayable;
     
-    console.log("Checking unit_id:", firstLine.unit_id);
-    // Only proceed with unit validation if unit_id exists and is not null
+    if (!accountsPayableId) {
+      console.error('Accounts payable account not configured in company settings');
+      return NextResponse.json(
+        { error: 'Accounts payable account not configured in company settings' },
+        { status: 400 }
+      );
+    }
+
+    // Validate unit if specified in any line item
+    let validatedUnitId = null;
+    const firstLine = billData.lines[0];
+    
     if (firstLine.unit_id) {
-      console.log("Validating unit_id:", firstLine.unit_id);
       const { data: unitData, error: unitError } = await supabase
-        .from("units")
-        .select("id")
-        .eq("id", firstLine.unit_id)
-        .eq("property_id", firstLine.property_id)
+        .from('units')
+        .select('id')
+        .eq('id', firstLine.unit_id)
+        .eq('company_id', company_id)
         .single();
 
-      if (unitError) {
-        console.error("Error verifying unit:", unitError);
+      if (unitError || !unitData) {
+        console.error('Error verifying unit:', unitError);
         return NextResponse.json(
-          { error: "Invalid unit selected" },
-          { status: 400 }
-        );
-      }
-
-      if (!unitData) {
-        console.error("Unit not found:", firstLine.unit_id);
-        return NextResponse.json(
-          { error: "Unit not found" },
+          { error: 'Unit not found or does not belong to your company' },
           { status: 404 }
         );
       }
       
       validatedUnitId = unitData.id;
-      console.log("Unit validated:", validatedUnitId);
     }
 
-    // Transform line items and calculate total
-    const transformedLines = billData.lines.map(line => {
-      const lineItem: {
-        line_id: string;
-        amount: number;
-        category: string;
-        reference: number;
-        description?: string;
-        property_id: string | null;
-        unit_id: string | null;
-      } = {
-        line_id: line.line_id || nanoid(),
-        amount: line.amount,
-        category: line.category_id,
-        reference: 0,
-        description: line.description || undefined,
-        property_id: line.property_id,
-        unit_id: null // Default to null
-      };
-      
-      // Only set unit_id if it has a valid value
-      if (line.unit_id) {
-        lineItem.unit_id = line.unit_id;
-      }
-      
-      return lineItem;
-    });
+    // Transform line items and calculate total amount
+    const transformedLines = billData.lines.map(line => ({
+      line_id: line.line_id || nanoid(),
+      amount: line.amount,
+      category: line.category_id,
+      reference: 0,
+      description: line.description,
+      property_id: line.property_id,
+      unit_id: line.unit_id
+    }));
 
     const totalAmount = transformedLines.reduce((sum, line) => sum + line.amount, 0);
+
+    // Process memo - if it's a string, parse it to JSON object
+    let processedMemo;
+    if (billData.memo === null) {
+      // Use default empty editor state
+      processedMemo = {
+        "root": {
+          "type": "root",
+          "format": "",
+          "indent": 0,
+          "version": 1,
+          "children": [
+            {
+              "type": "paragraph",
+              "format": "",
+              "indent": 0,
+              "version": 1,
+              "children": [],
+              "direction": null,
+              "textStyle": "",
+              "textFormat": 0
+            }
+          ],
+          "direction": null
+        }
+      };
+    } else if (typeof billData.memo === 'string') {
+      // Parse the string into a JSON object
+      try {
+        processedMemo = JSON.parse(billData.memo);
+      } catch (e) {
+        console.error('Error parsing memo string:', e);
+        // Fallback to default if parsing fails
+        processedMemo = {
+          "root": {
+            "type": "root",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "children": [
+              {
+                "type": "paragraph",
+                "format": "",
+                "indent": 0,
+                "version": 1,
+                "children": [],
+                "direction": null,
+                "textStyle": "",
+                "textFormat": 0
+              }
+            ],
+            "direction": null
+          }
+        };
+      }
+    } else {
+      // It's already an object
+      processedMemo = billData.memo;
+    }
+
+    // Create a new transaction with debit and credit entries
+    const transactionId = uuidv4();
+    
+    // Prepare transaction lines with debit and credit entries
+    const transactionLines = [];
+    
+    // Add credit entry for accounts payable (total amount)
+    transactionLines.push({
+      account_id: accountsPayableId,
+      description: "Vendor bill - Accounts Payable",
+      debit_amount: 0,
+      credit_amount: totalAmount,
+      reference: nanoid()
+    });
+    
+    // Add debit entries for each bill line
+    transformedLines.forEach(line => {
+      transactionLines.push({
+        account_id: line.category,
+        description: line.description || "Vendor bill",
+        debit_amount: line.amount,
+        credit_amount: 0,
+        reference: nanoid()
+      });
+    });
+    
+    // Create the transaction record
+    const { error: transactionError } = await supabase
+      .from('transaction')
+      .insert({
+        id: transactionId,
+        created_at: new Date().toISOString(),
+        transaction_type: 'bill',
+        property: firstLine.property_id,
+        due_date: billData.due_date,
+        data: {
+          lines: transactionLines,
+          total_amount: totalAmount,
+          vendor_id: billData.people_id,
+          unit_id: validatedUnitId,
+          status: billData.status
+        },
+        company: company_id,
+        memo: processedMemo,
+        reference: billData.reference || nanoid(),
+        share_files: false,
+        status: billData.status,
+        created_by: user.id,
+        payee: billData.people_id
+      });
+    
+    if (transactionError) {
+      console.error('Error creating transaction:', transactionError);
+      return NextResponse.json(
+        { error: 'Failed to create transaction: ' + transactionError.message },
+        { status: 500 }
+      );
+    }
 
     // Prepare charge data
     const chargeData: ChargeData = {
@@ -196,17 +312,17 @@ export async function POST(request: NextRequest) {
       people_id: billData.people_id,
       bill_date: billData.bill_date,
       due_date: billData.due_date,
-      property_id: billData.lines[0].property_id,
+      property_id: firstLine.property_id,
       unit_id: null, // Default to null
-        charge_amount: {
-          lines: transformedLines,
-          total_amount: totalAmount
-        },
-        amount_remaining: {
-          lines: transformedLines,
-          total_amount: totalAmount
-        },
-      memo: billData.memo,
+      charge_amount: {
+        lines: transformedLines,
+        total_amount: totalAmount
+      },
+      amount_remaining: {
+        lines: transformedLines,
+        total_amount: totalAmount
+      },
+      memo: processedMemo,
       reference: billData.reference,
       status: billData.status,
       created_by: user.id,

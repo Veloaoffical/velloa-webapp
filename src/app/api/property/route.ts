@@ -28,7 +28,7 @@ export async function GET() {
     // Get properties for the company
     const { data: properties, error: propertiesError } = await supabase
       .from('properties')
-      .select('id, name, address_line_1, address_line_2, city, state, zip')
+      .select('id, name, address_line_1, address_line_2, city, state, zip, country')
       .eq('company_id', companyMember.company_id)
       .order('name');
 

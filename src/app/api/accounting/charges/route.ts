@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     // Verify that the lease exists and belongs to the company
     const { data: leaseData, error: leaseError } = await supabase
       .from('lease_contracts')
-      .select('id, property_id, unit_id')
+      .select('id, property_id, unit_id, tenant_id')
       .eq('id', chargeData.lease_id)
       .eq('company_id', company_id)
       .single();
@@ -136,8 +136,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create a new charge
-    const chargeId = uuidv4();
+    // Get company default accounts settings to find the accounts receivable account
+    const { data: settings, error: settingsError } = await supabase
+      .from('company_settings')
+      .select('default_account')
+      .eq('companyid', company_id)
+      .single();
+
+    if (settingsError) {
+      console.error('Error fetching company settings:', settingsError);
+      return NextResponse.json(
+        { error: 'Failed to fetch company settings' }, 
+        { status: 500 }
+      );
+    }
+
+    // Get the accounts receivable account ID from company settings
+    const accountsReceivableId = settings?.default_account?.accountreceivable;
+    
+    if (!accountsReceivableId) {
+      console.error('Accounts receivable account not configured in company settings');
+      return NextResponse.json(
+        { error: 'Accounts receivable account not configured in company settings' }, 
+        { status: 400 }
+      );
+    }
 
     // Process memo - if it's a string, parse it to JSON object
     let processedMemo;
@@ -198,6 +221,69 @@ export async function POST(request: NextRequest) {
       processedMemo = chargeData.memo;
     }
     
+    // Create a new charge
+    const chargeId = uuidv4();
+    
+    // Create a new transaction with debit and credit entries
+    const transactionId = uuidv4();
+    
+    // Prepare transaction lines with debit and credit entries
+    const transactionLines = [];
+    
+    // Add debit entry for accounts receivable (total amount)
+    transactionLines.push({
+      account_id: accountsReceivableId,
+      description: "Tenant charge - Accounts Receivable",
+      debit_amount: chargeData.total_amount,
+      credit_amount: 0,
+      reference: nanoid()
+    });
+    
+    // Add credit entries for each charge line
+    chargeData.lines.forEach(line => {
+      transactionLines.push({
+        account_id: line.category_id,
+        description: line.description || "Tenant charge",
+        debit_amount: 0,
+        credit_amount: line.amount,
+        reference: nanoid()
+      });
+    });
+    
+    // Create the transaction record
+    const { error: transactionError } = await supabase
+      .from('transaction')
+      .insert({
+        id: transactionId,
+        created_at: new Date().toISOString(),
+        transaction_type: 'charge',
+        property: leaseData.property_id,
+        due_date: chargeData.due_date,
+        data: {
+          lines: transactionLines,
+          total_amount: chargeData.total_amount,
+          lease_id: chargeData.lease_id,
+          unit_id: leaseData.unit_id,
+          status: 'unpaid'
+        },
+        company: company_id,
+        memo: processedMemo,
+        reference: chargeData.reference || nanoid(),
+        share_files: chargeData.share_with_tenants || false,
+        status: 'unpaid',
+        created_by: user.id,
+        payee: leaseData.tenant_id || null
+      });
+    
+    if (transactionError) {
+      console.error('Error creating transaction:', transactionError);
+      return NextResponse.json(
+        { error: 'Failed to create transaction: ' + transactionError.message }, 
+        { status: 500 }
+      );
+    }
+    
+    // Create the charge record linked to the transaction
     const { data: charge, error: chargeError } = await supabase
       .from('charges')
       .insert({
@@ -207,7 +293,7 @@ export async function POST(request: NextRequest) {
         property_id: leaseData.property_id,
         unit_id: leaseData.unit_id,
         people_id: null,
-        transaction_id: null,
+        transaction_id: transactionId,
         charge_amount: {
           lines: chargeData.lines,
           total_amount: chargeData.total_amount
@@ -218,7 +304,7 @@ export async function POST(request: NextRequest) {
         },
         due_date: chargeData.due_date,
         memo: processedMemo,
-        reference: chargeData.reference || uuidv4().substring(0, 8).toUpperCase(),
+        reference: chargeData.reference || nanoid().substring(0, 8).toUpperCase(),
         status: 'unpaid',
         created_by: user.id,
         share_with_tenants: chargeData.share_with_tenants || false

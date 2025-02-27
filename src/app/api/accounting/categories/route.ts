@@ -32,12 +32,18 @@ export async function GET() {
         account_type,
         account_subtype,
         account_balance,
+        start_balance,
+        property_balance,
+        start_property_balance,
         sub_accounts:chart_of_sub_accounts!chart_of_sub_accounts_parent_account_fkey(
           id,
           account_name,
           account_subtype,
           account_balance,
-          active_account
+          active_account,
+          start_balance,
+          property_balance,
+          start_property_balance
         )
       `)
       .eq('company_id', companyMember.company_id)
@@ -57,13 +63,19 @@ export async function GET() {
       account_type: account.account_type,
       account_subtype: account.account_subtype,
       account_balance: account.account_balance,
+      start_balance: account.start_balance,
+      property_balance: account.property_balance,
+      start_property_balance: account.start_property_balance,
       sub_accounts: account.sub_accounts
         ?.filter(sub => sub.active_account)
         ?.map(sub => ({
           id: sub.id,
           account_name: sub.account_name,
           account_subtype: sub.account_subtype,
-          account_balance: sub.account_balance
+          account_balance: sub.account_balance,
+          start_balance: sub.start_balance,
+          property_balance: sub.property_balance,
+          start_property_balance: sub.start_property_balance
         }))
     }))
 

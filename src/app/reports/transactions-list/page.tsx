@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useId } from "react"
+import { useState, useId, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Button as ButtonUI } from "@/components/ui/button"
 import {
@@ -15,7 +15,10 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -31,57 +34,388 @@ import { RangeCalendar } from "@/components/ui/calendar-rac"
 import { DateInput, dateInputStyle } from "@/components/ui/datefield-rac"
 import { Button, DateRangePicker, Dialog, Group, Popover } from "react-aria-components"
 import { parseDate, type CalendarDate } from "@internationalized/date"
+import React from "react"
+import LeaseCombobox from "@/components/LeaseCombobox"
+import PropertyCombobox from "@/components/PropertyCombobox"
+import UnitCombobox from "@/components/UnitCombobox"
+import AccountCombobox from "@/components/AccountCombobox"
+import OwnerCombobox from "@/components/OwnerCombobox"
+import VendorCombobox from "@/components/VendorCombobox"
+import TenantCombobox from "@/components/TenantCombobox"
 
-// Mock data for demonstration
-const transactions = [
-  {
-    id: 1,
-    date: "2/14/2024",
-    type: "Deposit",
-    account: "Operating Account 2",
-    property: "500 Northwest 15th S",
-    lease: "L-2024-001",
-    name: "",
-    memo: "Automatically created",
-    amount: "$1,000.00",
-    updatedBy: "John Doe",
-    updatedAt: "2024-02-14 09:30 AM"
-  },
-  {
-    id: 2,
-    date: "2/16/2024",
-    type: "Deposit",
-    account: "Operating Account 2",
-    property: "698 Northwest 1st Ave",
-    lease: "L-2024-002",
-    name: "",
-    memo: "Automatically created",
-    amount: "$10,000.00",
-    updatedBy: "Jane Smith",
-    updatedAt: "2024-02-16 02:15 PM"
-  },
-  {
-    id: 3,
-    date: "2/16/2024",
-    type: "Deposit",
-    account: "Bank E (Contra Accts)",
-    property: "1900 North Bayshore",
-    lease: "L-2024-003",
-    name: "",
-    memo: "Automatically created",
-    amount: "$2,000.00",
-    updatedBy: "Mike Johnson",
-    updatedAt: "2024-02-16 04:45 PM"
-  },
-  // Add more mock data as needed
-]
+interface Property {
+  id: string
+  name: string
+  address: string
+  city: string
+  state: string
+  zip: string
+  active: boolean
+}
+
+interface Unit {
+  id: string
+  unit_number: string
+  property_id: string
+}
+
+interface Lease {
+  id: string
+  tenant_name: string
+  unit_name: string
+  property_name: string
+  tenant: {
+    id: string
+    first_name?: string
+    last_name?: string
+    email?: string
+    phone?: string
+    name?: string
+  } | null
+  property: {
+    name: string
+    address: string
+  }
+  unit: {
+    unit_number: string
+  }
+  start_date: string
+  end_date: string
+  rent_amount: string
+  lease_term: string
+  deposit_amount: string
+}
+
+interface Person {
+  id: string
+  first_name: string | null
+  last_name: string | null
+  email: string | null
+  phone: string | null
+  role: string
+  unit_id: string | null
+  units?: {
+    unit_name: string
+    properties: {
+      name: string
+    }
+  } | null
+  company: string | null
+}
+
+interface Owner extends Person {
+  role: 'owner'
+}
+
+interface Vendor extends Person {
+  role: 'vendor'
+}
+
+interface Tenant extends Person {
+  role: 'tenant'
+}
+
+interface Transaction {
+  id: string
+  transaction_type: string
+  property: string
+  start_date: string
+  memo: {
+    type: string
+    content: string
+    root?: {
+      type: string
+      format: string
+      indent: number
+      version: number
+      children: Array<{
+        type: string
+        format: string
+        indent: number
+        version: number
+        children: never[]
+        direction: string | null
+        textStyle: string
+        textFormat: number
+      }>
+      direction: string | null
+    }
+  } | null
+  data: {
+    total_amount: number
+    payment_method?: string
+    lines?: Array<{
+      category: string
+      unit: string
+      description: string
+      debit_amount: number
+      credit_amount: number
+    }>
+  }
+  created_at: string
+  created_by: string
+  reference?: string
+  payee?: string
+}
+
+interface Account {
+  id: string
+  account_name: string
+  account_type: string
+  account_subtype: string
+  account_balance: number
+  start_balance: number
+  accounting_start_date: string
+  owner_id?: string
+  property_balance?: Array<{
+    property_id: string
+    property_name: string
+    balance: number
+    start_balance: number
+    accounting_start_date: string
+  }>
+  active_account: boolean
+  sub_accounts?: Array<{
+    id: string
+    account_name: string
+    account_subtype: string
+    account_balance: number
+  }>
+}
 
 export default function TransactionsListReport() {
-  const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set())
+  const [selectedTransactions, setSelectedTransactions] = useState<Set<string>>(new Set())
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
+  const [accountingMethod, setAccountingMethod] = useState('cash')
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [beginningBalance, setBeginningBalance] = useState<number>(0)
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState(true)
+  const [selectedAccount, setSelectedAccount] = useState<string>('all')
+  const [properties, setProperties] = useState<Property[]>([])
+  const [isLoadingProperties, setIsLoadingProperties] = useState(true)
+  const [selectedProperty, setSelectedProperty] = useState<string>('all')
+  const [units, setUnits] = useState<Unit[]>([])
+  const [isLoadingUnits, setIsLoadingUnits] = useState(false)
+  const [selectedUnit, setSelectedUnit] = useState<string>('all')
+  const [leases, setLeases] = useState<Lease[]>([])
+  const [isLoadingLeases, setIsLoadingLeases] = useState(true)
+  const [selectedLease, setSelectedLease] = useState<string>('all')
+  const [people, setPeople] = useState<Person[]>([])
+  const [isLoadingPeople, setIsLoadingPeople] = useState(true)
+  const [selectedOwner, setSelectedOwner] = useState<string>('all')
+  const [selectedVendor, setSelectedVendor] = useState<string>('all')
+  const [selectedTenant, setSelectedTenant] = useState<string>('all')
+  const [accountOwner, setAccountOwner] = useState<Person | null>(null)
+  const [payees, setPayees] = useState<Map<string, Person>>(new Map())
   const tableId = useId()
   const currentDateTime = new Date()
   
+  // Calculate beginning balance from accounts
+  const calculateBeginningBalance = useCallback((accountsToCalculate: Account[]) => {
+    if (!selectedAccount || selectedAccount === 'all') {
+      return 0
+    }
+
+    const account = accountsToCalculate.find(a => a.id === selectedAccount)
+    if (!account) return 0
+
+    if (selectedProperty && selectedProperty !== 'all') {
+      // For property-specific view, use property balance
+      const propertyBalance = account.property_balance?.find(pb => pb.property_id === selectedProperty)
+      if (!propertyBalance) return 0
+      return propertyBalance.start_balance || 0
+    }
+
+    // For all properties view, use account start balance
+    return account.start_balance || 0
+  }, [selectedAccount, selectedProperty])
+
+  // Fetch chart of accounts
+  useEffect(() => {
+    const fetchAccounts = async () => {
+      try {
+        const response = await fetch('/api/accounting/chart-of-accounts')
+        if (!response.ok) throw new Error('Failed to fetch accounts')
+        const data = await response.json()
+        setAccounts(data)
+        const calculatedBalance = calculateBeginningBalance(data)
+        setBeginningBalance(calculatedBalance)
+      } catch (error) {
+        console.error('Error fetching accounts:', error)
+      } finally {
+        setIsLoadingAccounts(false)
+      }
+    }
+    fetchAccounts()
+  }, [calculateBeginningBalance])
+
+  // Recalculate beginning balance when account or property filter changes
+  useEffect(() => {
+    if (accounts.length > 0) {
+      const calculatedBalance = calculateBeginningBalance(accounts)
+      setBeginningBalance(calculatedBalance)
+    }
+  }, [selectedAccount, selectedProperty, accounts, calculateBeginningBalance])
+
+  useEffect(() => {
+    const fetchProperties = async () => {
+      try {
+        const response = await fetch('/api/property')
+        if (!response.ok) {
+          throw new Error('Failed to fetch properties')
+        }
+        const data = await response.json()
+        setProperties(data)
+      } catch (error) {
+        console.error('Error fetching properties:', error)
+      } finally {
+        setIsLoadingProperties(false)
+      }
+    }
+
+    fetchProperties()
+  }, [])
+
+  useEffect(() => {
+    const fetchLeases = async () => {
+      try {
+        setIsLoadingLeases(true)
+        const response = await fetch('/api/accounting/lease-contracts')
+        if (!response.ok) {
+          throw new Error('Failed to fetch leases')
+        }
+        const data = await response.json()
+        setLeases(data)
+      } catch (error) {
+        console.error('Error fetching leases:', error)
+      } finally {
+        setIsLoadingLeases(false)
+      }
+    }
+
+    fetchLeases()
+  }, [])
+
+  // Fetch units when property is selected
+  useEffect(() => {
+    const fetchUnits = async () => {
+      if (selectedProperty === 'all') {
+        setUnits([])
+        setSelectedUnit('all') // Reset unit selection when property is deselected
+        return
+      }
+
+      try {
+        setIsLoadingUnits(true)
+        const response = await fetch(`/api/property/${selectedProperty}/units`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch units')
+        }
+        const data = await response.json()
+        setUnits(data)
+        setSelectedUnit('all') // Reset unit selection when property changes
+      } catch (error) {
+        console.error('Error fetching units:', error)
+        setUnits([])
+      } finally {
+        setIsLoadingUnits(false)
+      }
+    }
+
+    fetchUnits()
+  }, [selectedProperty])
+
+  // Update lease options when property or unit changes
+  useEffect(() => {
+    // Reset lease selection when property or unit changes
+    setSelectedLease('all')
+  }, [selectedProperty, selectedUnit])
+
+  // Fetch people data
+  useEffect(() => {
+    const fetchPeople = async () => {
+      try {
+        setIsLoadingPeople(true)
+        const response = await fetch('/api/people/all')
+        if (!response.ok) {
+          throw new Error('Failed to fetch people')
+        }
+        const data = await response.json()
+        setPeople(data)
+      } catch (error) {
+        console.error('Error fetching people:', error)
+      } finally {
+        setIsLoadingPeople(false)
+      }
+    }
+
+    fetchPeople()
+  }, [])
+
+  // Fetch account owner when account changes
+  useEffect(() => {
+    const fetchAccountOwner = async () => {
+      if (!selectedAccount || selectedAccount === 'all') {
+        setAccountOwner(null)
+        return
+      }
+
+      const account = accounts.find(a => a.id === selectedAccount)
+      if (!account?.owner_id) {
+        setAccountOwner(null)
+        return
+      }
+
+      try {
+        const response = await fetch(`/api/people/${account.owner_id}`)
+        if (!response.ok) throw new Error('Failed to fetch account owner')
+        const data = await response.json()
+        setAccountOwner(data)
+      } catch (error) {
+        console.error('Error fetching account owner:', error)
+        setAccountOwner(null)
+      }
+    }
+
+    fetchAccountOwner()
+  }, [selectedAccount, accounts])
+
+  // Fetch payee details for transactions
+  useEffect(() => {
+    const fetchPayeeDetails = async () => {
+      const uniquePayeeIds = new Set(
+        transactions
+          .map(t => t.payee)
+          .filter((id): id is string => id !== undefined && id !== null)
+      )
+      const newPayees = new Map<string, Person>()
+      
+      for (const payeeId of uniquePayeeIds) {
+        if (!payees.has(payeeId)) {
+          try {
+            const response = await fetch(`/api/people/${payeeId}`)
+            if (response.ok) {
+              const data = await response.json()
+              newPayees.set(payeeId, data)
+            }
+          } catch (error) {
+            console.error(`Error fetching payee ${payeeId}:`, error)
+          }
+        }
+      }
+      
+      if (newPayees.size > 0) {
+        setPayees(new Map([...payees, ...newPayees]))
+      }
+    }
+
+    if (transactions.length > 0) {
+      fetchPayeeDetails()
+    }
+  }, [transactions])
+
   const getDateRangeForPeriod = (period: string) => {
     switch (period) {
       case 'day':
@@ -104,6 +438,12 @@ export default function TransactionsListReport() {
           start: parseDate(format(startOfYear(currentDateTime), "yyyy-MM-dd")),
           end: parseDate(format(endOfYear(currentDateTime), "yyyy-MM-dd"))
         }
+      case 'all-time':
+        return {
+          // Using a far past date for start (Jan 1, 1970)
+          start: parseDate("1970-01-01"),
+          end: parseDate(format(currentDateTime, "yyyy-MM-dd"))
+        }
       default:
         return {
           start: parseDate(format(subDays(currentDateTime, 7), "yyyy-MM-dd")),
@@ -112,8 +452,8 @@ export default function TransactionsListReport() {
     }
   }
 
-  const [selectedPeriod, setSelectedPeriod] = useState('last-7-days')
-  const [dateRange, setDateRange] = useState(getDateRangeForPeriod('last-7-days'))
+  const [selectedPeriod, setSelectedPeriod] = useState('all-time')
+  const [dateRange, setDateRange] = useState(getDateRangeForPeriod('all-time'))
 
   const handlePeriodChange = (period: string) => {
     setSelectedPeriod(period)
@@ -122,7 +462,85 @@ export default function TransactionsListReport() {
     }
   }
 
-  const toggleTransaction = (id: number) => {
+  // Fetch transactions when filters change
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        setIsLoadingTransactions(true)
+        const params = new URLSearchParams()
+        
+        if (selectedAccount && selectedAccount !== 'all') {
+          params.append('account_id', selectedAccount)
+          // Also include sub-accounts if any
+          const selectedAccountData = accounts.find(a => a.id === selectedAccount)
+          if (selectedAccountData?.sub_accounts?.length) {
+            selectedAccountData.sub_accounts.forEach(sa => {
+              params.append('sub_account_ids[]', sa.id)
+            })
+          }
+
+          // If this is a bank account, also include credit account transactions
+          if (selectedAccountData?.account_type?.toLowerCase() === 'asset' && 
+              selectedAccountData?.account_subtype?.toLowerCase() === 'bank') {
+            // Get all credit accounts
+            const creditAccountIds = accounts
+              .filter(a => a.account_type?.toLowerCase() === 'credit')
+              .map(a => a.id)
+            
+            // Add credit account IDs to params
+            creditAccountIds.forEach(id => {
+              params.append('related_account_ids[]', id)
+            })
+          }
+        }
+        
+        if (dateRange?.start) {
+          params.append('start_date', dateRange.start.toString())
+        }
+        
+        if (dateRange?.end) {
+          params.append('end_date', dateRange.end.toString())
+        }
+
+        if (selectedProperty && selectedProperty !== 'all') {
+          params.append('property_id', selectedProperty)
+        }
+
+        if (selectedUnit && selectedUnit !== 'all') {
+          params.append('unit_id', selectedUnit)
+        }
+
+        if (selectedLease && selectedLease !== 'all') {
+          params.append('lease_id', selectedLease)
+        }
+
+        if (selectedOwner && selectedOwner !== 'all') {
+          params.append('owner_id', selectedOwner)
+        }
+
+        if (selectedVendor && selectedVendor !== 'all') {
+          params.append('vendor_id', selectedVendor)
+        }
+
+        if (selectedTenant && selectedTenant !== 'all') {
+          params.append('tenant_id', selectedTenant)
+        }
+
+        const response = await fetch(`/api/accounting/transactions?${params.toString()}`)
+        if (!response.ok) throw new Error('Failed to fetch transactions')
+        const data = await response.json()
+        setTransactions(data)
+      } catch (error) {
+        console.error('Error fetching transactions:', error)
+      } finally {
+        setIsLoadingTransactions(false)
+      }
+    }
+
+    fetchTransactions()
+  }, [selectedAccount, dateRange, selectedProperty, selectedUnit, selectedLease, selectedOwner, selectedVendor, selectedTenant, accounts])
+
+  const toggleTransaction = (id: string) => {
     const newSelected = new Set(selectedTransactions)
     if (newSelected.has(id)) {
       newSelected.delete(id)
@@ -146,16 +564,24 @@ export default function TransactionsListReport() {
     const csvContent = [
       headers.join(','),
       ...transactions.map(t => [
-        t.date,
-        t.type,
-        t.account,
+        t.start_date,
+        t.transaction_type,
+        t.data.lines?.[0]?.category ? (
+          accounts.find(a => 
+            a.id === t.data.lines![0].category || 
+            a.sub_accounts?.some(sa => sa.id === t.data.lines![0].category)
+          )?.account_name || t.data.lines[0].category
+        ) : 'N/A',
         t.property,
-        t.lease,
-        t.name,
-        t.memo,
-        t.amount,
-        t.updatedBy,
-        t.updatedAt
+        t.reference,
+        t.payee,
+        t.memo?.content || 'N/A',
+        new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD'
+        }).format(t.data.total_amount || 0),
+        t.created_by,
+        t.created_at
       ].join(','))
     ].join('\n')
 
@@ -173,9 +599,71 @@ export default function TransactionsListReport() {
 
   // Calculate totals
   const totalAmount = transactions.reduce((sum, transaction) => {
-    const amount = parseFloat(transaction.amount.replace('$', '').replace(',', ''))
-    return sum + amount
+    const account = accounts.find(a => 
+      a.id === transaction.data.lines?.[0]?.category || 
+      a.sub_accounts?.some(sa => sa.id === transaction.data.lines?.[0]?.category)
+    )
+    
+    // For bank accounts (asset accounts), debits add and credits subtract
+    const isBankAccount = account?.account_type?.toLowerCase() === 'asset' && 
+                         account?.account_subtype?.toLowerCase() === 'bank'
+
+    if (isBankAccount && transaction.data.lines) {
+      // For bank accounts:
+      // Sum all debit amounts and subtract all credit amounts for the selected account
+      return sum + transaction.data.lines.reduce((lineSum, line) => {
+        // Check if this line is for the selected account or its sub-accounts
+        const isSelectedAccount = selectedAccount === 'all' || 
+          line.category === selectedAccount ||
+          accounts.find(a => a.id === selectedAccount)?.sub_accounts?.some(sa => sa.id === line.category)
+
+        if (isSelectedAccount) {
+          return lineSum + (line.debit_amount || 0) - (line.credit_amount || 0)
+        }
+        return lineSum
+      }, 0)
+    } else {
+      // For other accounts, use the total amount as is
+      return sum + (transaction.data.total_amount || 0)
+    }
   }, 0)
+
+  // Calculate running balance including beginning balance
+  const calculateRunningBalance = (transaction: Transaction, index: number) => {
+    const transactionsUpToIndex = transactions.slice(0, index + 1)
+    const account = accounts.find(a => 
+      a.id === transaction.data.lines?.[0]?.category || 
+      a.sub_accounts?.some(sa => sa.id === transaction.data.lines?.[0]?.category)
+    )
+    
+    // For bank accounts (asset accounts), debits add and credits subtract
+    const isBankAccount = account?.account_type?.toLowerCase() === 'asset' && 
+                         account?.account_subtype?.toLowerCase() === 'bank'
+
+    const runningTotal = transactionsUpToIndex.reduce((sum, t) => {
+      if (isBankAccount && t.data.lines) {
+        // For bank accounts:
+        // Add all debit amounts and subtract all credit amounts for the selected account
+        return sum + t.data.lines.reduce((lineSum, line) => {
+          // Check if this line is for the selected account or its sub-accounts
+          const isSelectedAccount = selectedAccount === 'all' || 
+            line.category === selectedAccount ||
+            accounts.find(a => a.id === selectedAccount)?.sub_accounts?.some(sa => sa.id === line.category)
+
+          if (isSelectedAccount) {
+            return lineSum + (line.debit_amount || 0) - (line.credit_amount || 0)
+          }
+          return lineSum
+        }, 0)
+      } else {
+        // For other accounts:
+        // Use the total amount as is
+        return sum + (t.data.total_amount || 0)
+      }
+    }, beginningBalance)
+
+    return runningTotal
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -203,6 +691,7 @@ export default function TransactionsListReport() {
                     <SelectValue placeholder="Select period" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="all-time">All Time</SelectItem>
                     <SelectItem value="day">Today</SelectItem>
                     <SelectItem value="last-7-days">Last 7 Days</SelectItem>
                     <SelectItem value="month">This Month</SelectItem>
@@ -263,15 +752,16 @@ export default function TransactionsListReport() {
                   </SelectContent>
                 </Select>
 
-                <Select>
+                <Select
+                  value={accountingMethod}
+                  onValueChange={setAccountingMethod}
+                >
                   <SelectTrigger className="w-[180px] bg-background">
-                    <SelectValue placeholder="Type" />
+                    <SelectValue placeholder="Accounting Method" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="deposit">Deposit</SelectItem>
-                    <SelectItem value="payment">Payment</SelectItem>
-                    <SelectItem value="charge">Charge</SelectItem>
-                    <SelectItem value="credit">Credit</SelectItem>
+                    <SelectItem value="cash">Cash basis</SelectItem>
+                    <SelectItem value="accrual">Accrual basis</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -302,52 +792,42 @@ export default function TransactionsListReport() {
 
               {showFilters && (
                 <div className="grid grid-cols-6 gap-4 animate-in slide-in-from-top-2 duration-200 fade-in-0 data-[state=closed]:animate-out data-[state=closed]:slide-out-to-top-2 data-[state=closed]:fade-out-0">
-                  <Select>
-                    <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="ePay Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <AccountCombobox
+                    accounts={accounts}
+                    value={selectedAccount}
+                    onValueChange={setSelectedAccount}
+                    isLoading={isLoadingAccounts}
+                    className={cn(dateInputStyle, "text-sm h-9")}
+                  />
 
-                  <Select>
-                    <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="Account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Accounts</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <PropertyCombobox
+                    properties={properties}
+                    value={selectedProperty}
+                    onValueChange={setSelectedProperty}
+                    isLoading={isLoadingProperties}
+                    className={cn(dateInputStyle, "text-sm h-9")}
+                  />
 
-                  <Select>
-                    <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="Property" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Properties</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <UnitCombobox
+                    units={units}
+                    value={selectedUnit}
+                    onValueChange={setSelectedUnit}
+                    isLoading={isLoadingUnits}
+                    selectedProperty={selectedProperty}
+                    className={cn(dateInputStyle, "text-sm h-9")}
+                  />
 
-                  <Select>
-                    <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="Unit" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Units</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select>
-                    <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="Lease" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Leases</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <LeaseCombobox
+                    leases={leases}
+                    value={selectedLease}
+                    onValueChange={setSelectedLease}
+                    isLoading={isLoadingLeases}
+                    selectedProperty={selectedProperty}
+                    selectedUnit={selectedUnit}
+                    properties={properties}
+                    units={units}
+                    className={cn(dateInputStyle, "text-sm h-9")}
+                  />
 
                   <Select>
                     <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
@@ -358,61 +838,50 @@ export default function TransactionsListReport() {
                     </SelectContent>
                   </Select>
 
-                  <Select>
-                    <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="Owner" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Owners</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <OwnerCombobox
+                    owners={people.filter((p): p is Owner => p.role === 'owner')}
+                    value={selectedOwner}
+                    onValueChange={setSelectedOwner}
+                    isLoading={isLoadingPeople}
+                    className={cn(dateInputStyle, "text-sm h-9")}
+                  />
 
-                  <Select>
-                    <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="Vendor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Vendors</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <VendorCombobox
+                    vendors={people.filter((p): p is Vendor => p.role === 'vendor')}
+                    value={selectedVendor}
+                    onValueChange={setSelectedVendor}
+                    isLoading={isLoadingPeople}
+                    className={cn(dateInputStyle, "text-sm h-9")}
+                  />
 
-                  <Select>
-                    <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="Tenant" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Tenants</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <TenantCombobox
+                    tenants={people.filter((p): p is Tenant => p.role === 'tenant')}
+                    value={selectedTenant}
+                    onValueChange={setSelectedTenant}
+                    isLoading={isLoadingPeople}
+                    className={cn(dateInputStyle, "text-sm h-9")}
+                  />
 
                   <Select>
                     <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
                       <SelectValue placeholder="Payment Method" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="check">Check</SelectItem>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="credit">Credit Card</SelectItem>
-                      <SelectItem value="ach">ACH</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select>
-                    <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="Deposit" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Deposits</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select>
-                    <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="Deleted Items" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="show">Show</SelectItem>
-                      <SelectItem value="hide">Hide</SelectItem>
+                      <SelectGroup>
+                        <SelectLabel>In App</SelectLabel>
+                        <SelectItem value="velloa-pay">Velloa Pay</SelectItem>
+                        <SelectItem value="check-in-app">Check</SelectItem>
+                      </SelectGroup>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel>External</SelectLabel>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="ach">Bank Transfer (ACH/EFT)</SelectItem>
+                        <SelectItem value="card">Credit/Debit Card</SelectItem>
+                        <SelectItem value="check">Check</SelectItem>
+                        <SelectItem value="money-order">Money Order</SelectItem>
+                        <SelectItem value="wire">Wire Transfer</SelectItem>
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </div>
@@ -438,50 +907,171 @@ export default function TransactionsListReport() {
                   <TableHead>Type</TableHead>
                   <TableHead>Account</TableHead>
                   <TableHead>Property</TableHead>
-                  <TableHead>Lease</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Memo</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Updated By</TableHead>
-                  <TableHead>Updated At</TableHead>
+                  <TableHead className="text-right">Running Balance</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactions.map((transaction) => (
-                  <TableRow key={transaction.id} className="has-[[data-state=checked]]:bg-muted/50">
-                    <TableCell>
-                      <Checkbox 
-                        id={`table-checkbox-${transaction.id}`}
-                        checked={selectedTransactions.has(transaction.id)}
-                        onCheckedChange={() => toggleTransaction(transaction.id)}
-                      />
+                {/* Beginning Balance Row */}
+                <TableRow>
+                  <TableCell>
+                    <Checkbox checked={false} disabled />
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {selectedAccount !== 'all' ? (
+                      selectedProperty !== 'all' ? (
+                        // Show property-specific accounting start date
+                        format(new Date(accounts.find(a => a.id === selectedAccount)?.property_balance?.find(pb => pb.property_id === selectedProperty)?.accounting_start_date || '1970-01-01'), 'MM/dd/yyyy')
+                      ) : (
+                        // Show account's accounting start date
+                        format(new Date(accounts.find(a => a.id === selectedAccount)?.accounting_start_date || '1970-01-01'), 'MM/dd/yyyy')
+                      )
+                    ) : 'All Time'}
+                  </TableCell>
+                  <TableCell>Opening Balance</TableCell>
+                  <TableCell>
+                    {selectedAccount !== 'all' ? (
+                      accounts.find(a => a.id === selectedAccount)?.account_name || 'N/A'
+                    ) : 'All Accounts'}
+                  </TableCell>
+                  <TableCell>
+                    {selectedProperty !== 'all' ? (
+                      properties.find(p => p.id === selectedProperty)?.name || 'N/A'
+                    ) : 'All Properties'}
+                  </TableCell>
+                  <TableCell>
+                    {accountOwner ? (
+                      accountOwner.company || [accountOwner.first_name, accountOwner.last_name].filter(Boolean).join(' ') || 'N/A'
+                    ) : '-'}
+                  </TableCell>
+                  <TableCell>-</TableCell>
+                  <TableCell className="text-right">-</TableCell>
+                  <TableCell className="text-right">
+                    {new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: 'USD'
+                    }).format(beginningBalance)}
+                  </TableCell>
+                </TableRow>
+
+                {isLoadingTransactions ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-4">
+                      Loading transactions...
                     </TableCell>
-                    <TableCell className="font-medium">{transaction.date}</TableCell>
-                    <TableCell>{transaction.type}</TableCell>
-                    <TableCell>{transaction.account}</TableCell>
-                    <TableCell>{transaction.property}</TableCell>
-                    <TableCell>{transaction.lease}</TableCell>
-                    <TableCell>{transaction.name}</TableCell>
-                    <TableCell>{transaction.memo}</TableCell>
-                    <TableCell className="text-right">{transaction.amount}</TableCell>
-                    <TableCell>{transaction.updatedBy}</TableCell>
-                    <TableCell>{transaction.updatedAt}</TableCell>
                   </TableRow>
-                ))}
+                ) : transactions.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-4">
+                      No transactions found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  transactions.map((transaction, index) => (
+                    <TableRow key={transaction.id} className="has-[[data-state=checked]]:bg-muted/50">
+                      <TableCell>
+                        <Checkbox 
+                          id={`table-checkbox-${transaction.id}`}
+                          checked={selectedTransactions.has(transaction.id)}
+                          onCheckedChange={() => toggleTransaction(transaction.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{format(new Date(transaction.start_date), 'MM/dd/yyyy')}</TableCell>
+                      <TableCell>{transaction.transaction_type}</TableCell>
+                      <TableCell>
+                        {selectedAccount !== 'all' ? (
+                          accounts.find(a => a.id === selectedAccount)?.account_name || 'N/A'
+                        ) : (
+                          transaction.data.lines?.[0]?.category ? (
+                            accounts.find(a => 
+                              a.id === transaction.data.lines![0].category || 
+                              a.sub_accounts?.some(sa => sa.id === transaction.data.lines![0].category)
+                            )?.account_name || transaction.data.lines[0].category
+                          ) : 'N/A'
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {properties.find(p => p.id === transaction.property)?.name || transaction.property}
+                      </TableCell>
+                      <TableCell>
+                        {transaction.payee ? (
+                          payees.get(transaction.payee) ? (
+                            payees.get(transaction.payee)?.company ? (
+                              `${[payees.get(transaction.payee)?.first_name, payees.get(transaction.payee)?.last_name]
+                                .filter(Boolean)
+                                .join(' ')} | ${payees.get(transaction.payee)?.company}`
+                            ) : (
+                              [payees.get(transaction.payee)?.first_name, payees.get(transaction.payee)?.last_name]
+                                .filter(Boolean)
+                                .join(' ')
+                            )
+                          ) : 'Loading...'
+                        ) : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {transaction.memo?.root?.children?.[0]?.children?.length === 0 ? '-' : transaction.memo?.content || 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {new Intl.NumberFormat('en-US', {
+                          style: 'currency',
+                          currency: 'USD'
+                        }).format((() => {
+                          const account = accounts.find(a => 
+                            a.id === transaction.data.lines?.[0]?.category || 
+                            a.sub_accounts?.some(sa => sa.id === transaction.data.lines?.[0]?.category)
+                          )
+                          
+                          const isBankAccount = account?.account_type?.toLowerCase() === 'asset' && 
+                                             account?.account_subtype?.toLowerCase() === 'bank'
+
+                          if (isBankAccount && transaction.data.lines) {
+                            // For bank accounts, calculate based on the selected account
+                            return transaction.data.lines.reduce((sum, line) => {
+                              // Check if this line is for the selected account or its sub-accounts
+                              const isSelectedAccount = selectedAccount === 'all' || 
+                                line.category === selectedAccount ||
+                                accounts.find(a => a.id === selectedAccount)?.sub_accounts?.some(sa => sa.id === line.category)
+
+                              if (isSelectedAccount) {
+                                return sum + (line.debit_amount || 0) - (line.credit_amount || 0)
+                              }
+                              return sum
+                            }, 0)
+                          } else {
+                            // For other accounts, use total amount
+                            return transaction.data.total_amount || 0
+                          }
+                        })())}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {new Intl.NumberFormat('en-US', {
+                          style: 'currency',
+                          currency: 'USD'
+                        }).format(calculateRunningBalance(transaction, index))}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
               <TableFooter className="bg-muted">
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={8}>Total</TableCell>
-                  <TableCell className="text-right">{new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD'
-                  }).format(totalAmount)}</TableCell>
-                  <TableCell colSpan={2}></TableCell>
+                  <TableCell colSpan={7}>Total</TableCell>
+                  <TableCell className="text-right">
+                    {new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: 'USD'
+                    }).format(beginningBalance + totalAmount)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                   
+                  </TableCell>
                 </TableRow>
               </TableFooter>
             </Table>
             <p className="text-center text-sm text-muted-foreground">
-              Cash Basis • {format(currentDateTime, "MMM d, yyyy h:mm a")}
+              {accountingMethod === 'cash' ? 'Cash' : 'Accrual'} Basis • {format(currentDateTime, "MMM d, yyyy h:mm a")}
             </p>
           </div>
         </CardContent>

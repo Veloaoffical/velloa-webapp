@@ -4,7 +4,8 @@ import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { LucideIcon, Star } from "lucide-react"
+import { LucideIcon, Star, Search, X } from "lucide-react"
+import { Input } from "@/components/ui/input"
 import {
   FileText,
   Clock,
@@ -71,6 +72,7 @@ interface ReportSectionProps {
 
 export default function ReportsPage() {
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState<string>("")
 
   useEffect(() => {
     const savedFavorites = localStorage.getItem('reportFavorites')
@@ -670,59 +672,72 @@ export default function ReportsPage() {
     },
   ]
 
-  const ReportSection = ({ title, reports }: ReportSectionProps) => (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-        <div className="h-px bg-border mt-2" />
-      </div>
-      {reports.length === 0 && title === "Favorites" ? (
-        <div className="text-center py-12 bg-muted/10 rounded-lg flex flex-col items-center gap-3">
-          <Star className="w-8 h-8 text-muted-foreground/50" />
-          <p className="text-muted-foreground">No favorites set. Click the star icon on any report to add it to your favorites.</p>
+  const ReportSection = ({ title, reports }: ReportSectionProps) => {
+    // Filter reports based on search query
+    const filteredReports = searchQuery 
+      ? reports.filter(report => 
+          report.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+          report.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      : reports
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+          <div className="h-px bg-border mt-2" />
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-          {reports.map((report, index) => (
-            <Link 
-              key={index}
-              href={`/reports/${report.title.toLowerCase().replace(/\s+/g, "-")}`}
-            >
-              <Card className="hover:bg-accent/5 transition-colors cursor-pointer group">
-                <CardContent className="p-6">
-                  <div className="flex items-start space-x-4">
-                    <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                      {<report.icon className="h-5 w-5 text-primary" />}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between">
-                        <h3 className="font-medium leading-none mb-1">{report.title}</h3>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => toggleFavorite(report.id, e)}
-                        >
-                          <Star 
-                            className={`h-4 w-4 ${
-                              favorites.has(report.id) 
-                                ? 'fill-yellow-400 text-yellow-400' 
-                                : 'text-muted-foreground'
-                            }`}
-                          />
-                        </Button>
+        {filteredReports.length === 0 && title === "Favorites" && !searchQuery ? (
+          <div className="text-center py-12 bg-muted/10 rounded-lg flex flex-col items-center gap-3">
+            <Star className="w-8 h-8 text-muted-foreground/50" />
+            <p className="text-muted-foreground">No favorites set. Click the star icon on any report to add it to your favorites.</p>
+          </div>
+        ) : filteredReports.length === 0 && searchQuery ? (
+          <div className="text-center py-6">
+            <p className="text-muted-foreground">No reports found matching &quot;{searchQuery}&quot;</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+            {filteredReports.map((report, index) => (
+              <Link 
+                key={index}
+                href={`/reports/${report.title.toLowerCase().replace(/\s+/g, "-")}`}
+              >
+                <Card className="hover:bg-accent/5 transition-colors cursor-pointer group">
+                  <CardContent className="p-6">
+                    <div className="flex items-start space-x-4">
+                      <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                        {<report.icon className="h-5 w-5 text-primary" />}
                       </div>
-                      <p className="text-sm text-muted-foreground">{report.description}</p>
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between">
+                          <h3 className="font-medium leading-none mb-1">{report.title}</h3>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => toggleFavorite(report.id, e)}
+                          >
+                            <Star 
+                              className={`h-4 w-4 ${
+                                favorites.has(report.id) 
+                                  ? 'fill-yellow-400 text-yellow-400' 
+                                  : 'text-muted-foreground'
+                              }`}
+                            />
+                          </Button>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{report.description}</p>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  )
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const getFavoriteReports = (): Report[] => {
     const allReports = [
@@ -747,6 +762,29 @@ export default function ReportsPage() {
         <p className="text-muted-foreground">
           Generate and view detailed financial reports and analytics
         </p>
+      </div>
+
+      <div className="relative w-full max-w-sm mb-6">
+        <Input
+          type="search"
+          placeholder="Search reports..."
+          className="peer pe-9 ps-9 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+          <Search size={16} strokeWidth={2} aria-hidden="true" />
+        </div>
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center rounded-e-lg text-muted-foreground/80 outline-offset-2 transition-colors hover:text-foreground focus:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70"
+            aria-label="Clear search"
+            type="button"
+          >
+            <X size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       <div className="space-y-8">

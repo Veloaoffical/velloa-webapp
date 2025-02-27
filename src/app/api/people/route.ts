@@ -52,7 +52,8 @@ export async function GET() {
         phone,
         role,
         status,
-        company
+        company,
+        service_address
       `)
       .eq('company_id', companyMember.company_id);
 
@@ -78,8 +79,13 @@ export async function GET() {
       phone: person.phone,
       role: person.role,
       status: person.status,
-      company: person.company
-        }));
+      company: person.company,
+      service_address: person.service_address ? 
+        (typeof person.service_address === 'string' ? 
+          JSON.parse(person.service_address) : 
+          person.service_address
+        ) : undefined
+    }));
 
     console.log('Transformed people data:', {
       count: transformedPeople.length,

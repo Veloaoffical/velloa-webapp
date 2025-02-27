@@ -14,13 +14,16 @@ function RootLayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <html lang="en" className={`${GeistSans.variable}`} suppressHydrationWarning={true}>
+      
       <head>
+        
         <title>Velloa - Property Management</title>
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <meta name="theme-color" content="#1DB954" />
         <meta name="apple-mobile-web-app-title" content="Velloa" />
       </head>
       <body>
+        
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

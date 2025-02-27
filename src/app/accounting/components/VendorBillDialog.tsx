@@ -51,6 +51,10 @@ interface Vendor {
   phone?: string
   address?: string
   company?: string
+  service_address?: {
+    type: 'all' | 'specific'
+    property_ids?: string[]
+  }
 }
 
 interface Property {
@@ -239,7 +243,7 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
     fetchUnits();
   }, [lines]);
 
-  // Function to load vendors using the API
+  // Function to load vendors
   const loadVendors = async () => {
     try {
       setIsLoading(true);
@@ -286,7 +290,7 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
         throw new Error('Received invalid people data format from server');
       }
       
-      // Filter for vendors only
+      // Filter for vendors only and map to our interface
       const vendorsData = peopleData.filter(person => person.role === 'vendor').map(vendor => {
         // Create a display name from company or first/last name
         let name = '';
@@ -303,13 +307,22 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
           name = "Unnamed Vendor";
         }
 
+        // Parse service_address if it exists
+        let serviceAddress;
+        if (vendor.service_address) {
+          serviceAddress = typeof vendor.service_address === 'string' 
+            ? JSON.parse(vendor.service_address) 
+            : vendor.service_address;
+        }
+
         return {
           id: vendor.id,
           name: name,
           email: vendor.email || undefined,
           phone: vendor.phone || undefined,
           address: vendor.address || undefined,
-          company: vendor.company || undefined
+          company: vendor.company || undefined,
+          service_address: serviceAddress
         };
       });
       
@@ -336,6 +349,34 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
       setIsLoading(true);
       console.log('Loading properties from API...');
       
+      // Get the selected vendor first
+      const selectedVendorObj = vendors.find((vendor) => vendor.id === selectedVendor);
+      console.log('Selected vendor:', selectedVendorObj);
+      
+      if (!selectedVendorObj) {
+        console.log('No vendor selected, skipping property load');
+        setProperties([]);
+        return;
+      }
+
+      // Check if vendor has service_address configured
+      if (!selectedVendorObj.service_address) {
+        console.log('No service_address configured for vendor');
+        setProperties([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Check if vendor has any properties assigned when type is specific
+      if (selectedVendorObj.service_address.type === 'specific' && 
+          (!selectedVendorObj.service_address.property_ids || 
+           selectedVendorObj.service_address.property_ids.length === 0)) {
+        console.log('Vendor has no properties assigned');
+        setProperties([]);
+        setIsLoading(false);
+        return;
+      }
+
       const response = await fetch("/api/property");
       const responseData = await response.text(); // Get response as text first
       
@@ -380,10 +421,21 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
         throw new Error('Received invalid properties data format from server');
       }
       
-      console.log(`Successfully loaded ${propertiesData.length} properties:`, propertiesData);
+      // Filter properties based on vendor's service_address
+      console.log('Vendor service_address:', selectedVendorObj.service_address);
+      
+      if (selectedVendorObj.service_address.type === 'specific') {
+        console.log('Filtering for specific properties:', selectedVendorObj.service_address.property_ids);
+        propertiesData = propertiesData.filter(property => 
+          selectedVendorObj.service_address?.property_ids?.includes(property.id)
+        );
+      } else {
+        console.log('Vendor has access to all properties');
+      }
+      
+      console.log(`Filtered to ${propertiesData.length} properties for vendor`);
       setProperties(propertiesData);
       
-      // Units are now loaded in the useEffect when property changes
     } catch (error) {
       console.error("Error loading properties:", error);
       
@@ -501,30 +553,27 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
 
       // Prepare the payload
       const billData = {
-        vendor_id: selectedVendor,
-        bill_date: billDate ? format(billDate, "yyyy-MM-dd") : undefined,
-        due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : undefined,
-        bill_type: billType,
+        people_id: selectedVendor,
+        bill_date: billDate ? format(billDate, "yyyy-MM-dd") : null,
+        due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
         lines: lines.map(line => ({
-          property_id: line.property,
-          unit_id: line.unit || undefined,
+          description: line.description || '',
+          amount: parseFloat(line.amount) || 0,
           category_id: line.category,
-          description: line.description,
-          amount: parseFloat(line.amount)
+          property_id: line.property || null,
+          unit_id: line.unit ? line.unit : null
         })),
-        memo: memo || undefined,
+        memo: memo && memo !== emptyEditorState ? memo : null,
         reference: newReference,
-        ...(billType === "recurring" && {
-          recurring_details: {
-            start_date: startDate ? format(startDate, "yyyy-MM-dd") : undefined,
-            end_date: !repeatForever && endDate ? format(endDate, "yyyy-MM-dd") : undefined,
-            frequency: frequency,
-            repeat_forever: repeatForever
-          }
-        })
+        status: "unpaid",
+        ...(billType === "recurring" ? {
+          start_date: startDate ? format(startDate, "yyyy-MM-dd") : null,
+          frequency: frequency,
+          repeat_infinite: repeatForever
+        } : {})
       }
 
-      console.log("Submitting bill with vendor_id:", selectedVendor);
+      console.log("Submitting bill data:", JSON.stringify(billData, null, 2));
 
       // Save the bill - assuming we'll create an API endpoint for this
       const response = await fetch("/api/accounting/bills", {
@@ -534,6 +583,8 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
         },
         body: JSON.stringify(billData),
       })
+
+      console.log("Response status:", response.status);
 
       let responseData: BillResponse | null = null;
       
@@ -676,6 +727,13 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
     setRepeatForever(false)
   }
 
+  // Update useEffect to reload properties when vendor changes
+  useEffect(() => {
+    if (selectedVendor) {
+      loadProperties();
+    }
+  }, [selectedVendor]);
+
   // Component UI will go here
   return (
     <Dialog 
@@ -730,7 +788,7 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                     variant="outline"
                     role="combobox"
                     aria-expanded={vendorSearchOpen}
-                    className="w-full h-[42px] bg-background justify-between px-3 font-normal"
+                    className="w-[300px] h-[42px] bg-background justify-between px-3 font-normal"
                     disabled={isLoading}
                   >
                     {isLoading ? (
@@ -751,7 +809,7 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent
-                  className="border-input w-[400px] p-0"
+                  className="border-input w-[300px] p-0"
                   align="start"
                 >
                   <Command>
@@ -801,6 +859,7 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                   </Command>
                 </PopoverContent>
               </Popover>
+              <div className="border-b mt-4" />
             </div>
 
             {/* Bill Type, Date and Due Date Row */}
@@ -989,18 +1048,27 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
                         <Select
                           value={line.property}
                           onValueChange={(value) => handleLineChange(index, "property", value)}
+                          disabled={!selectedVendor}
                         >
                           <SelectTrigger className={`bg-background h-[42px] ${!line.property ? 'text-muted-foreground' : ''}`}>
-                            <SelectValue placeholder="Select property">
+                            <SelectValue placeholder={selectedVendor ? "Select property" : "Select a vendor first"}>
                               {line.property && properties.find(p => p.id === line.property)?.name}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent className="max-h-[300px]">
-                            {properties.map((property) => (
-                              <SelectItem key={property.id} value={property.id}>
-                                {property.name}
-                              </SelectItem>
-                            ))}
+                            {properties.length > 0 ? (
+                              properties.map((property) => (
+                                <SelectItem key={property.id} value={property.id}>
+                                  {property.name}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <div className="py-2 px-2 text-sm text-muted-foreground">
+                                {!selectedVendor 
+                                  ? "Select a vendor first" 
+                                  : "No service address configured for this vendor"}
+                              </div>
+                            )}
                           </SelectContent>
                         </Select>
                       </TableCell>

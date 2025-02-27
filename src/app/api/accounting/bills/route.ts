@@ -1,24 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { customAlphabet } from "nanoid";
 import { z } from "zod";
+
+// Create a custom nanoid that only uses capital letters and numbers
+const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 10);
+
+// Define interface for charge data
+interface ChargeData {
+  company_id: string;
+  people_id: string;
+  bill_date: string;
+  due_date: string;
+  property_id: string | null;
+  charge_amount: {
+    lines: {
+      line_id: string;
+      amount: number;
+      category: string;
+      reference: number;
+      description?: string;
+      property_id: string | null;
+      unit_id: string | null;
+    }[];
+    total_amount: number;
+  };
+  amount_remaining: {
+    lines: {
+      line_id: string;
+      amount: number;
+      category: string;
+      reference: number;
+      description?: string;
+      property_id: string | null;
+      unit_id: string | null;
+    }[];
+    total_amount: number;
+  };
+  memo?: unknown;
+  reference?: string;
+  status: string;
+  created_by: string;
+  start_date?: string;
+  frequency?: string;
+  repeat_infinite?: boolean;
+  unit_id: string | null;
+}
 
 // Define the schema for bill line items
 const BillLineSchema = z.object({
-  property_id: z.string().uuid(),
-  unit_id: z.string().uuid().optional(),
-  category_id: z.string().uuid(),
   description: z.string().optional(),
-  amount: z.number().positive()
+  amount: z.number().positive(),
+  category_id: z.string().uuid(),
+  property_id: z.string().uuid().nullable(),
+  unit_id: z.string().uuid().nullable(),
+  line_id: z.string().optional()
 });
 
 // Define the schema for the bill creation request
 const BillCreateSchema = z.object({
-  vendor_id: z.string().uuid(),
+  people_id: z.string().uuid(),
   bill_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   lines: z.array(BillLineSchema).min(1),
-  memo: z.string().optional(),
-  reference: z.string().optional()
+  memo: z.any().nullable().optional(),
+  reference: z.string().optional(),
+  status: z.string(),
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  frequency: z.string().optional(),
+  repeat_infinite: z.boolean().optional()
 });
 
 export async function POST(request: NextRequest) {
@@ -61,10 +111,11 @@ export async function POST(request: NextRequest) {
 
     // Verify the vendor exists and belongs to the company
     const { data: vendorData, error: vendorError } = await supabase
-      .from("vendors")
+      .from("people")
       .select("id")
-      .eq("id", billData.vendor_id)
+      .eq("id", billData.people_id)
       .eq("company_id", company_id)
+      .eq("role", "vendor")
       .single();
 
     if (vendorError || !vendorData) {
@@ -74,76 +125,119 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Start a transaction to create the bill and its line items
-    const { data: bill, error: billError } = await supabase
-      .from("vendor_bills")
-      .insert({
-        company_id,
-        vendor_id: billData.vendor_id,
-        bill_date: billData.bill_date,
-        due_date: billData.due_date,
-        memo: billData.memo,
-        reference: billData.reference,
-        status: "unpaid",
-        created_by: user.id
-      })
-      .select("id")
+    // Verify the unit exists if one is specified
+    const firstLine = billData.lines[0];
+    let validatedUnitId: string | null = null;
+    
+    console.log("Checking unit_id:", firstLine.unit_id);
+    // Only proceed with unit validation if unit_id exists and is not null
+    if (firstLine.unit_id) {
+      console.log("Validating unit_id:", firstLine.unit_id);
+      const { data: unitData, error: unitError } = await supabase
+        .from("units")
+        .select("id")
+        .eq("id", firstLine.unit_id)
+        .eq("property_id", firstLine.property_id)
+        .single();
+
+      if (unitError) {
+        console.error("Error verifying unit:", unitError);
+        return NextResponse.json(
+          { error: "Invalid unit selected" },
+          { status: 400 }
+        );
+      }
+
+      if (!unitData) {
+        console.error("Unit not found:", firstLine.unit_id);
+        return NextResponse.json(
+          { error: "Unit not found" },
+          { status: 404 }
+        );
+      }
+      
+      validatedUnitId = unitData.id;
+      console.log("Unit validated:", validatedUnitId);
+    }
+
+    // Transform line items and calculate total
+    const transformedLines = billData.lines.map(line => {
+      const lineItem: {
+        line_id: string;
+        amount: number;
+        category: string;
+        reference: number;
+        description?: string;
+        property_id: string | null;
+        unit_id: string | null;
+      } = {
+        line_id: line.line_id || nanoid(),
+        amount: line.amount,
+        category: line.category_id,
+        reference: 0,
+        description: line.description || undefined,
+        property_id: line.property_id,
+        unit_id: null // Default to null
+      };
+      
+      // Only set unit_id if it has a valid value
+      if (line.unit_id) {
+        lineItem.unit_id = line.unit_id;
+      }
+      
+      return lineItem;
+    });
+
+    const totalAmount = transformedLines.reduce((sum, line) => sum + line.amount, 0);
+
+    // Prepare charge data
+    const chargeData: ChargeData = {
+      company_id,
+      people_id: billData.people_id,
+      bill_date: billData.bill_date,
+      due_date: billData.due_date,
+      property_id: billData.lines[0].property_id,
+      unit_id: null, // Default to null
+        charge_amount: {
+          lines: transformedLines,
+          total_amount: totalAmount
+        },
+        amount_remaining: {
+          lines: transformedLines,
+          total_amount: totalAmount
+        },
+      memo: billData.memo,
+      reference: billData.reference,
+      status: billData.status,
+      created_by: user.id,
+      start_date: billData.start_date,
+      frequency: billData.frequency,
+      repeat_infinite: billData.repeat_infinite
+    };
+
+    // Only set unit_id if it exists and is not null
+    if (firstLine.unit_id) {
+      chargeData.unit_id = validatedUnitId;
+    }
+
+    console.log("Creating charge with data:", chargeData);
+
+    // Create the charge record
+    const { data: charge, error: chargeError } = await supabase
+      .from("charges")
+      .insert(chargeData)
+      .select()
       .single();
 
-    if (billError || !bill) {
-      console.error("Error creating bill:", billError);
+    if (chargeError) {
+      console.error("Error creating charge:", chargeError);
       return NextResponse.json(
-        { error: "Failed to create bill" },
+        { error: chargeError.message || "Failed to create bill" },
         { status: 500 }
       );
     }
 
-    // Create bill line items
-    const billLines = billData.lines.map(line => ({
-      bill_id: bill.id,
-      property_id: line.property_id,
-      unit_id: line.unit_id,
-      category_id: line.category_id,
-      description: line.description || "",
-      amount: line.amount,
-      company_id
-    }));
-
-    const { error: linesError } = await supabase
-      .from("vendor_bill_lines")
-      .insert(billLines);
-
-    if (linesError) {
-      console.error("Error creating bill lines:", linesError);
-      // If there's an error with the lines, we should delete the bill to maintain consistency
-      await supabase.from("vendor_bills").delete().eq("id", bill.id);
-      return NextResponse.json(
-        { error: "Failed to create bill lines" },
-        { status: 500 }
-      );
-    }
-
-    // Create a transaction record for accounting
-    const totalAmount = billData.lines.reduce((sum, line) => sum + line.amount, 0);
-    
-    const { error: transactionError } = await supabase
-      .from("accounting_transactions")
-      .insert({
-        company_id,
-        transaction_date: billData.bill_date,
-        transaction_type: "vendor_bill",
-        reference_id: bill.id,
-        amount: totalAmount,
-        description: `Bill for ${billData.vendor_id}`,
-        created_by: user.id
-      });
-
-    if (transactionError) {
-      console.error("Error creating transaction record:", transactionError);
-      // We'll still return success since the bill was created
-    }
-
-    return NextResponse.json({ id: bill.id, success: true });
+    return NextResponse.json({ id: charge.id, success: true });
   } catch (error) {
     console.error("Unexpected error in bill creation:", error);
     return NextResponse.json(

@@ -79,8 +79,9 @@ interface ChargeLine {
 }
 
 interface ChargeResponse {
-  id: string
-  error?: string
+  id: string;
+  success?: boolean;
+  error?: string;
 }
 
 function Placeholder() {
@@ -339,23 +340,26 @@ export function PostChargeDialog({ open, onOpenChange }: PostChargeDialogProps) 
         return
       }
 
-      // Generate a new reference before saving
-      const newReference = generateReference()
-      setReference(newReference)
+      // Format the lines data according to the required structure
+      const formattedLines = lines.map(line => ({
+        category_id: line.category,
+        description: line.description || '',
+        amount: parseFloat(line.amount) || 0
+      }))
 
       // Prepare the payload
       const chargeData = {
         lease_id: selectedLease,
         due_date: format(dueDate, "yyyy-MM-dd"),
-        category_id: lines[0].category,
-        description: lines[0].description,
-        amount: parseFloat(lines[0].amount),
-        memo: memo || undefined,
-        reference: newReference,
-        share_with_tenants: shareWithTenants
+        lines: formattedLines,
+        memo: memo && memo !== emptyEditorState ? memo : null,
+        reference: reference,
+        share_with_tenants: shareWithTenants,
+        total_amount: getTotalAmount()
       }
 
       console.log("Submitting charge with lease_id:", selectedLease);
+      console.log("Charge data:", JSON.stringify(chargeData, null, 2));
 
       // Save the charge
       const response = await fetch("/api/accounting/charges", {
@@ -679,7 +683,7 @@ export function PostChargeDialog({ open, onOpenChange }: PostChargeDialogProps) 
                           <SelectContent className="max-h-[300px]">
                             {Object.entries(
                               categories
-                                .filter(category => category.account_type === "Revenue")
+                                .filter(category => ["Revenue", "Liability", "Expense"].includes(category.account_type))
                                 .reduce((acc, category) => {
                                   if (!acc[category.account_type]) {
                                     acc[category.account_type] = [];
@@ -687,7 +691,12 @@ export function PostChargeDialog({ open, onOpenChange }: PostChargeDialogProps) 
                                   acc[category.account_type].push(category);
                                   return acc;
                                 }, {} as Record<string, ChargeCategory[]>)
-                            ).map(([type, cats]) => (
+                            )
+                            .sort(([a], [b]) => {
+                              const order = ["Revenue", "Liability", "Expense"];
+                              return order.indexOf(a) - order.indexOf(b);
+                            })
+                            .map(([type, cats]) => (
                               <SelectGroup key={type}>
                                 <SelectLabel>{type}</SelectLabel>
                                 {cats.map((category) => (
@@ -946,7 +955,7 @@ export function PostChargeDialog({ open, onOpenChange }: PostChargeDialogProps) 
             </div>
            
             <Button 
-              onClick={handleSaveAndNew}
+              onClick={resetForm}
               className="w-full"
             >
               Create Another Charge

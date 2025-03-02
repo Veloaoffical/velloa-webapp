@@ -5,7 +5,7 @@ import { customAlphabet } from 'nanoid';
 import { z } from 'zod';
 
 // Create a custom nanoid that only uses capital letters and numbers
-const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 10);
+const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 8);
 
 // Define interfaces for our data structures
 interface Category {
@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
     
     // Add debit entry for accounts receivable (total amount)
     transactionLines.push({
-      account_id: accountsReceivableId,
+      category: accountsReceivableId,
       description: "Tenant charge - Accounts Receivable",
       debit_amount: chargeData.total_amount,
       credit_amount: 0,
@@ -242,7 +242,7 @@ export async function POST(request: NextRequest) {
     // Add credit entries for each charge line
     chargeData.lines.forEach(line => {
       transactionLines.push({
-        account_id: line.category_id,
+        category: line.category_id,
         description: line.description || "Tenant charge",
         debit_amount: 0,
         credit_amount: line.amount,
@@ -272,7 +272,7 @@ export async function POST(request: NextRequest) {
         share_files: chargeData.share_with_tenants || false,
         status: 'unpaid',
         created_by: user.id,
-        payee: leaseData.tenant_id || null
+        payee: null
       });
     
     if (transactionError) {
@@ -281,6 +281,106 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to create transaction: ' + transactionError.message }, 
         { status: 500 }
       );
+    }
+    
+    // Update account balances for each transaction line
+    for (const line of transactionLines) {
+      const { category, debit_amount, credit_amount } = line;
+      
+      // First try to find and update sub-account
+      const { data: subAccount, error: subAccountError } = await supabase
+        .from('chart_of_sub_accounts')
+        .select('id, account_balance, account_type, parent_account')
+        .eq('id', category)
+        .single();
+
+      if (!subAccountError && subAccount) {
+        // Always increase the account balance regardless of account type
+        const amount = Math.abs(credit_amount) + Math.abs(debit_amount);
+        
+        // Update sub-account balance
+        const currentBalance = parseFloat(subAccount.account_balance) || 0;
+        const newBalance = currentBalance + amount;
+
+        // Only update the account balance without property balance
+        const { error: updateError } = await supabase
+          .from('chart_of_sub_accounts')
+          .update({ 
+            account_balance: newBalance.toString()
+          })
+          .eq('id', category);
+
+        if (updateError) {
+          console.error('Error updating sub-account balance:', updateError);
+          // Continue with other lines even if one update fails
+        }
+
+        // Update parent account if it exists
+        if (subAccount.parent_account) {
+          const { data: parentAccount, error: parentError } = await supabase
+            .from('chart_of_accounts')
+            .select('account_balance, account_type')
+            .eq('id', subAccount.parent_account)
+            .single();
+
+          if (!parentError && parentAccount) {
+            // Always increase the parent account balance
+            const parentAmount = Math.abs(credit_amount) + Math.abs(debit_amount);
+            
+            const parentCurrentBalance = parseFloat(parentAccount.account_balance) || 0;
+            const parentNewBalance = parentCurrentBalance + parentAmount;
+
+            const { error: parentUpdateError } = await supabase
+              .from('chart_of_accounts')
+              .update({ 
+                account_balance: parentNewBalance.toString()
+              })
+              .eq('id', subAccount.parent_account);
+
+            if (parentUpdateError) {
+              console.error('Error updating parent account balance:', parentUpdateError);
+              // Continue with other lines even if one update fails
+            }
+          }
+        }
+
+        continue; // Skip main account update if sub-account was found and updated
+      }
+
+      // If not found in sub-accounts, update main account
+      const { data: mainAccount, error: mainAccountError } = await supabase
+        .from('chart_of_accounts')
+        .select('id, account_balance, account_type')
+        .eq('id', category)
+        .single();
+
+      if (mainAccountError) {
+        console.error('Error finding account:', mainAccountError);
+        // Continue with other lines even if one account is not found
+        continue;
+      }
+
+      if (mainAccount) {
+        // Always increase the account balance
+        const amount = Math.abs(credit_amount) + Math.abs(debit_amount);
+        
+        // Update main account balance
+        const currentBalance = parseFloat(mainAccount.account_balance) || 0;
+        const newBalance = currentBalance + amount;
+
+        // Only update the account balance without property balance
+        const { error: updateError } = await supabase
+          .from('chart_of_accounts')
+          .update({ 
+            account_balance: newBalance.toString()
+          })
+          .eq('id', category);
+
+        if (updateError) {
+          console.error('Error updating account balance:', updateError);
+          // Continue with other lines even if one update fails
+        }
+      }
     }
     
     // Create the charge record linked to the transaction

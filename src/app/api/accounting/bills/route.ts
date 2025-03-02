@@ -5,7 +5,7 @@ import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 
 // Create a custom nanoid that only uses capital letters and numbers
-const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 10);
+const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 8);
 
 // Define interface for charge data
 interface ChargeData {
@@ -177,12 +177,12 @@ export async function POST(request: NextRequest) {
 
     // Transform line items and calculate total amount
     const transformedLines = billData.lines.map(line => ({
-      line_id: line.line_id || nanoid(),
-      amount: line.amount,
-      category: line.category_id,
-      reference: 0,
+        line_id: line.line_id || nanoid(),
+        amount: line.amount,
+        category: line.category_id,
+        reference: 0,
       description: line.description,
-      property_id: line.property_id,
+        property_id: line.property_id,
       unit_id: line.unit_id
     }));
 
@@ -255,7 +255,7 @@ export async function POST(request: NextRequest) {
     
     // Add credit entry for accounts payable (total amount)
     transactionLines.push({
-      account_id: accountsPayableId,
+      category: accountsPayableId,
       description: "Vendor bill - Accounts Payable",
       debit_amount: 0,
       credit_amount: totalAmount,
@@ -265,7 +265,7 @@ export async function POST(request: NextRequest) {
     // Add debit entries for each bill line
     transformedLines.forEach(line => {
       transactionLines.push({
-        account_id: line.category,
+        category: line.category,
         description: line.description || "Vendor bill",
         debit_amount: line.amount,
         credit_amount: 0,
@@ -305,6 +305,106 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+    
+    // Update account balances for each transaction line
+    for (const line of transactionLines) {
+      const { category, debit_amount, credit_amount } = line;
+      
+      // First try to find and update sub-account
+      const { data: subAccount, error: subAccountError } = await supabase
+        .from('chart_of_sub_accounts')
+        .select('id, account_balance, account_type, parent_account')
+        .eq('id', category)
+        .single();
+
+      if (!subAccountError && subAccount) {
+        // Always increase the account balance regardless of account type
+        const amount = Math.abs(credit_amount) + Math.abs(debit_amount);
+        
+        // Update sub-account balance
+        const currentBalance = parseFloat(subAccount.account_balance) || 0;
+        const newBalance = currentBalance + amount;
+
+        // Only update the account balance without property balance
+        const { error: updateError } = await supabase
+          .from('chart_of_sub_accounts')
+          .update({ 
+            account_balance: newBalance.toString()
+          })
+          .eq('id', category);
+
+        if (updateError) {
+          console.error('Error updating sub-account balance:', updateError);
+          // Continue with other lines even if one update fails
+        }
+
+        // Update parent account if it exists
+        if (subAccount.parent_account) {
+          const { data: parentAccount, error: parentError } = await supabase
+            .from('chart_of_accounts')
+            .select('account_balance, account_type')
+            .eq('id', subAccount.parent_account)
+            .single();
+
+          if (!parentError && parentAccount) {
+            // Always increase the parent account balance
+            const parentAmount = Math.abs(credit_amount) + Math.abs(debit_amount);
+            
+            const parentCurrentBalance = parseFloat(parentAccount.account_balance) || 0;
+            const parentNewBalance = parentCurrentBalance + parentAmount;
+
+            const { error: parentUpdateError } = await supabase
+              .from('chart_of_accounts')
+              .update({ 
+                account_balance: parentNewBalance.toString()
+              })
+              .eq('id', subAccount.parent_account);
+
+            if (parentUpdateError) {
+              console.error('Error updating parent account balance:', parentUpdateError);
+              // Continue with other lines even if one update fails
+            }
+          }
+        }
+
+        continue; // Skip main account update if sub-account was found and updated
+      }
+
+      // If not found in sub-accounts, update main account
+      const { data: mainAccount, error: mainAccountError } = await supabase
+        .from('chart_of_accounts')
+        .select('id, account_balance, account_type')
+        .eq('id', category)
+        .single();
+
+      if (mainAccountError) {
+        console.error('Error finding account:', mainAccountError);
+        // Continue with other lines even if one account is not found
+        continue;
+      }
+
+      if (mainAccount) {
+        // Always increase the account balance
+        const amount = Math.abs(credit_amount) + Math.abs(debit_amount);
+        
+        // Update main account balance
+        const currentBalance = parseFloat(mainAccount.account_balance) || 0;
+        const newBalance = currentBalance + amount;
+
+        // Only update the account balance without property balance
+        const { error: updateError } = await supabase
+          .from('chart_of_accounts')
+          .update({ 
+            account_balance: newBalance.toString()
+          })
+          .eq('id', category);
+
+        if (updateError) {
+          console.error('Error updating account balance:', updateError);
+          // Continue with other lines even if one update fails
+        }
+      }
+    }
 
     // Prepare charge data
     const chargeData: ChargeData = {
@@ -314,14 +414,14 @@ export async function POST(request: NextRequest) {
       due_date: billData.due_date,
       property_id: firstLine.property_id,
       unit_id: null, // Default to null
-      charge_amount: {
-        lines: transformedLines,
-        total_amount: totalAmount
-      },
-      amount_remaining: {
-        lines: transformedLines,
-        total_amount: totalAmount
-      },
+        charge_amount: {
+          lines: transformedLines,
+          total_amount: totalAmount
+        },
+        amount_remaining: {
+          lines: transformedLines,
+          total_amount: totalAmount
+        },
       memo: processedMemo,
       reference: billData.reference,
       status: billData.status,

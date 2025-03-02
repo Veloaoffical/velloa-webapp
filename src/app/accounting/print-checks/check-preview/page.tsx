@@ -249,6 +249,8 @@ export default function CheckPreviewPage() {
                   size: 8.5in 11in;
                 }
                 body {
+                  background: white !important;
+                  color: black !important;
                   print-color-adjust: exact;
                   -webkit-print-color-adjust: exact;
                   margin: 0 0 0 0 !important;
@@ -266,6 +268,17 @@ export default function CheckPreviewPage() {
                 * {
                   background-image: none !important;
                 }
+                /* Force light mode for printing */
+                .bg-card {
+                  background: white !important;
+                }
+                .text-card-foreground {
+                  color: black !important;
+                }
+                /* Ensure all text is black for printing */
+                div, span, p, h1, h2, h3, h4, h5, h6 {
+                  color: black !important;
+                }
               }
             `}</style>
             <div className="print:shadow-none print:border-none print:p-0">
@@ -273,7 +286,7 @@ export default function CheckPreviewPage() {
                 {/* First Check Section */}
                 <div className="mb-2 print:mb-0">
                   {/* Main Check */}
-                  <div className="relative border border-gray-300 bg-white w-[8.5in] h-[3.5in] mx-auto p-6 print:border-none">
+                  <div className="relative border border-gray-300 bg-card text-card-foreground w-[8.5in] h-[3.5in] mx-auto p-6 print:border-none">
                     {/* Date */}
                     <div className="absolute top-[72px] right-8 text-[12px]">
                       <div className="border-gray-400 px-2 py-[2px]">
@@ -350,7 +363,7 @@ export default function CheckPreviewPage() {
                 {/* Second Check Section - Transaction List */}
                 <div className="mb-2 print:mb-0 print:-mt-1">
                   {/* Transaction List */}
-                  <div className="relative border border-gray-300 bg-white w-[8.5in] h-[3.5in] mx-auto p-6 print:border-none">
+                  <div className="relative border border-gray-300 bg-card text-card-foreground w-[8.5in] h-[3.5in] mx-auto p-6 print:border-none">
                     <div className="flex justify-between text-[12px] mb-4">
                       <div className="flex gap-4">
                         <div>{transaction.start_date
@@ -397,7 +410,7 @@ export default function CheckPreviewPage() {
                 {/* Third Check Section */}
                 <div className="mb-2 print:mb-0 print:-mt-1">
                   {/* Transaction List */}
-                  <div className="relative border border-gray-300 bg-white w-[8.5in] h-[3.5in] mx-auto p-6 print:border-none">
+                  <div className="relative border border-gray-300 bg-card text-card-foreground w-[8.5in] h-[3.5in] mx-auto p-6 print:border-none">
                     <div className="flex justify-between text-[12px] mb-4">
                       <div className="flex gap-4">
                         <div>{transaction.start_date

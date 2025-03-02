@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { XAxis, Legend, ResponsiveContainer, Area, AreaChart, CartesianGrid } from "recharts"
+import { XAxis, Legend, Area, AreaChart, CartesianGrid } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Button } from "@/components/ui/button"
@@ -241,49 +241,49 @@ export default function AccountingPage() {
               </CardHeader>
               <CardContent className="pt-0">
                 <ChartContainer config={profitLossConfig}>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <AreaChart
-                      data={profitLossData}
-                      margin={{
-                        top: 5,
-                        right: 10,
-                        left: 10,
-                        bottom: 0,
-                      }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis
-                        dataKey="month"
-                        tickLine={false}
-                        axisLine={false}
-                        tickMargin={8}
-                        fontSize={11}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '11px' }} />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Area
-                        type="monotone"
-                        dataKey="revenue"
-                        stroke="var(--color-revenue)"
-                        fill="var(--color-revenue)"
-                        fillOpacity={0.4}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="costs"
-                        stroke="var(--color-costs)"
-                        fill="var(--color-costs)"
-                        fillOpacity={0.4}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="netIncome"
-                        stroke="var(--color-netIncome)"
-                        fill="var(--color-netIncome)"
-                        fillOpacity={0.4}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  <AreaChart
+                    width={500}
+                    height={200}
+                    data={profitLossData}
+                    margin={{
+                      top: 5,
+                      right: 10,
+                      left: 10,
+                      bottom: 0,
+                    }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="month"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      fontSize={11}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="var(--color-revenue)"
+                      fill="var(--color-revenue)"
+                      fillOpacity={0.4}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="costs"
+                      stroke="var(--color-costs)"
+                      fill="var(--color-costs)"
+                      fillOpacity={0.4}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="netIncome"
+                      stroke="var(--color-netIncome)"
+                      fill="var(--color-netIncome)"
+                      fillOpacity={0.4}
+                    />
+                  </AreaChart>
                 </ChartContainer>
               </CardContent>
             </Card>
@@ -303,42 +303,42 @@ export default function AccountingPage() {
               </CardHeader>
               <CardContent className="pt-0">
                 <ChartContainer config={monthlyTrendsConfig}>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <AreaChart
-                      data={monthlyTrendsData}
-                      margin={{
-                        top: 5,
-                        right: 10,
-                        left: 10,
-                        bottom: 0,
-                      }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis
-                        dataKey="month"
-                        tickLine={false}
-                        axisLine={false}
-                        tickMargin={8}
-                        fontSize={11}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '11px' }} />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Area
-                        type="monotone"
-                        dataKey="income"
-                        stroke="var(--color-income)"
-                        fill="var(--color-income)"
-                        fillOpacity={0.4}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="expenses"
-                        stroke="var(--color-expenses)"
-                        fill="var(--color-expenses)"
-                        fillOpacity={0.4}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  <AreaChart
+                    width={500}
+                    height={200}
+                    data={monthlyTrendsData}
+                    margin={{
+                      top: 5,
+                      right: 10,
+                      left: 10,
+                      bottom: 0,
+                    }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="month"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      fontSize={11}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Area
+                      type="monotone"
+                      dataKey="income"
+                      stroke="var(--color-income)"
+                      fill="var(--color-income)"
+                      fillOpacity={0.4}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="expenses"
+                      stroke="var(--color-expenses)"
+                      fill="var(--color-expenses)"
+                      fillOpacity={0.4}
+                    />
+                  </AreaChart>
                 </ChartContainer>
               </CardContent>
             </Card>

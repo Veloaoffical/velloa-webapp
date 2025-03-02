@@ -2,6 +2,9 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+i am so mad u didnt commit on feb 28th,2025
+
+
 First, run the development server:
 
 ```bash

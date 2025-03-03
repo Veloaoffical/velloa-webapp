@@ -32,6 +32,7 @@ import { CheckDialog } from "./components/CheckDialog"
 import { BankDepositDialog } from "./components/BankDepositDialog"
 import { ReceivePaymentDialog } from "./components/ReceivePaymentDialog"
 import { VendorBillDialog } from "./components/VendorBillDialog"
+import { IssueCreditDialog } from "./components/IssueCreditDialog"
 
 const profitLossData = [
   { month: "Jan", revenue: 4500, costs: 3000, netIncome: 1500 },
@@ -119,6 +120,8 @@ export default function AccountingPage() {
   const [showBankDepositDialog, setShowBankDepositDialog] = useState(false)
   const [showReceivePaymentDialog, setShowReceivePaymentDialog] = useState(false)
   const [showBillsDialog, setShowBillsDialog] = useState(false)
+  const [showIssueCreditDialog, setShowIssueCreditDialog] = useState(false)
+  
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -145,7 +148,7 @@ export default function AccountingPage() {
                 <HandCoins className="w-4 h-4 me-2 opacity-60" />
                 Receive Payment
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowIssueCreditDialog(true)}>
                 <CreditCard className="w-4 h-4 me-2 opacity-60" />
                 Issue Credit
               </DropdownMenuItem>
@@ -630,6 +633,10 @@ export default function AccountingPage() {
       <VendorBillDialog
         open={showBillsDialog}
         onOpenChange={setShowBillsDialog}
+      />
+      <IssueCreditDialog
+        open={showIssueCreditDialog}
+        onOpenChange={setShowIssueCreditDialog}
       />
     </div>
   )

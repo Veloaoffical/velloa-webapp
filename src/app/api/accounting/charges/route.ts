@@ -140,6 +140,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Extract tenant ID from the lease data
+    let people_id = null;
+    if (leaseData.tenant_id) {
+      try {
+        const tenantData = typeof leaseData.tenant_id === 'string' 
+          ? JSON.parse(leaseData.tenant_id) 
+          : leaseData.tenant_id;
+        
+        if (Array.isArray(tenantData) && tenantData.length > 0) {
+          people_id = tenantData[0].id;
+        } else if (tenantData.id) {
+          people_id = tenantData.id;
+        }
+      } catch (e) {
+        console.error('Error parsing tenant data:', e);
+      }
+    }
+
     // Get company default accounts settings to find the accounts receivable account
     const { data: settings, error: settingsError } = await supabase
       .from('company_settings')
@@ -396,7 +414,7 @@ export async function POST(request: NextRequest) {
         lease_id: chargeData.lease_id,
         property_id: leaseData.property_id,
         unit_id: leaseData.unit_id,
-        people_id: null,
+        people_id: people_id,
         transaction_id: transactionId,
         charge_amount: {
           lines: chargeData.lines,

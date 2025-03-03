@@ -34,10 +34,12 @@ interface DbCharge {
   charge_amount: {
     lines: ChargeLine[];
     total_amount: number;
+    accounts_receivable_id?: string;
   };
   amount_remaining: {
     lines: ChargeLine[];
     total_amount: number;
+    accounts_receivable_id?: string;
   };
   due_date: string;
   memo: string | null;
@@ -46,6 +48,7 @@ interface DbCharge {
   created_at: string;
   created_by: string;
   share_with_tenants: boolean;
+  charge_type: string;
   lease_contracts?: {
     tenant_name: string;
     unit_name: string;
@@ -69,7 +72,8 @@ const ChargeCreateSchema = z.object({
   memo: z.any().nullable().optional(),
   reference: z.string().optional(),
   share_with_tenants: z.boolean().optional(),
-  total_amount: z.number().positive()
+  total_amount: z.number().positive(),
+  charge_type: z.string().default('charge')
 });
 
 export async function POST(request: NextRequest) {
@@ -396,18 +400,21 @@ export async function POST(request: NextRequest) {
         transaction_id: transactionId,
         charge_amount: {
           lines: chargeData.lines,
-          total_amount: chargeData.total_amount
+          total_amount: chargeData.total_amount,
+          accounts_receivable_id: accountsReceivableId
         },
         amount_remaining: {
           lines: chargeData.lines,
-          total_amount: chargeData.total_amount
+          total_amount: chargeData.total_amount,
+          accounts_receivable_id: accountsReceivableId
         },
         due_date: chargeData.due_date,
         memo: processedMemo,
         reference: chargeData.reference || nanoid().substring(0, 8).toUpperCase(),
         status: 'unpaid',
         created_by: user.id,
-        share_with_tenants: chargeData.share_with_tenants || false
+        share_with_tenants: chargeData.share_with_tenants || false,
+        charge_type: chargeData.charge_type || 'charge'
       })
       .select()
       .single();
@@ -491,7 +498,8 @@ export async function GET(request: NextRequest) {
           status,
           created_at,
           created_by,
-          share_with_tenants
+          share_with_tenants,
+          charge_type
         `)
         .eq('company_id', company_id);
 

@@ -25,6 +25,7 @@ interface ChargeData {
       unit_id: string | null;
     }[];
     total_amount: number;
+    accounts_receivable_id?: string;
   };
   amount_remaining: {
     lines: {
@@ -37,6 +38,7 @@ interface ChargeData {
       unit_id: string | null;
     }[];
     total_amount: number;
+    accounts_receivable_id?: string;
   };
   memo?: unknown;
   reference?: string;
@@ -46,6 +48,7 @@ interface ChargeData {
   frequency?: string;
   repeat_infinite?: boolean;
   unit_id: string | null;
+  charge_type: string;
 }
 
 // Define the schema for bill line items
@@ -69,7 +72,8 @@ const BillCreateSchema = z.object({
   status: z.string(),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   frequency: z.string().optional(),
-  repeat_infinite: z.boolean().optional()
+  repeat_infinite: z.boolean().optional(),
+  charge_type: z.string().default('bill')
 });
 
 export async function POST(request: NextRequest) {
@@ -148,6 +152,17 @@ export async function POST(request: NextRequest) {
       console.error('Accounts payable account not configured in company settings');
       return NextResponse.json(
         { error: 'Accounts payable account not configured in company settings' },
+        { status: 400 }
+      );
+    }
+    
+    // Get the accounts receivable account ID from company settings
+    const accountsReceivableId = settings?.default_account?.accountreceivable;
+    
+    if (!accountsReceivableId) {
+      console.error('Accounts receivable account not configured in company settings');
+      return NextResponse.json(
+        { error: 'Accounts receivable account not configured in company settings' },
         { status: 400 }
       );
     }
@@ -416,11 +431,13 @@ export async function POST(request: NextRequest) {
       unit_id: null, // Default to null
         charge_amount: {
           lines: transformedLines,
-          total_amount: totalAmount
+          total_amount: totalAmount,
+          accounts_receivable_id: accountsReceivableId
         },
         amount_remaining: {
           lines: transformedLines,
-          total_amount: totalAmount
+          total_amount: totalAmount,
+          accounts_receivable_id: accountsReceivableId
         },
       memo: processedMemo,
       reference: billData.reference,
@@ -428,7 +445,8 @@ export async function POST(request: NextRequest) {
       created_by: user.id,
       start_date: billData.start_date,
       frequency: billData.frequency,
-      repeat_infinite: billData.repeat_infinite
+      repeat_infinite: billData.repeat_infinite,
+      charge_type: billData.charge_type || 'bill'
     };
 
     // Only set unit_id if it exists and is not null

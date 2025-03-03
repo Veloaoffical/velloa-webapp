@@ -33,6 +33,7 @@ interface Lease {
   tenant_name: string
   unit_name: string
   property_name: string
+  property_id?: string
   tenant: {
     id: string
     first_name?: string
@@ -44,6 +45,7 @@ interface Lease {
   property: {
     name: string
     address: string
+    id?: string
   }
   unit: {
     unit_number: string
@@ -60,6 +62,12 @@ interface BankAccount {
   account_name: string
   account_type: string
   account_subtype?: string
+  account_balance?: number
+  property_balance?: {
+    property_id: string
+    property_name: string
+    balance: number
+  }[]
   sub_accounts?: {
     id: string
     account_name: string
@@ -106,10 +114,12 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
     return nanoid()
   }
 
-  // Format currency with commas for thousands and millions
   const formatCurrency = (amount: string | number): string => {
-    const num = typeof amount === 'string' ? parseFloat(amount) || 0 : amount
-    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(numericAmount)
   }
 
   const [selectedLease, setSelectedLease] = useState<string>("")
@@ -145,16 +155,11 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
           setLeases(leasesData)
         }
 
-        // Fetch bank accounts
-        const accountsResponse = await fetch("/api/accounting/categories")
+        // Fetch bank accounts (without property filter initially)
+        const accountsResponse = await fetch("/api/accounting/bank-accounts")
         if (accountsResponse.ok) {
           const accountsData = await accountsResponse.json()
-          // Filter to only include bank accounts
-          const filteredBankAccounts = accountsData.filter(
-            (account: BankAccount) => account.account_type === 'Asset' && 
-            (account.account_subtype === 'Bank' || account.account_subtype === 'Cash')
-          )
-          setBankAccounts(filteredBankAccounts)
+          setBankAccounts(accountsData)
         }
 
         // Fetch all tenants
@@ -193,6 +198,22 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
     }
   }, [open])
 
+  // Function to get property ID from property name
+  const getPropertyIdFromName = async (propertyName: string): Promise<string | null> => {
+    try {
+      const response = await fetch("/api/properties");
+      if (response.ok) {
+        const properties = await response.json();
+        const property = properties.find((p: { name: string; id: string }) => p.name === propertyName);
+        return property ? property.id : null;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error fetching property ID:", error);
+      return null;
+    }
+  };
+
   useEffect(() => {
     const fetchLeaseDetails = async () => {
       if (!selectedLease) {
@@ -226,113 +247,294 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
               }
             }
           }
-        }
 
-        // Fetch default bank account for the property
-        if (leaseData?.property_name) {
-          const propertyResponse = await fetch(`/api/property/${leaseData.property_name}`)
-          if (propertyResponse.ok) {
-            const propertyData = await propertyResponse.json()
-            if (propertyData.default_operating_account) {
-              setDepositAccount(propertyData.default_operating_account)
+          // Get property ID from the lease data
+          let propertyId = null;
+          
+          // First check if the property ID is directly available in the lease data
+          if (leaseData.property_id) {
+            propertyId = leaseData.property_id;
+          } 
+          // Check if property.id is available
+          else if (leaseData.property && leaseData.property.id) {
+            propertyId = leaseData.property.id;
+          }
+          // If not, try to get it from the property balance array
+          else if (bankAccounts.length > 0) {
+            // Find a property with matching name in any bank account's property_balance
+            for (const account of bankAccounts) {
+              if (account.property_balance) {
+                const matchingProperty = account.property_balance.find(
+                  (pb: { property_name: string; property_id: string }) => 
+                    pb.property_name === leaseData.property.name
+                );
+                if (matchingProperty) {
+                  propertyId = matchingProperty.property_id;
+                  break;
+                }
+              }
             }
           }
-        }
-
-        // Fetch unpaid charges for the lease using the dedicated charges API
-        console.log(`Fetching charges for lease: ${selectedLease}`)
-        // Modify the URL to avoid the lease_contracts join that's causing the error
-        const chargesUrl = `/api/accounting/charges?lease_id=${selectedLease}&status=unpaid`
-        console.log(`API URL: ${chargesUrl}`)
-        
-        try {
-          const chargesResponse = await fetch(chargesUrl)
           
-          if (chargesResponse.ok) {
-            const chargesData = await chargesResponse.json()
-            console.log(`Received ${chargesData.length} charges:`, chargesData)
-            
-            if (Array.isArray(chargesData) && chargesData.length > 0) {
-              // Log the first charge to see its structure
-              console.log('First charge structure:', JSON.stringify(chargesData[0], null, 2))
+          // If still not found, try to get it from the properties API
+          if (!propertyId && leaseData.property && leaseData.property.name) {
+            propertyId = await getPropertyIdFromName(leaseData.property.name);
+          }
+          
+          console.log(`Found property ID for lease ${selectedLease}: ${propertyId}`);
+          
+          // Fetch bank accounts filtered by property ID if available
+          if (propertyId) {
+            const accountsResponse = await fetch(`/api/accounting/bank-accounts?property_id=${propertyId}`);
+            if (accountsResponse.ok) {
+              const accountsData = await accountsResponse.json();
+              setBankAccounts(accountsData);
               
-              // Transform charges data to match the Charge interface
-              const processedCharges = chargesData.map((charge) => {
-                // Check if the charge has the expected data structure
-                const hasLines = charge.data && Array.isArray(charge.data.lines) && charge.data.lines.length > 0
-                const totalAmount = charge.data?.total_amount || 0
+              // Clear selected deposit account if it's not available for this property
+              const currentAccount = accountsData.find((acc: BankAccount) => acc.id === depositAccount);
+              if (depositAccount && !currentAccount) {
+                setDepositAccount("");
+              }
+            }
+          }
+
+          // Fetch unpaid charges for the lease using the dedicated charges API
+          console.log(`Fetching charges for lease: ${selectedLease}`)
+          // Modify the URL to avoid the lease_contracts join that's causing the error
+          const chargesUrl = `/api/accounting/charges?lease_id=${selectedLease}&status=unpaid`
+          console.log(`API URL: ${chargesUrl}`)
+          
+          try {
+            const chargesResponse = await fetch(chargesUrl)
+            
+            if (chargesResponse.ok) {
+              const chargesData = await chargesResponse.json()
+              console.log(`Received ${chargesData.length} charges:`, chargesData)
+              
+              if (Array.isArray(chargesData) && chargesData.length > 0) {
+                // Log the first charge to see its structure
+                console.log('First charge structure:', JSON.stringify(chargesData[0], null, 2))
                 
-                // Extract category information from the first line if available
-                let categoryId: string | undefined = undefined;
-                let description = 'Charge';
-                
-                if (hasLines && charge.data.lines.length > 0) {
-                  // Get the first line for category info
-                  const firstLine = charge.data.lines[0];
+                // Transform charges data to match the Charge interface
+                const processedCharges = chargesData.map((charge) => {
+                  // Log the raw charge data for debugging
+                  console.log(`Processing charge ${charge.id}:`, JSON.stringify(charge, null, 2));
                   
-                  // Check if category_id exists in the first line
-                  if (firstLine && typeof firstLine.category_id === 'string') {
-                    categoryId = firstLine.category_id;
-                    console.log(`Charge ${charge.id} has category ID: ${categoryId}`);
-                  } else {
-                    console.log(`Charge ${charge.id} has no valid category ID in first line:`, firstLine);
+                  // Check if the charge has the expected data structure
+                  let categoryId: string | undefined = undefined;
+                  let categoryName: string | undefined = undefined;
+                  let description = 'Charge';
+                  let totalAmount = 0;
+                  
+                  // First check for amount_remaining structure directly in the charge object
+                  if (charge.amount_remaining) {
+                    console.log(`Charge ${charge.id} has amount_remaining structure:`, JSON.stringify(charge.amount_remaining, null, 2));
+                    
+                    // Get the total amount from amount_remaining
+                    totalAmount = charge.amount_remaining.total_amount || 0;
+                    
+                    // Check if amount_remaining has lines array
+                    if (charge.amount_remaining.lines && Array.isArray(charge.amount_remaining.lines) && charge.amount_remaining.lines.length > 0) {
+                      console.log(`Charge ${charge.id} has ${charge.amount_remaining.lines.length} lines in amount_remaining`);
+                      
+                      // Use amount_remaining.lines for category info
+                      const firstLine = charge.amount_remaining.lines[0];
+                      if (firstLine) {
+                        // Log the first line to see its structure
+                        console.log(`First line of charge ${charge.id}:`, JSON.stringify(firstLine, null, 2));
+                        
+                        // Check for category object with name directly in the line
+                        if (firstLine.category && firstLine.category.id && firstLine.category.account_name) {
+                          categoryId = firstLine.category.id;
+                          categoryName = firstLine.category.account_name;
+                          console.log(`Found category directly in line: ID=${categoryId}, Name=${categoryName}`);
+                        }
+                        // If no direct category object, check for category_id in different formats
+                        else if (typeof firstLine.category_id === 'string') {
+                          categoryId = firstLine.category_id;
+                          console.log(`Found category_id as string: ${categoryId}`);
+                        } else if (firstLine.category && typeof firstLine.category.id === 'string') {
+                          categoryId = firstLine.category.id;
+                          console.log(`Found category.id as string: ${categoryId}`);
+                        } else if (firstLine.category_id && typeof firstLine.category_id.id === 'string') {
+                          categoryId = firstLine.category_id.id;
+                          console.log(`Found category_id.id as string: ${categoryId}`);
+                        }
+                        
+                        console.log(`Charge ${charge.id} has category ID from amount_remaining.lines[0]: ${categoryId}`);
+                        
+                        // Use description from amount_remaining if available
+                        description = charge.amount_remaining.lines
+                          .map((line: { description?: string }) => line.description)
+                          .filter(Boolean)
+                          .join(', ') || 'Charge';
+                      }
+                    }
+                    // If no lines array, check if category_id is directly in amount_remaining
+                    else {
+                      // Log the amount_remaining to see its structure
+                      console.log(`Charge ${charge.id} amount_remaining structure:`, JSON.stringify(charge.amount_remaining, null, 2));
+                      
+                      // Check for category object with name directly in amount_remaining
+                      if (charge.amount_remaining.category && charge.amount_remaining.category.id && charge.amount_remaining.category.account_name) {
+                        categoryId = charge.amount_remaining.category.id;
+                        categoryName = charge.amount_remaining.category.account_name;
+                        console.log(`Found category directly in amount_remaining: ID=${categoryId}, Name=${categoryName}`);
+                      }
+                      // If no direct category object, check for category_id in different formats
+                      else if (typeof charge.amount_remaining.category_id === 'string') {
+                        categoryId = charge.amount_remaining.category_id;
+                        console.log(`Found category_id as string in amount_remaining: ${categoryId}`);
+                      } else if (charge.amount_remaining.category && typeof charge.amount_remaining.category.id === 'string') {
+                        categoryId = charge.amount_remaining.category.id;
+                        console.log(`Found category.id as string in amount_remaining: ${categoryId}`);
+                      } else if (charge.amount_remaining.category_id && typeof charge.amount_remaining.category_id.id === 'string') {
+                        categoryId = charge.amount_remaining.category_id.id;
+                        console.log(`Found category_id.id as string in amount_remaining: ${categoryId}`);
+                      } else {
+                        console.log(`Could not find category ID in amount_remaining. amount_remaining.category_id:`, charge.amount_remaining.category_id);
+                        if (charge.amount_remaining.category) console.log(`amount_remaining.category:`, charge.amount_remaining.category);
+                      }
+                      
+                      console.log(`Charge ${charge.id} has category ID directly in amount_remaining: ${categoryId}`);
+                      
+                      // Use description from amount_remaining if available
+                      description = charge.amount_remaining.description || 'Charge';
+                    }
+                  }
+                  // If no amount_remaining, fall back to charge_amount
+                  else if (charge.charge_amount) {
+                    console.log(`Charge ${charge.id} has no amount_remaining, falling back to charge_amount structure:`, JSON.stringify(charge.charge_amount, null, 2));
+                    
+                    // Get the total amount
+                    totalAmount = charge.charge_amount.total_amount || 0;
+                    
+                    // Check if charge_amount has lines array
+                    if (charge.charge_amount.lines && Array.isArray(charge.charge_amount.lines) && charge.charge_amount.lines.length > 0) {
+                      console.log(`Charge ${charge.id} has ${charge.charge_amount.lines.length} lines in charge_amount`);
+                      
+                      // Use charge_amount.lines for category info
+                      const firstLine = charge.charge_amount.lines[0];
+                      if (firstLine) {
+                        // Log the first line to see its structure
+                        console.log(`First line of charge ${charge.id}:`, JSON.stringify(firstLine, null, 2));
+                        
+                        // Check for category object with name directly in the line
+                        if (firstLine.category && firstLine.category.id && firstLine.category.account_name) {
+                          categoryId = firstLine.category.id;
+                          categoryName = firstLine.category.account_name;
+                          console.log(`Found category directly in line: ID=${categoryId}, Name=${categoryName}`);
+                        }
+                        // If no direct category object, check for category_id in different formats
+                        else if (typeof firstLine.category_id === 'string') {
+                          categoryId = firstLine.category_id;
+                          console.log(`Found category_id as string: ${categoryId}`);
+                        } else if (firstLine.category && typeof firstLine.category.id === 'string') {
+                          categoryId = firstLine.category.id;
+                          console.log(`Found category.id as string: ${categoryId}`);
+                        } else if (firstLine.category_id && typeof firstLine.category_id.id === 'string') {
+                          categoryId = firstLine.category_id.id;
+                          console.log(`Found category_id.id as string: ${categoryId}`);
+                        }
+                        
+                        console.log(`Charge ${charge.id} has category ID from charge_amount.lines[0]: ${categoryId}`);
+                        
+                        // Use description from charge_amount if available
+                        description = charge.charge_amount.lines
+                          .map((line: { description?: string }) => line.description)
+                          .filter(Boolean)
+                          .join(', ') || 'Charge';
+                      }
+                    }
+                    // If no lines array, check if category_id is directly in charge_amount
+                    else {
+                      // Log the charge_amount to see its structure
+                      console.log(`Charge ${charge.id} charge_amount structure:`, JSON.stringify(charge.charge_amount, null, 2));
+                      
+                      // Check for category object with name directly in charge_amount
+                      if (charge.charge_amount.category && charge.charge_amount.category.id && charge.charge_amount.category.account_name) {
+                        categoryId = charge.charge_amount.category.id;
+                        categoryName = charge.charge_amount.category.account_name;
+                        console.log(`Found category directly in charge_amount: ID=${categoryId}, Name=${categoryName}`);
+                      }
+                      // If no direct category object, check for category_id in different formats
+                      else if (typeof charge.charge_amount.category_id === 'string') {
+                        categoryId = charge.charge_amount.category_id;
+                        console.log(`Found category_id as string in charge_amount: ${categoryId}`);
+                      } else if (charge.charge_amount.category && typeof charge.charge_amount.category.id === 'string') {
+                        categoryId = charge.charge_amount.category.id;
+                        console.log(`Found category.id as string in charge_amount: ${categoryId}`);
+                      } else if (charge.charge_amount.category_id && typeof charge.charge_amount.category_id.id === 'string') {
+                        categoryId = charge.charge_amount.category_id.id;
+                        console.log(`Found category_id.id as string in charge_amount: ${categoryId}`);
+                      } else {
+                        console.log(`Could not find category ID in charge_amount. charge_amount.category_id:`, charge.charge_amount.category_id);
+                        if (charge.charge_amount.category) console.log(`charge_amount.category:`, charge.charge_amount.category);
+                      }
+                      
+                      console.log(`Charge ${charge.id} has category ID directly in charge_amount: ${categoryId}`);
+                      
+                      // Use description from charge_amount if available
+                      description = charge.charge_amount.description || 'Charge';
+                    }
                   }
                   
-                  // Combine descriptions from all lines
-                  description = charge.data.lines
-                    .map((line: { description?: string }) => line.description || 'Charge')
-                    .filter(Boolean)
-                    .join(', ');
-                }
+                  // If we still don't have a total amount, try to get it from other fields
+                  if (totalAmount === 0) {
+                    totalAmount = charge.amount || charge.balance || 0;
+                  }
+                  
+                  console.log(`Processed charge ${charge.id} with category ID: ${categoryId || 'undefined'}, category name: ${categoryName || 'undefined'}, amount: ${totalAmount}`);
+                  
+                  // Return the processed charge
+                  return {
+                    id: charge.id,
+                    description: description,
+                    amount: totalAmount,
+                    due_date: charge.due_date || new Date().toISOString(),
+                    status: charge.status || 'unpaid',
+                    balance: charge.amount_remaining?.total_amount || charge.balance || totalAmount, // Use amount_remaining.total_amount if available, then balance, then amount
+                    category_id: categoryId,
+                    category_name: categoryName, // Add the category name directly from the data if available
+                    reference: charge.reference
+                  }
+                })
                 
-                // If the charge has lines, use the total amount from data
-                // Otherwise, try to find amount in other possible locations
-                return {
-                  id: charge.id,
-                  description: description,
-                  amount: totalAmount,
-                  due_date: charge.due_date || new Date().toISOString(),
-                  status: charge.status || 'unpaid',
-                  balance: totalAmount, // Assuming balance is the same as amount for unpaid charges
-                  category_id: categoryId,
-                  reference: charge.reference
+                console.log('Processed charges with category IDs:', processedCharges.map(c => ({ id: c.id, category_id: c.category_id })))
+                setCharges(processedCharges)
+                
+                // Initialize selected charges for manual allocation
+                if (!autoApplyPayments) {
+                  const initialSelectedCharges: Record<string, number> = {};
+                  processedCharges.forEach(charge => {
+                    initialSelectedCharges[charge.id] = 0;
+                  });
+                  setSelectedCharges(initialSelectedCharges);
                 }
-              })
-              
-              console.log('Processed charges with category IDs:', processedCharges.map(c => ({ id: c.id, category_id: c.category_id })))
-              setCharges(processedCharges)
-              
-              // Initialize selected charges for manual allocation
-              if (!autoApplyPayments) {
-                const initialSelectedCharges: Record<string, number> = {};
-                processedCharges.forEach(charge => {
-                  initialSelectedCharges[charge.id] = 0;
-                });
-                setSelectedCharges(initialSelectedCharges);
+              } else {
+                console.log('No charges found or empty array returned')
+                setCharges([])
+                setSelectedCharges({})
               }
             } else {
-              console.log('No charges found or empty array returned')
+              console.error(`Failed to fetch charges: ${chargesResponse.status} ${chargesResponse.statusText}`)
+              
+              let errorText = 'Unknown error';
+              try {
+                errorText = await chargesResponse.text();
+              } catch {
+                // Ignore error parsing failures
+              }
+              console.error(`Error response: ${errorText}`);
+              
               setCharges([])
               setSelectedCharges({})
             }
-          } else {
-            console.error(`Failed to fetch charges: ${chargesResponse.status} ${chargesResponse.statusText}`)
-            
-            let errorText = 'Unknown error';
-            try {
-              errorText = await chargesResponse.text();
-            } catch {
-              // Ignore error parsing failures
-            }
-            console.error(`Error response: ${errorText}`);
-            
+          } catch (chargeError) {
+            console.error("Error fetching charges:", chargeError)
             setCharges([])
             setSelectedCharges({})
           }
-        } catch (chargeError) {
-          console.error("Error fetching charges:", chargeError)
-          setCharges([])
-          setSelectedCharges({})
         }
       } catch (error) {
         console.error("Error fetching lease details:", error)
@@ -358,11 +560,12 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
     }
 
     try {
-      // Fetch all categories from chart_of_accounts instead of categories
+      // Fetch categories from the categories API
+      console.log('Fetching categories from API...');
       const response = await fetch("/api/accounting/categories");
       if (response.ok) {
         const categoriesData = await response.json();
-        console.log('Fetched categories data:', categoriesData);
+        console.log(`Fetched ${categoriesData.length} categories:`, categoriesData);
         
         // Create a map of category IDs to category names for quick lookup
         const categoryMap: Record<string, string> = {};
@@ -371,6 +574,7 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
         categoriesData.forEach((category: Category) => {
           if (category.id) {
             categoryMap[category.id] = category.account_name;
+            console.log(`Mapped category ID ${category.id} to name "${category.account_name}"`);
           }
           
           // Also process sub-accounts if they exist
@@ -378,25 +582,59 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
             category.sub_accounts.forEach((subAccount: { id: string; account_name: string }) => {
               if (subAccount.id) {
                 categoryMap[subAccount.id] = subAccount.account_name;
+                console.log(`Mapped sub-account ID ${subAccount.id} to name "${subAccount.account_name}"`);
               }
             });
           }
         });
         
-        console.log('Category map:', categoryMap);
+        // Check if we found all category IDs
+        const missingCategoryIds = categoryIds.filter(id => !categoryMap[id]);
+        if (missingCategoryIds.length > 0) {
+          console.warn(`Could not find category names for IDs: ${missingCategoryIds.join(', ')}`);
+          
+          // Fetch missing categories individually
+          for (const missingId of missingCategoryIds) {
+            try {
+              console.log(`Fetching individual category for ID: ${missingId}`);
+              const categoryResponse = await fetch(`/api/accounting/categories/${missingId}`);
+              if (categoryResponse.ok) {
+                const categoryData = await categoryResponse.json();
+                console.log(`Individual category response for ${missingId}:`, categoryData);
+                if (categoryData && categoryData.account_name) {
+                  categoryMap[missingId] = categoryData.account_name;
+                  console.log(`Fetched individual category: ${missingId} -> ${categoryData.account_name}`);
+                } else {
+                  console.error(`Category data for ${missingId} does not contain account_name:`, categoryData);
+                }
+              } else {
+                console.error(`Failed to fetch individual category ${missingId}: ${categoryResponse.status}`);
+              }
+            } catch (error) {
+              console.error(`Error fetching individual category ${missingId}:`, error);
+            }
+          }
+        }
         
         // Update charges with category names
         setCharges(prevCharges => {
-          const updatedCharges = prevCharges.map(charge => ({
-            ...charge,
-            category_name: charge.category_id ? categoryMap[charge.category_id] || 'Uncategorized' : 'Uncategorized'
-          }));
-          console.log('Updated charges with category names:', updatedCharges);
+          const updatedCharges = prevCharges.map(charge => {
+            const categoryName = charge.category_id ? categoryMap[charge.category_id] : undefined;
+            console.log(`Setting category name for charge ${charge.id}: ${categoryName || 'Uncategorized'} (ID: ${charge.category_id})`);
+            
+            return {
+              ...charge,
+              category_name: categoryName || 'Uncategorized'
+            };
+          });
+          
           return updatedCharges;
         });
         
         // Also update the categories state for the getCategoryName function
         setCategories(categoriesData);
+      } else {
+        console.error(`Failed to fetch categories: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
       console.error("Error fetching categories:", error);
@@ -462,10 +700,16 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
       const allocations: Record<string, number> = {}
       
       if (autoApplyPayments && charges.length > 0) {
-        // Auto-allocate to oldest charges first
+        // Auto-allocate to oldest charges first based on due date
         let remainingAmount = parseFloat(amountReceived)
+        
+        // Sort charges by due date (oldest first)
         const sortedCharges = [...charges].sort((a, b) => 
           new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+        )
+        
+        console.log('Auto-applying payments to charges sorted by due date:', 
+          sortedCharges.map(c => ({ id: c.id, due_date: c.due_date, balance: c.balance }))
         )
         
         for (const charge of sortedCharges) {
@@ -475,6 +719,8 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
           if (paymentAmount > 0) {
             allocations[charge.id] = paymentAmount
             remainingAmount -= paymentAmount
+            
+            console.log(`Applied ${paymentAmount} to charge ${charge.id}, remaining: ${remainingAmount}`)
           }
         }
       } else if (!autoApplyPayments && Object.keys(selectedCharges).length > 0) {
@@ -519,7 +765,8 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
           auto_deposit: autoDepositFunds,
           email_receipt: emailReceipt,
           allocations,
-          share_with_tenants: shareWithTenants
+          share_with_tenants: shareWithTenants,
+          tenant_id: selectedTenant
         }),
       })
 
@@ -609,31 +856,111 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
   }, [open]);
 
   const getCategoryName = (categoryId: string | undefined) => {
-    if (!categoryId) return 'Uncategorized';
+    if (!categoryId) {
+      return 'Uncategorized';
+    }
+    
+    console.log(`Looking up category name for ID: ${categoryId}`);
     
     // First check in the main categories
     const category = categories.find(cat => cat.id === categoryId);
-    if (category) return category.account_name;
+    if (category) {
+      console.log(`Found category in main categories: ${category.account_name}`);
+      return category.account_name;
+    }
     
     // If not found in main categories, check in sub-accounts
     for (const mainCategory of categories) {
       if (mainCategory.sub_accounts) {
         const subAccount = mainCategory.sub_accounts.find(sub => sub.id === categoryId);
-        if (subAccount) return subAccount.account_name;
+        if (subAccount) {
+          console.log(`Found category in sub-accounts: ${subAccount.account_name}`);
+          return subAccount.account_name;
+        }
       }
     }
     
     // If we still haven't found it, try to find it in the charges data
     const chargeWithCategory = charges.find(charge => 
-      charge.category_id === categoryId && charge.category_name
+      charge.category_id === categoryId && charge.category_name && charge.category_name !== 'Uncategorized'
     );
+    
     if (chargeWithCategory && chargeWithCategory.category_name) {
+      console.log(`Found category name in charges data: ${chargeWithCategory.category_name}`);
       return chargeWithCategory.category_name;
     }
     
-    console.log(`Category ID ${categoryId} not found in categories:`, categories);
-    return 'Uncategorized';
-  };
+    // If we still can't find it, make one more attempt to fetch it directly
+    const fetchCategoryDirectly = async (id: string) => {
+      try {
+        const response = await fetch(`/api/accounting/categories/${id}`);
+        if (response.ok) {
+          const categoryData = await response.json();
+          if (categoryData && categoryData.account_name) {
+            console.log(`Fetched category directly: ${categoryData.account_name}`);
+            return categoryData.account_name;
+          }
+        }
+        return 'Uncategorized';
+      } catch (error) {
+        console.error(`Error fetching category ${id} directly:`, error);
+        return 'Uncategorized';
+      }
+    };
+    
+    // Note: This is an async function but we're returning synchronously
+    // The direct fetch will happen but won't affect the initial return value
+    if (categoryId) {
+      fetchCategoryDirectly(categoryId).then(name => {
+        if (name !== 'Uncategorized') {
+          // Update the categories map for future lookups
+          setCategories(prev => {
+            const updated = [...prev];
+            const existingIndex = updated.findIndex(c => c.id === categoryId);
+            if (existingIndex >= 0) {
+              updated[existingIndex].account_name = name;
+            } else {
+              if (categoryId) {
+                updated.push({ id: categoryId, account_name: name, account_type: 'Unknown' });
+              }
+            }
+            return updated;
+          });
+        }
+      });
+    }
+  }
+
+  // Add a new function to calculate auto-payment allocations for preview
+  const calculateAutoPaymentAllocations = () => {
+    if (!autoApplyPayments || charges.length === 0 || !amountReceived || parseFloat(amountReceived) <= 0) {
+      return {}
+    }
+    
+    // Auto-allocate to oldest charges first based on due date
+    let remainingAmount = parseFloat(amountReceived)
+    const allocations: Record<string, number> = {}
+    
+    // Sort charges by due date (oldest first)
+    const sortedCharges = [...charges].sort((a, b) => 
+      new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+    )
+    
+    for (const charge of sortedCharges) {
+      if (remainingAmount <= 0) break
+      
+      const paymentAmount = Math.min(remainingAmount, charge.balance)
+      if (paymentAmount > 0) {
+        allocations[charge.id] = paymentAmount
+        remainingAmount -= paymentAmount
+      }
+    }
+    
+    return allocations
+  }
+  
+  // Calculate auto payment allocations whenever relevant state changes
+  const autoPaymentAllocations = calculateAutoPaymentAllocations()
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -737,11 +1064,50 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
                 <SelectContent className="max-h-[300px]">
                   {Object.entries(
                     bankAccounts.reduce((acc, account) => {
-                      const type = account.account_subtype || 'Other';
-                      if (!acc[type]) {
-                        acc[type] = [];
+                      // Only include accounts that have property_balance matching the selected lease's property
+                      const leaseData = leases.find(lease => lease.id === selectedLease);
+                      let shouldIncludeAccount = true;
+                      
+                      if (leaseData && account.property_balance && account.property_balance.length > 0) {
+                        // Get property ID from lease
+                        const leasePropertyId = leaseData.property_id || 
+                          (leaseData.property && leaseData.property.id) || 
+                          null;
+                        
+                        // If we have a property ID from the lease, check if this account has a matching property_balance
+                        if (leasePropertyId) {
+                          shouldIncludeAccount = account.property_balance.some(
+                            pb => pb.property_id === leasePropertyId
+                          );
+                          
+                          if (!shouldIncludeAccount) {
+                            console.log(`Account ${account.account_name} excluded - no matching property_id ${leasePropertyId} in:`, 
+                              account.property_balance.map(pb => pb.property_id).join(', '));
+                          }
+                        } else if (leaseData.property && leaseData.property.name) {
+                          // If we don't have a property ID but have a property name, match by name
+                          shouldIncludeAccount = account.property_balance.some(
+                            pb => pb.property_name === leaseData.property.name
+                          );
+                          
+                          if (!shouldIncludeAccount) {
+                            console.log(`Account ${account.account_name} excluded - no matching property_name ${leaseData.property.name} in:`, 
+                              account.property_balance.map(pb => pb.property_name).join(', '));
+                          }
+                        }
+                      } else if (leaseData) {
+                        console.log(`Account ${account.account_name} included by default - no property_balance to filter by`);
                       }
-                      acc[type].push(account);
+                      
+                      // Only add the account to the dropdown if it matches the property
+                      if (shouldIncludeAccount) {
+                        const type = account.account_subtype || 'Other';
+                        if (!acc[type]) {
+                          acc[type] = [];
+                        }
+                        acc[type].push(account);
+                      }
+                      
                       return acc;
                     }, {} as Record<string, BankAccount[]>)
                   ).map(([type, accounts]) => (
@@ -782,6 +1148,44 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
                       ))}
                     </SelectGroup>
                   ))}
+                  
+                  {/* Show a message when there are no matching bank accounts */}
+                  {Object.keys(
+                    bankAccounts.reduce((acc, account) => {
+                      const leaseData = leases.find(lease => lease.id === selectedLease);
+                      let shouldIncludeAccount = true;
+                      
+                      if (leaseData && account.property_balance && account.property_balance.length > 0) {
+                        const leasePropertyId = leaseData.property_id || 
+                          (leaseData.property && leaseData.property.id) || 
+                          null;
+                        
+                        if (leasePropertyId) {
+                          shouldIncludeAccount = account.property_balance.some(
+                            pb => pb.property_id === leasePropertyId
+                          );
+                        } else if (leaseData.property && leaseData.property.name) {
+                          shouldIncludeAccount = account.property_balance.some(
+                            pb => pb.property_name === leaseData.property.name
+                          );
+                        }
+                      }
+                      
+                      if (shouldIncludeAccount) {
+                        const type = account.account_subtype || 'Other';
+                        if (!acc[type]) {
+                          acc[type] = [];
+                        }
+                        acc[type].push(account);
+                      }
+                      
+                      return acc;
+                    }, {} as Record<string, BankAccount[]>)
+                  ).length === 0 && selectedLease && (
+                    <div className="p-2 text-center text-sm text-muted-foreground">
+                      No bank accounts linked to this property. Please link a bank account to this property first.
+                    </div>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -859,7 +1263,24 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
               <Checkbox 
                 id="auto-apply" 
                 checked={autoApplyPayments}
-                onCheckedChange={(checked) => setAutoApplyPayments(checked === true)}
+                onCheckedChange={(checked) => {
+                  const newAutoApply = checked === true;
+                  setAutoApplyPayments(newAutoApply);
+                  
+                  // If switching from auto to manual, initialize selectedCharges
+                  if (!newAutoApply && charges.length > 0) {
+                    const initialSelectedCharges: Record<string, number> = {};
+                    charges.forEach(charge => {
+                      initialSelectedCharges[charge.id] = 0;
+                    });
+                    setSelectedCharges(initialSelectedCharges);
+                  }
+                  
+                  // If switching from manual to auto, clear selectedCharges
+                  if (newAutoApply) {
+                    setSelectedCharges({});
+                  }
+                }}
               />
               <label
                 htmlFor="auto-apply"
@@ -898,10 +1319,115 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
             </div>
           </div>
 
+          {/* Outstanding Charges Preview (shown when a lease is selected AND autoApplyPayments is ON) */}
+          {selectedLease && charges.length > 0 && autoApplyPayments && amountReceived && parseFloat(amountReceived) > 0 && (
+            <div className="border rounded-md p-4 mt-4">
+              <h3 className="font-medium mb-3">Payment Preview</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                This payment will be automatically applied to the following charges, starting with the earliest due date.
+                <span className="block mt-1 text-xs italic">Note: Balance shown reflects the remaining amount to be paid based on previous payments.</span>
+              </p>
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Charges</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead>Balance</TableHead>
+                    <TableHead>Payment Amount</TableHead>
+                    <TableHead>Status After Payment</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {charges
+                    .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+                    .map(charge => {
+                      const allocationAmount = autoPaymentAllocations[charge.id] || 0
+                      const newBalance = charge.balance - allocationAmount
+                      const newStatus = newBalance <= 0 ? 'Paid' : newBalance === charge.balance ? 'Unpaid' : 'Partial'
+                      const statusColor = newStatus === 'Paid' ? 'text-green-600' : newStatus === 'Partial' ? 'text-amber-600' : 'text-muted-foreground'
+                      
+                      return (
+                        <TableRow key={charge.id} className={allocationAmount > 0 ? 'bg-primary/5' : undefined}>
+                          <TableCell className="py-2">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0 h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center">
+                                <Banknote className="h-4 w-4 text-primary" />
+                              </div>
+                              <div>
+                                <div className="font-medium capitalize">
+                                  {(() => {
+                                    console.log(`Rendering category for charge ${charge.id}:`);
+                                    console.log(`- category_id: ${charge.category_id}`);
+                                    console.log(`- category_name: ${charge.category_name}`);
+                                    
+                                    // First try to use the category_name that was directly extracted from the charge data
+                                    if (charge.category_name) {
+                                      console.log(`Using category name directly from charge data: ${charge.category_name}`);
+                                      return charge.category_name;
+                                    } 
+                                    // If not available, fall back to the lookup methods
+                                    else if (charge.category_id) {
+                                      const name = getCategoryName(charge.category_id);
+                                      console.log(`Using getCategoryName result: ${name}`);
+                                      return name;
+                                    } else {
+                                      console.log(`No category information available`);
+                                      return 'Uncategorized';
+                                    }
+                                  })()}
+                                </div>
+                                <div className="text-xs text-muted-foreground">Charge</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-2">
+                            {charge.reference || 'N/A'}
+                          </TableCell>
+                          <TableCell className="py-2">
+                            {new Date(charge.due_date).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="py-2 font-medium">
+                            ${formatCurrency(charge.balance)}
+                          </TableCell>
+                          <TableCell className="py-2 font-medium">
+                            ${formatCurrency(allocationAmount)}
+                          </TableCell>
+                          <TableCell className={`py-2 font-medium ${statusColor}`}>
+                            {newStatus}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  {charges.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-24 text-center">
+                        No outstanding charges found for this lease
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+              
+              {/* Show remaining amount if any */}
+              {parseFloat(amountReceived) > Object.values(autoPaymentAllocations).reduce((sum, amount) => sum + amount, 0) && (
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                  <p className="text-sm text-amber-800">
+                    <strong>Note:</strong> ${formatCurrency(parseFloat(amountReceived) - Object.values(autoPaymentAllocations).reduce((sum, amount) => sum + amount, 0))} will remain unallocated after paying all outstanding charges.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Outstanding Charges (shown only when a lease is selected AND autoApplyPayments is OFF) */}
           {selectedLease && charges.length > 0 && !autoApplyPayments && (
             <div className="border rounded-md p-4 mt-4">
               <h3 className="font-medium mb-3">Outstanding Transactions</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Select the charges you want to apply this payment to.
+                <span className="block mt-1 text-xs italic">Note: Balance shown reflects the remaining amount to be paid based on previous payments.</span>
+              </p>
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -922,9 +1448,28 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
                           </div>
                           <div>
                             <div className="font-medium capitalize">
-                              {charge.category_name || getCategoryName(charge.category_id) || 'Uncategorized'}
+                              {(() => {
+                                console.log(`Rendering category for charge ${charge.id}:`);
+                                console.log(`- category_id: ${charge.category_id}`);
+                                console.log(`- category_name: ${charge.category_name}`);
+                                
+                                // First try to use the category_name that was directly extracted from the charge data
+                                if (charge.category_name) {
+                                  console.log(`Using category name directly from charge data: ${charge.category_name}`);
+                                  return charge.category_name;
+                                } 
+                                // If not available, fall back to the lookup methods
+                                else if (charge.category_id) {
+                                  const name = getCategoryName(charge.category_id);
+                                  console.log(`Using getCategoryName result: ${name}`);
+                                  return name;
+                                } else {
+                                  console.log(`No category information available`);
+                                  return 'Uncategorized';
+                                }
+                              })()}
                             </div>
-                            <div className="text-xs text-muted-foreground">{charge.description || 'No description'}</div>
+                            <div className="text-xs text-muted-foreground">Charge</div>
                           </div>
                         </div>
                       </TableCell>

@@ -516,7 +516,6 @@ export function IssueCreditDialog({ open, onOpenChange }: IssueCreditDialogProps
           resetForm()
         }
         onOpenChange(newOpen)
-        resetForm()
       }}
     >
       <DialogContent className={`${step === "form" ? "max-w-7xl" : "sm:max-w-md"} bg-card max-h-[95vh] flex flex-col`}>

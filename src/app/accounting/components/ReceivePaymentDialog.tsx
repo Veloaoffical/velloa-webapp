@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { FileText, X, Banknote } from "lucide-react"
+import { FileText, X, Banknote, Check } from "lucide-react"
 import { format } from "date-fns"
 import CalendarInput from "@/components/calendarwithmonthsinput"
 import { toast } from "sonner"
@@ -144,6 +144,7 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [selectedTenant, setSelectedTenant] = useState<string>("")
   const [categories, setCategories] = useState<Category[]>([])
+  const [step, setStep] = useState<"form" | "confirmation">("form")
 
   useEffect(() => {
     const fetchData = async () => {
@@ -193,6 +194,7 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
       setShareWithTenants(false)
       setSelectedCharges({})
       setSelectedTenant("")
+      setStep("form")
       
       fetchData()
     }
@@ -796,7 +798,7 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
       }
 
       toast.success("Payment recorded successfully")
-      onOpenChange(false)
+      setStep("confirmation")
     } catch (error) {
       console.error("Error saving payment:", error)
       toast.error(error instanceof Error ? error.message : "Failed to record payment")
@@ -962,26 +964,57 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
   // Calculate auto payment allocations whenever relevant state changes
   const autoPaymentAllocations = calculateAutoPaymentAllocations()
 
+  // Add resetForm function
+  const resetForm = () => {
+    setSelectedLease("")
+    setPaymentDate(new Date())
+    setDepositAccount("")
+    setAmountReceived("")
+    setPaymentMethod("")
+    setMemo("")
+    setShowMemo(false)
+    setReference(generateReference())
+    setPaymentReference("")
+    setAutoApplyPayments(true)
+    setAutoDepositFunds(true)
+    setEmailReceipt(true)
+    setUploadedFiles([])
+    setShareWithTenants(false)
+    setSelectedCharges({})
+    setSelectedTenant("")
+    setStep("form")
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-7xl bg-card max-h-[95vh] flex flex-col">
+    <Dialog 
+      open={open} 
+      onOpenChange={(newOpen) => {
+        if (!newOpen) {
+          resetForm()
+        }
+        onOpenChange(newOpen)
+      }}
+    >
+      <DialogContent className={`${step === "form" ? "max-w-7xl" : "sm:max-w-md"} bg-card max-h-[95vh] flex flex-col`}>
         <DialogHeader>
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <DialogTitle className="text-xl font-semibold">Receive Payment</DialogTitle>
-              <div className="text-sm text-muted-foreground">
-                Record a payment received from a tenant
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-sm">
-                      <p>Record payments received outside of the tenant portal, such as checks, cash, or direct payments.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
+              <DialogTitle className="text-xl font-semibold">{step === "form" ? "Receive Payment" : "Payment Received"}</DialogTitle>
+              {step === "form" && (
+                <div className="text-sm text-muted-foreground">
+                  Record a payment received from a tenant
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-sm">
+                        <p>Record payments received outside of the tenant portal, such as checks, cash, or direct payments.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              )}
             </div>
             <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
               <X className="h-4 w-4" />
@@ -989,651 +1022,701 @@ export function ReceivePaymentDialog({ open, onOpenChange }: ReceivePaymentDialo
           </div>
         </DialogHeader>
 
-        <div className="space-y-6 flex-1 overflow-y-auto px-4">
-          {/* Lease Selection and Payment Date Row */}
-          <div className="pt-4 flex items-start gap-4">
-            <div className="w-[400px]">
-              <Label className="text-sm text-muted-foreground mb-2 block">
-                Lease <span className="text-destructive">*</span>
-              </Label>
-              <Select value={selectedLease} onValueChange={setSelectedLease}>
-                <SelectTrigger className="w-full h-[42px] bg-background">
-                  <SelectValue placeholder="Select lease" />
-                </SelectTrigger>
-                <SelectContent>
-                  {leases.map((lease) => (
-                    <SelectItem key={lease.id} value={lease.id}>
-                      {`${lease.tenant_name} - ${lease.property_name} (${lease.unit_name})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        {step === "form" ? (
+          <div className="space-y-6 flex-1 overflow-y-auto px-4">
+            {/* Lease Selection and Payment Date Row */}
+            <div className="pt-4 flex items-start gap-4">
+              <div className="w-[400px]">
+                <Label className="text-sm text-muted-foreground mb-2 block">
+                  Lease <span className="text-destructive">*</span>
+                </Label>
+                <Select value={selectedLease} onValueChange={setSelectedLease}>
+                  <SelectTrigger className="w-full h-[42px] bg-background">
+                    <SelectValue placeholder="Select lease" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leases.map((lease) => (
+                      <SelectItem key={lease.id} value={lease.id}>
+                        {`${lease.tenant_name} - ${lease.property_name} (${lease.unit_name})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="w-[200px]">
-              <Label className="text-sm text-muted-foreground mb-2 block">
-                Date <span className="text-destructive">*</span>
-              </Label>
-              <CalendarInput
-                value={paymentDate}
-                onChange={(date: Date | undefined) => {
-                  if (date) setPaymentDate(date)
-                }}
-                className="w-full h-[42px]"
-                placeholder="Select payment date"
-              />
-            </div>
-          </div>
-
-          {/* Received From, Deposit Account, and Amount Received Row */}
-          <div className="flex items-start gap-4">
-            <div className="w-[400px]">
-              <Label className="text-sm text-muted-foreground mb-2 block">
-                Received From
-              </Label>
-              <Select 
-                value={selectedTenant} 
-                onValueChange={handleTenantChange}
-                disabled={!selectedLease}
-              >
-                <SelectTrigger className="w-full h-[42px] bg-background">
-                  <SelectValue placeholder="Select tenant" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tenants.map((tenant) => (
-                    <SelectItem key={tenant.id} value={tenant.id}>
-                      {`${tenant.first_name} ${tenant.last_name}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="w-[250px]">
-              <Label className="text-sm text-muted-foreground mb-2 block">
-                Deposit Account <span className="text-destructive">*</span>
-              </Label>
-              <Select 
-                value={depositAccount} 
-                onValueChange={setDepositAccount}
-                disabled={!selectedLease}
-              >
-                <SelectTrigger className="w-full h-[42px] bg-background">
-                  <SelectValue placeholder="Select deposit account" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
-                  {Object.entries(
-                    bankAccounts.reduce((acc, account) => {
-                      // Only include accounts that have property_balance matching the selected lease's property
-                      const leaseData = leases.find(lease => lease.id === selectedLease);
-                      let shouldIncludeAccount = true;
-                      
-                      if (leaseData && account.property_balance && account.property_balance.length > 0) {
-                        // Get property ID from lease
-                        const leasePropertyId = leaseData.property_id || 
-                          (leaseData.property && leaseData.property.id) || 
-                          null;
-                        
-                        // If we have a property ID from the lease, check if this account has a matching property_balance
-                        if (leasePropertyId) {
-                          shouldIncludeAccount = account.property_balance.some(
-                            pb => pb.property_id === leasePropertyId
-                          );
-                          
-                          if (!shouldIncludeAccount) {
-                            console.log(`Account ${account.account_name} excluded - no matching property_id ${leasePropertyId} in:`, 
-                              account.property_balance.map(pb => pb.property_id).join(', '));
-                          }
-                        } else if (leaseData.property && leaseData.property.name) {
-                          // If we don't have a property ID but have a property name, match by name
-                          shouldIncludeAccount = account.property_balance.some(
-                            pb => pb.property_name === leaseData.property.name
-                          );
-                          
-                          if (!shouldIncludeAccount) {
-                            console.log(`Account ${account.account_name} excluded - no matching property_name ${leaseData.property.name} in:`, 
-                              account.property_balance.map(pb => pb.property_name).join(', '));
-                          }
-                        }
-                      } else if (leaseData) {
-                        console.log(`Account ${account.account_name} included by default - no property_balance to filter by`);
-                      }
-                      
-                      // Only add the account to the dropdown if it matches the property
-                      if (shouldIncludeAccount) {
-                        const type = account.account_subtype || 'Other';
-                        if (!acc[type]) {
-                          acc[type] = [];
-                        }
-                        acc[type].push(account);
-                      }
-                      
-                      return acc;
-                    }, {} as Record<string, BankAccount[]>)
-                  ).map(([type, accounts]) => (
-                    <SelectGroup key={type}>
-                      <SelectLabel>{type}</SelectLabel>
-                      {accounts.map((account) => (
-                        <React.Fragment key={account.id}>
-                          <SelectItem value={account.id}>
-                            <div className="flex flex-col">
-                              <span>{account.account_name}</span>
-                              {account.account_subtype && (
-                                <span className="text-xs text-muted-foreground">{account.account_subtype}</span>
-                              )}
-                            </div>
-                          </SelectItem>
-                          {account.sub_accounts && account.sub_accounts.length > 0 && (
-                            <SelectGroup>
-                              <SelectLabel className="pl-4 text-xs">
-                                {account.account_name} Sub-accounts
-                              </SelectLabel>
-                              {account.sub_accounts.map((subAccount) => (
-                                <SelectItem 
-                                  key={subAccount.id} 
-                                  value={subAccount.id}
-                                  className="pl-6"
-                                >
-                                  <div className="flex flex-col">
-                                    <span>{subAccount.account_name}</span>
-                                    {subAccount.account_subtype && (
-                                      <span className="text-xs text-muted-foreground">{subAccount.account_subtype}</span>
-                                    )}
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </SelectGroup>
-                  ))}
-                  
-                  {/* Show a message when there are no matching bank accounts */}
-                  {Object.keys(
-                    bankAccounts.reduce((acc, account) => {
-                      const leaseData = leases.find(lease => lease.id === selectedLease);
-                      let shouldIncludeAccount = true;
-                      
-                      if (leaseData && account.property_balance && account.property_balance.length > 0) {
-                        const leasePropertyId = leaseData.property_id || 
-                          (leaseData.property && leaseData.property.id) || 
-                          null;
-                        
-                        if (leasePropertyId) {
-                          shouldIncludeAccount = account.property_balance.some(
-                            pb => pb.property_id === leasePropertyId
-                          );
-                        } else if (leaseData.property && leaseData.property.name) {
-                          shouldIncludeAccount = account.property_balance.some(
-                            pb => pb.property_name === leaseData.property.name
-                          );
-                        }
-                      }
-                      
-                      if (shouldIncludeAccount) {
-                        const type = account.account_subtype || 'Other';
-                        if (!acc[type]) {
-                          acc[type] = [];
-                        }
-                        acc[type].push(account);
-                      }
-                      
-                      return acc;
-                    }, {} as Record<string, BankAccount[]>)
-                  ).length === 0 && selectedLease && (
-                    <div className="p-2 text-center text-sm text-muted-foreground">
-                      No bank accounts linked to this property. Please link a bank account to this property first.
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="w-[200px]">
-              <Label className="text-sm text-muted-foreground mb-2 block">
-                Amount Received <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                type="number"
-                placeholder="0.00"
-                value={amountReceived}
-                onChange={(e) => setAmountReceived(e.target.value)}
-                className="w-full h-[42px] bg-background"
-              />
-            </div>
-          </div>
-
-          {/* Payment Method Row */}
-          <div className="flex items-start gap-4">
-            <div className="w-[400px]">
-              <Label className="text-sm text-muted-foreground mb-2 block">
-                Payment Method <span className="text-destructive">*</span>
-              </Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger className="w-full h-[42px] bg-background">
-                  <SelectValue placeholder="Select method" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="check">Check</SelectItem>
-                  <SelectItem value="credit_card">Credit Card</SelectItem>
-                  <SelectItem value="eft">EFT/ACH</SelectItem>
-                  <SelectItem value="wire">Wire Transfer</SelectItem>
-                  <SelectItem value="money_order">Money Order</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {paymentMethod === "check" && (
               <div className="w-[200px]">
                 <Label className="text-sm text-muted-foreground mb-2 block">
-                  Reference Number
+                  Date <span className="text-destructive">*</span>
+                </Label>
+                <CalendarInput
+                  value={paymentDate}
+                  onChange={(date: Date | undefined) => {
+                    if (date) setPaymentDate(date)
+                  }}
+                  className="w-full h-[42px]"
+                  placeholder="Select payment date"
+                />
+              </div>
+            </div>
+
+            {/* Received From, Deposit Account, and Amount Received Row */}
+            <div className="flex items-start gap-4">
+              <div className="w-[400px]">
+                <Label className="text-sm text-muted-foreground mb-2 block">
+                  Received From
+                </Label>
+                <Select 
+                  value={selectedTenant} 
+                  onValueChange={handleTenantChange}
+                  disabled={!selectedLease}
+                >
+                  <SelectTrigger className="w-full h-[42px] bg-background">
+                    <SelectValue placeholder="Select tenant" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tenants.map((tenant) => (
+                      <SelectItem key={tenant.id} value={tenant.id}>
+                        {`${tenant.first_name} ${tenant.last_name}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="w-[250px]">
+                <Label className="text-sm text-muted-foreground mb-2 block">
+                  Deposit Account <span className="text-destructive">*</span>
+                </Label>
+                <Select 
+                  value={depositAccount} 
+                  onValueChange={setDepositAccount}
+                  disabled={!selectedLease}
+                >
+                  <SelectTrigger className="w-full h-[42px] bg-background">
+                    <SelectValue placeholder="Select deposit account" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    {Object.entries(
+                      bankAccounts.reduce((acc, account) => {
+                        // Only include accounts that have property_balance matching the selected lease's property
+                        const leaseData = leases.find(lease => lease.id === selectedLease);
+                        let shouldIncludeAccount = true;
+                        
+                        if (leaseData && account.property_balance && account.property_balance.length > 0) {
+                          // Get property ID from lease
+                          const leasePropertyId = leaseData.property_id || 
+                            (leaseData.property && leaseData.property.id) || 
+                            null;
+                          
+                          // If we have a property ID from the lease, check if this account has a matching property_balance
+                          if (leasePropertyId) {
+                            shouldIncludeAccount = account.property_balance.some(
+                              pb => pb.property_id === leasePropertyId
+                            );
+                            
+                            if (!shouldIncludeAccount) {
+                              console.log(`Account ${account.account_name} excluded - no matching property_id ${leasePropertyId} in:`, 
+                                account.property_balance.map(pb => pb.property_id).join(', '));
+                            }
+                          } else if (leaseData.property && leaseData.property.name) {
+                            // If we don't have a property ID but have a property name, match by name
+                            shouldIncludeAccount = account.property_balance.some(
+                              pb => pb.property_name === leaseData.property.name
+                            );
+                            
+                            if (!shouldIncludeAccount) {
+                              console.log(`Account ${account.account_name} excluded - no matching property_name ${leaseData.property.name} in:`, 
+                                account.property_balance.map(pb => pb.property_name).join(', '));
+                            }
+                          }
+                        } else if (leaseData) {
+                          console.log(`Account ${account.account_name} included by default - no property_balance to filter by`);
+                        }
+                        
+                        // Only add the account to the dropdown if it matches the property
+                        if (shouldIncludeAccount) {
+                          const type = account.account_subtype || 'Other';
+                          if (!acc[type]) {
+                            acc[type] = [];
+                          }
+                          acc[type].push(account);
+                        }
+                        
+                        return acc;
+                      }, {} as Record<string, BankAccount[]>)
+                    ).map(([type, accounts]) => (
+                      <SelectGroup key={type}>
+                        <SelectLabel>{type}</SelectLabel>
+                        {accounts.map((account) => (
+                          <React.Fragment key={account.id}>
+                            <SelectItem value={account.id}>
+                              <div className="flex flex-col">
+                                <span>{account.account_name}</span>
+                                {account.account_subtype && (
+                                  <span className="text-xs text-muted-foreground">{account.account_subtype}</span>
+                                )}
+                              </div>
+                            </SelectItem>
+                            {account.sub_accounts && account.sub_accounts.length > 0 && (
+                              <SelectGroup>
+                                <SelectLabel className="pl-4 text-xs">
+                                  {account.account_name} Sub-accounts
+                                </SelectLabel>
+                                {account.sub_accounts.map((subAccount) => (
+                                  <SelectItem 
+                                    key={subAccount.id} 
+                                    value={subAccount.id}
+                                    className="pl-6"
+                                  >
+                                    <div className="flex flex-col">
+                                      <span>{subAccount.account_name}</span>
+                                      {subAccount.account_subtype && (
+                                        <span className="text-xs text-muted-foreground">{subAccount.account_subtype}</span>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </SelectGroup>
+                    ))}
+                    
+                    {/* Show a message when there are no matching bank accounts */}
+                    {Object.keys(
+                      bankAccounts.reduce((acc, account) => {
+                        const leaseData = leases.find(lease => lease.id === selectedLease);
+                        let shouldIncludeAccount = true;
+                        
+                        if (leaseData && account.property_balance && account.property_balance.length > 0) {
+                          const leasePropertyId = leaseData.property_id || 
+                            (leaseData.property && leaseData.property.id) || 
+                            null;
+                          
+                          if (leasePropertyId) {
+                            shouldIncludeAccount = account.property_balance.some(
+                              pb => pb.property_id === leasePropertyId
+                            );
+                          } else if (leaseData.property && leaseData.property.name) {
+                            shouldIncludeAccount = account.property_balance.some(
+                              pb => pb.property_name === leaseData.property.name
+                            );
+                          }
+                        }
+                        
+                        if (shouldIncludeAccount) {
+                          const type = account.account_subtype || 'Other';
+                          if (!acc[type]) {
+                            acc[type] = [];
+                          }
+                          acc[type].push(account);
+                        }
+                        
+                        return acc;
+                      }, {} as Record<string, BankAccount[]>)
+                    ).length === 0 && selectedLease && (
+                      <div className="p-2 text-center text-sm text-muted-foreground">
+                        No bank accounts linked to this property. Please link a bank account to this property first.
+                      </div>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="w-[200px]">
+                <Label className="text-sm text-muted-foreground mb-2 block">
+                  Amount Received <span className="text-destructive">*</span>
                 </Label>
                 <Input
-                  placeholder="Reference #"
-                  value={paymentReference}
-                  onChange={(e) => setPaymentReference(e.target.value)}
+                  type="number"
+                  placeholder="0.00"
+                  value={amountReceived}
+                  onChange={(e) => setAmountReceived(e.target.value)}
                   className="w-full h-[42px] bg-background"
                 />
               </div>
-            )}
+            </div>
 
-            {["eft", "wire", "money_order"].includes(paymentMethod) && (
-              <div className="w-[200px]">
+            {/* Payment Method Row */}
+            <div className="flex items-start gap-4">
+              <div className="w-[400px]">
                 <Label className="text-sm text-muted-foreground mb-2 block">
-                  Reference Number
+                  Payment Method <span className="text-destructive">*</span>
                 </Label>
-                <Input
-                  placeholder="Reference #"
-                  value={paymentReference}
-                  onChange={(e) => setPaymentReference(e.target.value)}
-                  className="w-full h-[42px] bg-background"
-                />
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger className="w-full h-[42px] bg-background">
+                    <SelectValue placeholder="Select method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
+                    <SelectItem value="credit_card">Credit Card</SelectItem>
+                    <SelectItem value="eft">EFT/ACH</SelectItem>
+                    <SelectItem value="wire">Wire Transfer</SelectItem>
+                    <SelectItem value="money_order">Money Order</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            )}
-          </div>
 
-          <div className="border-b" />
+              {paymentMethod === "check" && (
+                <div className="w-[200px]">
+                  <Label className="text-sm text-muted-foreground mb-2 block">
+                    Reference Number
+                  </Label>
+                  <Input
+                    placeholder="Reference #"
+                    value={paymentReference}
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    className="w-full h-[42px] bg-background"
+                  />
+                </div>
+              )}
 
-          {/* Payment Options */}
-          <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="auto-apply" 
-                checked={autoApplyPayments}
-                onCheckedChange={(checked) => {
-                  const newAutoApply = checked === true;
-                  setAutoApplyPayments(newAutoApply);
-                  
-                  // If switching from auto to manual, initialize selectedCharges
-                  if (!newAutoApply && charges.length > 0) {
-                    const initialSelectedCharges: Record<string, number> = {};
-                    charges.forEach(charge => {
-                      initialSelectedCharges[charge.id] = 0;
-                    });
-                    setSelectedCharges(initialSelectedCharges);
-                  }
-                  
-                  // If switching from manual to auto, clear selectedCharges
-                  if (newAutoApply) {
-                    setSelectedCharges({});
-                  }
-                }}
-              />
-              <label
-                htmlFor="auto-apply"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Automatically Apply Payments
-              </label>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="auto-deposit" 
-                checked={autoDepositFunds}
-                onCheckedChange={(checked) => setAutoDepositFunds(checked === true)}
-              />
-              <label
-                htmlFor="auto-deposit"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Automatically Deposit Funds
-              </label>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="email-receipt" 
-                checked={emailReceipt}
-                onCheckedChange={(checked) => setEmailReceipt(checked === true)}
-              />
-              <label
-                htmlFor="email-receipt"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Email Payment Receipt to the Tenant
-              </label>
-            </div>
-          </div>
-
-          {/* Outstanding Charges Preview (shown when a lease is selected AND autoApplyPayments is ON) */}
-          {selectedLease && charges.length > 0 && autoApplyPayments && amountReceived && parseFloat(amountReceived) > 0 && (
-            <div className="border rounded-md p-4 mt-4">
-              <h3 className="font-medium mb-3">Payment Preview</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                This payment will be automatically applied to the following charges, starting with the earliest due date.
-                <span className="block mt-1 text-xs italic">Note: Balance shown reflects the remaining amount to be paid based on previous payments.</span>
-              </p>
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Charges</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead>Balance</TableHead>
-                    <TableHead>Payment Amount</TableHead>
-                    <TableHead>Status After Payment</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {charges
-                    .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
-                    .map(charge => {
-                      const allocationAmount = autoPaymentAllocations[charge.id] || 0
-                      const newBalance = charge.balance - allocationAmount
-                      const newStatus = newBalance <= 0 ? 'Paid' : newBalance === charge.balance ? 'Unpaid' : 'Partial'
-                      const statusColor = newStatus === 'Paid' ? 'text-green-600' : newStatus === 'Partial' ? 'text-amber-600' : 'text-muted-foreground'
-                      
-                      return (
-                        <TableRow key={charge.id} className={allocationAmount > 0 ? 'bg-primary/5' : undefined}>
-                          <TableCell className="py-2">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-shrink-0 h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center">
-                                <Banknote className="h-4 w-4 text-primary" />
-                              </div>
-                              <div>
-                                <div className="font-medium capitalize">
-                                  {(() => {
-                                    console.log(`Rendering category for charge ${charge.id}:`);
-                                    console.log(`- category_id: ${charge.category_id}`);
-                                    console.log(`- category_name: ${charge.category_name}`);
-                                    
-                                    // First try to use the category_name that was directly extracted from the charge data
-                                    if (charge.category_name) {
-                                      console.log(`Using category name directly from charge data: ${charge.category_name}`);
-                                      return charge.category_name;
-                                    } 
-                                    // If not available, fall back to the lookup methods
-                                    else if (charge.category_id) {
-                                      const name = getCategoryName(charge.category_id);
-                                      console.log(`Using getCategoryName result: ${name}`);
-                                      return name;
-                                    } else {
-                                      console.log(`No category information available`);
-                                      return 'Uncategorized';
-                                    }
-                                  })()}
-                                </div>
-                                <div className="text-xs text-muted-foreground">Charge</div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-2">
-                            {charge.reference || 'N/A'}
-                          </TableCell>
-                          <TableCell className="py-2">
-                            {new Date(charge.due_date).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell className="py-2 font-medium">
-                            ${formatCurrency(charge.balance)}
-                          </TableCell>
-                          <TableCell className="py-2 font-medium">
-                            ${formatCurrency(allocationAmount)}
-                          </TableCell>
-                          <TableCell className={`py-2 font-medium ${statusColor}`}>
-                            {newStatus}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  {charges.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center">
-                        No outstanding charges found for this lease
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              
-              {/* Show remaining amount if any */}
-              {parseFloat(amountReceived) > Object.values(autoPaymentAllocations).reduce((sum, amount) => sum + amount, 0) && (
-                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
-                  <p className="text-sm text-amber-800">
-                    <strong>Note:</strong> ${formatCurrency(parseFloat(amountReceived) - Object.values(autoPaymentAllocations).reduce((sum, amount) => sum + amount, 0))} will remain unallocated after paying all outstanding charges.
-                  </p>
+              {["eft", "wire", "money_order"].includes(paymentMethod) && (
+                <div className="w-[200px]">
+                  <Label className="text-sm text-muted-foreground mb-2 block">
+                    Reference Number
+                  </Label>
+                  <Input
+                    placeholder="Reference #"
+                    value={paymentReference}
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    className="w-full h-[42px] bg-background"
+                  />
                 </div>
               )}
             </div>
-          )}
 
-          {/* Outstanding Charges (shown only when a lease is selected AND autoApplyPayments is OFF) */}
-          {selectedLease && charges.length > 0 && !autoApplyPayments && (
-            <div className="border rounded-md p-4 mt-4">
-              <h3 className="font-medium mb-3">Outstanding Transactions</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                Select the charges you want to apply this payment to.
-                <span className="block mt-1 text-xs italic">Note: Balance shown reflects the remaining amount to be paid based on previous payments.</span>
-              </p>
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Charges <span className="text-destructive">*</span></TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Balance</TableHead>
-                    <TableHead>Payment Amount <span className="text-destructive">*</span></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {charges.map(charge => (
-                    <TableRow key={charge.id}>
-                      <TableCell className="py-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-shrink-0 h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center">
-                            <Banknote className="h-4 w-4 text-primary" />
-                          </div>
-                          <div>
-                            <div className="font-medium capitalize">
-                              {(() => {
-                                console.log(`Rendering category for charge ${charge.id}:`);
-                                console.log(`- category_id: ${charge.category_id}`);
-                                console.log(`- category_name: ${charge.category_name}`);
-                                
-                                // First try to use the category_name that was directly extracted from the charge data
-                                if (charge.category_name) {
-                                  console.log(`Using category name directly from charge data: ${charge.category_name}`);
-                                  return charge.category_name;
-                                } 
-                                // If not available, fall back to the lookup methods
-                                else if (charge.category_id) {
-                                  const name = getCategoryName(charge.category_id);
-                                  console.log(`Using getCategoryName result: ${name}`);
-                                  return name;
-                                } else {
-                                  console.log(`No category information available`);
-                                  return 'Uncategorized';
-                                }
-                              })()}
-                            </div>
-                            <div className="text-xs text-muted-foreground">Charge</div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-2">
-                        {charge.reference || 'N/A'}
-                      </TableCell>
-                      <TableCell className="py-2">
-                        {new Date(charge.due_date).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="py-2 font-medium">
-                        ${formatCurrency(charge.balance)}
-                      </TableCell>
-                      <TableCell className="py-2">
-                        <Input
-                          type="number"
-                          placeholder="0.00"
-                          className="bg-background h-[36px] w-[120px]"
-                          value={selectedCharges[charge.id] || ''}
-                          onChange={(e) => handleChargeAllocationChange(charge.id, e.target.value)}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {charges.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="h-24 text-center">
-                        No outstanding charges found for this lease
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+            <div className="border-b" />
 
-          {selectedLease && charges.length === 0 && !autoApplyPayments && (
-            <div className="border rounded-md p-4 mt-4">
-              <h3 className="font-medium mb-3">Outstanding Transactions</h3>
-              <div className="text-center py-4 text-muted-foreground">
-                No outstanding charges found for this lease
-              </div>
-            </div>
-          )}
-
-          {/* Memo */}
-          <div className="space-y-2">
-            <Button 
-              variant="ghost" 
-              onClick={() => setShowMemo(!showMemo)} 
-              className="flex items-center gap-2 text-primary hover:text-primary/80 p-0"
-            >
-              <FileText className="h-4 w-4" />
-              {showMemo ? "Hide memo" : "Add memo"}
-            </Button>
-            <div className="overflow-hidden">
-              <div 
-                className={`transform transition-all duration-200 ease-out ${
-                  showMemo 
-                    ? 'translate-y-0 opacity-100 h-auto visible' 
-                    : 'translate-y-4 opacity-0 h-0 invisible'
-                }`}
-              >
-                <Input
-                  placeholder="Add a memo for your reference"
-                  value={memo}
-                  onChange={(e) => setMemo(e.target.value)}
-                  className="w-full bg-background"
+            {/* Payment Options */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="auto-apply" 
+                  checked={autoApplyPayments}
+                  onCheckedChange={(checked) => {
+                    const newAutoApply = checked === true;
+                    setAutoApplyPayments(newAutoApply);
+                    
+                    // If switching from auto to manual, initialize selectedCharges
+                    if (!newAutoApply && charges.length > 0) {
+                      const initialSelectedCharges: Record<string, number> = {};
+                      charges.forEach(charge => {
+                        initialSelectedCharges[charge.id] = 0;
+                      });
+                      setSelectedCharges(initialSelectedCharges);
+                    }
+                    
+                    // If switching from manual to auto, clear selectedCharges
+                    if (newAutoApply) {
+                      setSelectedCharges({});
+                    }
+                  }}
                 />
+                <label
+                  htmlFor="auto-apply"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Automatically Apply Payments
+                </label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="auto-deposit" 
+                  checked={autoDepositFunds}
+                  onCheckedChange={(checked) => setAutoDepositFunds(checked === true)}
+                />
+                <label
+                  htmlFor="auto-deposit"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Automatically Deposit Funds
+                </label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="email-receipt" 
+                  checked={emailReceipt}
+                  onCheckedChange={(checked) => setEmailReceipt(checked === true)}
+                />
+                <label
+                  htmlFor="email-receipt"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Email Payment Receipt to the Tenant
+                </label>
               </div>
             </div>
-          </div>
 
-          {/* File Upload */}
-          <div className="border-2 border-dashed rounded-lg p-6 text-center relative">
-            <input
-              type="file"
-              id="file-upload"
-              multiple
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              onChange={handleFileUpload}
-            />
-            <p className="text-sm text-muted-foreground">
-              Drag files or <span className="text-primary cursor-pointer">Click here</span> to upload
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              jpg, png, mp4, doc, docx, pdf, xlsx, xls, no larger than 50 MB.
-            </p>
-            
-            {uploadedFiles.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {uploadedFiles.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between bg-muted p-2 rounded">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm truncate max-w-[300px]">{file.name}</span>
-                    </div>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-6 w-6" 
-                      onClick={() => handleRemoveFile(index)}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
+            {/* Outstanding Charges Preview (shown when a lease is selected AND autoApplyPayments is ON) */}
+            {selectedLease && charges.length > 0 && autoApplyPayments && amountReceived && parseFloat(amountReceived) > 0 && (
+              <div className="border rounded-md p-4 mt-4">
+                <h3 className="font-medium mb-3">Payment Preview</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  This payment will be automatically applied to the following charges, starting with the earliest due date.
+                  <span className="block mt-1 text-xs italic">Note: Balance shown reflects the remaining amount to be paid based on previous payments.</span>
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Charges</TableHead>
+                      <TableHead>Reference</TableHead>
+                      <TableHead>Due Date</TableHead>
+                      <TableHead>Balance</TableHead>
+                      <TableHead>Payment Amount</TableHead>
+                      <TableHead>Status After Payment</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {charges
+                      .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+                      .map(charge => {
+                        const allocationAmount = autoPaymentAllocations[charge.id] || 0
+                        const newBalance = charge.balance - allocationAmount
+                        const newStatus = newBalance <= 0 ? 'Paid' : newBalance === charge.balance ? 'Unpaid' : 'Partial'
+                        const statusColor = newStatus === 'Paid' ? 'text-green-600' : newStatus === 'Partial' ? 'text-amber-600' : 'text-muted-foreground'
+                        
+                        return (
+                          <TableRow key={charge.id} className={allocationAmount > 0 ? 'bg-primary/5' : undefined}>
+                            <TableCell className="py-2">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-shrink-0 h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center">
+                                  <Banknote className="h-4 w-4 text-primary" />
+                                </div>
+                                <div>
+                                  <div className="font-medium capitalize">
+                                    {(() => {
+                                      console.log(`Rendering category for charge ${charge.id}:`);
+                                      console.log(`- category_id: ${charge.category_id}`);
+                                      console.log(`- category_name: ${charge.category_name}`);
+                                      
+                                      // First try to use the category_name that was directly extracted from the charge data
+                                      if (charge.category_name) {
+                                        console.log(`Using category name directly from charge data: ${charge.category_name}`);
+                                        return charge.category_name;
+                                      } 
+                                      // If not available, fall back to the lookup methods
+                                      else if (charge.category_id) {
+                                        const name = getCategoryName(charge.category_id);
+                                        console.log(`Using getCategoryName result: ${name}`);
+                                        return name;
+                                      } else {
+                                        console.log(`No category information available`);
+                                        return 'Uncategorized';
+                                      }
+                                    })()}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">Charge</div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="py-2">
+                              {charge.reference || 'N/A'}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              {new Date(charge.due_date).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="py-2 font-medium">
+                              ${formatCurrency(charge.balance)}
+                            </TableCell>
+                            <TableCell className="py-2 font-medium">
+                              ${formatCurrency(allocationAmount)}
+                            </TableCell>
+                            <TableCell className={`py-2 font-medium ${statusColor}`}>
+                              {newStatus}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    {charges.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-24 text-center">
+                          No outstanding charges found for this lease
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+                
+                {/* Show remaining amount if any */}
+                {parseFloat(amountReceived) > Object.values(autoPaymentAllocations).reduce((sum, amount) => sum + amount, 0) && (
+                  <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                    <p className="text-sm text-amber-800">
+                      <strong>Note:</strong> ${formatCurrency(parseFloat(amountReceived) - Object.values(autoPaymentAllocations).reduce((sum, amount) => sum + amount, 0))} will remain unallocated after paying all outstanding charges.
+                    </p>
                   </div>
-                ))}
+                )}
               </div>
             )}
-          </div>
-          
-          {/* Share with tenants checkbox */}
-          <div className="flex items-center space-x-2">
-            <Checkbox 
-              id="share-with-tenants" 
-              checked={shareWithTenants}
-              onCheckedChange={(checked) => setShareWithTenants(checked === true)}
-            />
-            <label
-              htmlFor="share-with-tenants"
-              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Share files with the tenants.
-            </label>
-          </div>
-        </div>
 
-        <DialogFooter className="mt-2 border-t pt-4 px-6">
-          <div className="flex items-center justify-between w-full">
-            <div>
-              <div className="text-sm text-muted-foreground">Reference</div>
-              <div className="font-medium">{reference}</div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex gap-6 mr-4">
-                <div>
-                  <div className="text-sm text-muted-foreground">Total Amount</div>
-                  <div className="font-medium text-xl">${formatCurrency(amountReceived || "0")}</div>
+            {/* Outstanding Charges (shown only when a lease is selected AND autoApplyPayments is OFF) */}
+            {selectedLease && charges.length > 0 && !autoApplyPayments && (
+              <div className="border rounded-md p-4 mt-4">
+                <h3 className="font-medium mb-3">Outstanding Transactions</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Select the charges you want to apply this payment to.
+                  <span className="block mt-1 text-xs italic">Note: Balance shown reflects the remaining amount to be paid based on previous payments.</span>
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Charges <span className="text-destructive">*</span></TableHead>
+                      <TableHead>Reference</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Balance</TableHead>
+                      <TableHead>Payment Amount <span className="text-destructive">*</span></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {charges.map(charge => (
+                      <TableRow key={charge.id}>
+                        <TableCell className="py-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-shrink-0 h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center">
+                              <Banknote className="h-4 w-4 text-primary" />
+                            </div>
+                            <div>
+                              <div className="font-medium capitalize">
+                                {(() => {
+                                  console.log(`Rendering category for charge ${charge.id}:`);
+                                  console.log(`- category_id: ${charge.category_id}`);
+                                  console.log(`- category_name: ${charge.category_name}`);
+                                  
+                                  // First try to use the category_name that was directly extracted from the charge data
+                                  if (charge.category_name) {
+                                    console.log(`Using category name directly from charge data: ${charge.category_name}`);
+                                    return charge.category_name;
+                                  } 
+                                  // If not available, fall back to the lookup methods
+                                  else if (charge.category_id) {
+                                    const name = getCategoryName(charge.category_id);
+                                    console.log(`Using getCategoryName result: ${name}`);
+                                    return name;
+                                  } else {
+                                    console.log(`No category information available`);
+                                    return 'Uncategorized';
+                                  }
+                                })()}
+                              </div>
+                              <div className="text-xs text-muted-foreground">Charge</div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-2">
+                          {charge.reference || 'N/A'}
+                        </TableCell>
+                        <TableCell className="py-2">
+                          {new Date(charge.due_date).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="py-2 font-medium">
+                          ${formatCurrency(charge.balance)}
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <Input
+                            type="number"
+                            placeholder="0.00"
+                            className="bg-background h-[36px] w-[120px]"
+                            value={selectedCharges[charge.id] || ''}
+                            onChange={(e) => handleChargeAllocationChange(charge.id, e.target.value)}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {charges.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="h-24 text-center">
+                          No outstanding charges found for this lease
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {selectedLease && charges.length === 0 && !autoApplyPayments && (
+              <div className="border rounded-md p-4 mt-4">
+                <h3 className="font-medium mb-3">Outstanding Transactions</h3>
+                <div className="text-center py-4 text-muted-foreground">
+                  No outstanding charges found for this lease
                 </div>
-                {!autoApplyPayments && (
-                  <div>
-                    <div className="text-sm text-muted-foreground">Allocated</div>
-                    <div className="font-medium text-xl">${formatCurrency(getTotalAllocated())}</div>
-                  </div>
-                )}
-                {!autoApplyPayments && (
-                  <div>
-                    <div className="text-sm text-muted-foreground">Unallocated</div>
-                    <div className={`font-medium text-xl ${parseFloat(amountReceived || "0") - getTotalAllocated() < 0 ? 'text-destructive' : 'text-amber-500'}`}>
-                      ${formatCurrency(parseFloat(amountReceived || "0") - getTotalAllocated())}
+              </div>
+            )}
+
+            {/* Memo */}
+            <div className="space-y-2">
+              <Button 
+                variant="ghost" 
+                onClick={() => setShowMemo(!showMemo)} 
+                className="flex items-center gap-2 text-primary hover:text-primary/80 p-0"
+              >
+                <FileText className="h-4 w-4" />
+                {showMemo ? "Hide memo" : "Add memo"}
+              </Button>
+              <div className="overflow-hidden">
+                <div 
+                  className={`transform transition-all duration-200 ease-out ${
+                    showMemo 
+                      ? 'translate-y-0 opacity-100 h-auto visible' 
+                      : 'translate-y-4 opacity-0 h-0 invisible'
+                  }`}
+                >
+                  <Input
+                    placeholder="Add a memo for your reference"
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    className="w-full bg-background"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* File Upload */}
+            <div className="border-2 border-dashed rounded-lg p-6 text-center relative">
+              <input
+                type="file"
+                id="file-upload"
+                multiple
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                onChange={handleFileUpload}
+              />
+              <p className="text-sm text-muted-foreground">
+                Drag files or <span className="text-primary cursor-pointer">Click here</span> to upload
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                jpg, png, mp4, doc, docx, pdf, xlsx, xls, no larger than 50 MB.
+              </p>
+              
+              {uploadedFiles.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {uploadedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between bg-muted p-2 rounded">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm truncate max-w-[300px]">{file.name}</span>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-6 w-6" 
+                        onClick={() => handleRemoveFile(index)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
                     </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {/* Share with tenants checkbox */}
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="share-with-tenants" 
+                checked={shareWithTenants}
+                onCheckedChange={(checked) => setShareWithTenants(checked === true)}
+              />
+              <label
+                htmlFor="share-with-tenants"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Share files with the tenants.
+              </label>
+            </div>
+
+            <DialogFooter className="mt-2 border-t pt-4 px-6">
+              <div className="flex items-center justify-between w-full">
+                <div>
+                  <div className="text-sm text-muted-foreground">Reference</div>
+                  <div className="font-medium">{reference}</div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex gap-6 mr-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground">Total Amount</div>
+                      <div className="font-medium text-xl">${formatCurrency(amountReceived || "0")}</div>
+                    </div>
+                    {!autoApplyPayments && (
+                      <div>
+                        <div className="text-sm text-muted-foreground">Allocated</div>
+                        <div className="font-medium text-xl">${formatCurrency(getTotalAllocated())}</div>
+                      </div>
+                    )}
+                    {!autoApplyPayments && (
+                      <div>
+                        <div className="text-sm text-muted-foreground">Unallocated</div>
+                        <div className={`font-medium text-xl ${parseFloat(amountReceived || "0") - getTotalAllocated() < 0 ? 'text-destructive' : 'text-amber-500'}`}>
+                          ${formatCurrency(parseFloat(amountReceived || "0") - getTotalAllocated())}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSave} disabled={isLoading}>
+                      {isLoading ? "Saving..." : "Save"}
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => onOpenChange(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSave} disabled={isLoading}>
-                  {isLoading ? "Saving..." : "Save"}
-                </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4 py-4 px-6">
+            <div className="flex flex-col items-center justify-center gap-4">
+              <div className="w-24 h-24 bg-primary/10 rounded-xl flex items-center justify-center relative">
+                <Banknote className="h-12 w-12 text-primary" />
+                <div className="absolute -bottom-2 -right-2 bg-background rounded-full p-0.5">
+                  <div className="bg-primary rounded-full p-1">
+                    <Check className="h-4 w-4 text-primary-foreground" />
+                  </div>
+                </div>
               </div>
+              <div className="text-4xl font-semibold">
+                ${formatCurrency(amountReceived)}
+              </div>
+              <div className="w-full bg-background rounded-lg border p-4">
+                <div className="flex justify-between items-center">
+                  <div className="text-sm">Tenant</div>
+                  <div className="text-sm">
+                    {selectedLease && leases.find(lease => lease.id === selectedLease)?.tenant_name}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <div className="text-sm">Payment Date</div>
+                  <div className="text-sm">{format(paymentDate, "MMM d, yyyy")}</div>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <div className="text-sm">Payment Method</div>
+                  <div className="text-sm capitalize">{paymentMethod.replace('_', ' ')}</div>
+                </div>
+              </div>
+             
+              <Button 
+                onClick={resetForm}
+                className="w-full"
+              >
+                Record Another Payment
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  resetForm()
+                  onOpenChange(false)
+                }}
+              >
+                Close
+              </Button>
             </div>
           </div>
-        </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   )

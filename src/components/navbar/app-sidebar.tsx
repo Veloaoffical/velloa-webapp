@@ -20,6 +20,7 @@ import {
 import { NavUser } from "@/components/navbar/nav-user"
 import { SearchForm } from "@/components/ui/search-form"
 import { NotificationDialog } from "@/components/notification-dialog"
+import { useCommandPalette } from "@/components/command-palette"
 
 import {
   Sidebar,
@@ -93,6 +94,7 @@ interface UserData {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
+  const { setOpen: setCommandPaletteOpen } = useCommandPalette();
   const [userData, setUserData] = React.useState<UserData>({
     fullName: '',
     email: ''
@@ -166,7 +168,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
         <hr className="border-t border-border mx-2 -mt-px" />
         <div className="group-data-[collapsible=icon]:hidden">
-          <SearchForm className="mt-3 px-2" />
+          <SearchForm 
+            className="mt-3 px-2" 
+            onSearchClick={() => setCommandPaletteOpen(true)}
+          />
         </div>
         <div className="group-data-[collapsible=icon]:block group-data-[collapsible=icon]:h-[40px] hidden">
           {/* This empty div maintains spacing when search is hidden */}

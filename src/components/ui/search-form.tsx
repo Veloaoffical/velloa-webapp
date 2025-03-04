@@ -1,37 +1,35 @@
-import { useId, useEffect, useRef } from "react";
+import { useId } from "react";
 import { SidebarInput } from "@/components/ui/sidebar";
 import { SidebarGroup, SidebarGroupContent } from "@/components/ui/sidebar";
 import { Command, Search } from "lucide-react";
 
-export function SearchForm({ ...props }: React.ComponentProps<"form">) {
+interface SearchFormProps extends React.ComponentProps<"form"> {
+  onSearchClick: () => void;
+}
+
+export function SearchForm({ onSearchClick, ...props }: SearchFormProps) {
   const id = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
 
   return (
-    <form {...props}>
+    <form {...props} onClick={(e) => {
+      e.preventDefault();
+      onSearchClick();
+    }}>
       <SidebarGroup className="py-0">
         <SidebarGroupContent className="relative">
-          <div className="relative">
+          <div className="relative cursor-pointer">
             <SidebarInput 
-              ref={inputRef}
+              readOnly
               id={id} 
-              className="ps-9 pe-9" 
+              className="ps-9 pe-9 cursor-pointer" 
               aria-label="Search" 
               placeholder="Quick Search..."
+              onClick={(e) => {
+                e.preventDefault();
+                onSearchClick();
+              }}
             />
-            <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-2 text-muted-foreground/60 peer-disabled:opacity-50">
+            <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-2 text-muted-foreground/60">
               <Search size={20} aria-hidden="true" />
             </div>
             <div className="pointer-events-none absolute inset-y-0 end-0 flex items-center justify-center pe-2 text-muted-foreground">

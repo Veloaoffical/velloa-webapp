@@ -7,6 +7,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { usePathname } from 'next/navigation';
 import { ThemeProvider } from "next-themes";
 import { GeistSans } from "geist/font/sans";
+import { CommandPaletteProvider } from "@/components/command-palette";
 
 function RootLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -30,14 +31,16 @@ function RootLayoutContent({ children }: { children: React.ReactNode }) {
           enableSystem
           disableTransitionOnChange
         >
-          <SidebarProvider>
-            <div className="flex min-h-screen w-full">
-              {!isAuthPage && <AppSidebar />}
-              <main className="flex-1 w-0 min-w-0 md:group-data-[collapsible=icon]:pl-6">
-                {children}
-              </main>
-            </div>
-          </SidebarProvider>
+          <CommandPaletteProvider>
+            <SidebarProvider>
+              <div className="flex min-h-screen w-full">
+                {!isAuthPage && <AppSidebar />}
+                <main className="flex-1 w-0 min-w-0 md:group-data-[collapsible=icon]:pl-6">
+                  {children}
+                </main>
+              </div>
+            </SidebarProvider>
+          </CommandPaletteProvider>
           <Toaster position="top-right" />
         </ThemeProvider>
       </body>

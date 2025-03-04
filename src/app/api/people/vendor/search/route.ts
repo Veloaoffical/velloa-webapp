@@ -12,6 +12,11 @@ interface Unit {
   properties: Property;
 }
 
+interface ServiceAddress {
+  type: string;
+  property_ids: string[];
+}
+
 interface Vendor {
   id: string;
   first_name: string;
@@ -20,6 +25,7 @@ interface Vendor {
   role: string;
   unit_id: string | null;
   units: Unit | null;
+  service_address: ServiceAddress | null;
 }
 
 export async function GET() {
@@ -55,6 +61,7 @@ export async function GET() {
         role,
         company,
         unit_id,
+        service_address,
         units (
           unit_name,
           properties (
@@ -78,6 +85,7 @@ export async function GET() {
       last_name: vendor.last_name,
       company: vendor.company,
       role: vendor.role,
+      service_address: vendor.service_address,
       unit: vendor.units ? {
         unit_number: vendor.units.unit_name,
         property_name: vendor.units.properties.name

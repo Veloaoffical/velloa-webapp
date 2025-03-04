@@ -13,6 +13,7 @@ interface ChargeData {
   people_id: string;
   bill_date: string;
   due_date: string;
+  payee: string | null;
   property_id: string | null;
   charge_amount: {
     lines: {
@@ -174,9 +175,15 @@ export async function POST(request: NextRequest) {
     if (firstLine.unit_id) {
       const { data: unitData, error: unitError } = await supabase
         .from('units')
-        .select('id')
-        .eq('id', firstLine.unit_id)
-        .eq('company_id', company_id)
+        .select(`
+          unit_id,
+          property_id,
+          properties!inner (
+            company_id
+          )
+        `)
+        .eq('unit_id', firstLine.unit_id)
+        .eq('properties.company_id', company_id)
         .single();
 
       if (unitError || !unitData) {
@@ -187,7 +194,7 @@ export async function POST(request: NextRequest) {
         );
       }
       
-      validatedUnitId = unitData.id;
+      validatedUnitId = unitData.unit_id;
     }
 
     // Transform line items and calculate total amount
@@ -427,18 +434,19 @@ export async function POST(request: NextRequest) {
       people_id: billData.people_id,
       bill_date: billData.bill_date,
       due_date: billData.due_date,
+      payee: billData.people_id,
       property_id: firstLine.property_id,
       unit_id: null, // Default to null
-        charge_amount: {
-          lines: transformedLines,
-          total_amount: totalAmount,
-          accounts_receivable_id: accountsReceivableId
-        },
-        amount_remaining: {
-          lines: transformedLines,
-          total_amount: totalAmount,
-          accounts_receivable_id: accountsReceivableId
-        },
+      charge_amount: {
+        lines: transformedLines,
+        total_amount: totalAmount,
+        accounts_receivable_id: accountsReceivableId
+      },
+      amount_remaining: {
+        lines: transformedLines,
+        total_amount: totalAmount,
+        accounts_receivable_id: accountsReceivableId
+      },
       memo: processedMemo,
       reference: billData.reference,
       status: billData.status,
@@ -459,7 +467,34 @@ export async function POST(request: NextRequest) {
     // Create the charge record
     const { data: charge, error: chargeError } = await supabase
       .from("charges")
-      .insert(chargeData)
+      .insert({
+        company_id,
+        people_id: billData.people_id,
+        bill_date: billData.bill_date,
+        due_date: billData.due_date,
+        payee: billData.people_id,
+        property_id: firstLine.property_id,
+        unit_id: validatedUnitId,
+        charge_amount: {
+          lines: transformedLines,
+          total_amount: totalAmount,
+          accounts_receivable_id: accountsReceivableId
+        },
+        amount_remaining: {
+          lines: transformedLines,
+          total_amount: totalAmount,
+          accounts_receivable_id: accountsReceivableId
+        },
+        memo: processedMemo,
+        reference: billData.reference,
+        status: billData.status,
+        created_by: user.id,
+        start_date: billData.start_date,
+        frequency: billData.frequency,
+        repeat_infinite: billData.repeat_infinite,
+        charge_type: billData.charge_type || 'bill',
+        transaction_id: transactionId
+      })
       .select()
       .single();
 

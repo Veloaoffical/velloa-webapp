@@ -485,6 +485,7 @@ export async function POST(request: NextRequest) {
         company_id,
         lease_id: chargeData.lease_id,
         property_id: leaseData.property_id,
+        payee: null,
         unit_id: leaseData.unit_id,
         people_id: chargeData.tenant_id,
         transaction_id: transactionId,

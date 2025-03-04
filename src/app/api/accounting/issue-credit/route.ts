@@ -415,6 +415,7 @@ export async function POST(request: NextRequest) {
         property_id: leaseData.property_id,
         unit_id: leaseData.unit_id,
         people_id,
+        payee: null,
         transaction_id: transactionId,
         charge_amount: {
           lines: chargeData.lines,

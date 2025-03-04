@@ -15,6 +15,7 @@ import {
 import { Plus, Search, ArrowUpDown, ArrowLeft, ChevronRight, ChevronDown } from "lucide-react"
 import { useRouter } from "next/navigation"
 import React from "react"
+import Link from "next/link"
 
 interface Account {
   id: string
@@ -144,9 +145,11 @@ export default function ChartOfAccountsPage() {
       <div>
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" className="p-2 hover:bg-transparent -ml-2" onClick={() => window.history.back()}>
-              <ArrowLeft className="h-10 w-10" />
-            </Button>
+            <Link href="/accounting">
+              <Button variant="ghost" className="p-2 hover:bg-transparent -ml-2">
+                <ArrowLeft className="h-10 w-10" />
+              </Button>
+            </Link>
             <h1 className="text-3xl font-bold tracking-tight">Chart of Accounts</h1>
           </div>
           <div className="ml-10">

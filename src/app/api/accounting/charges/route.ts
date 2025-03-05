@@ -513,6 +513,7 @@ export async function GET(request: NextRequest) {
           amount_remaining,
           due_date,
           memo,
+          payee,
           reference,
           status,
           created_at,

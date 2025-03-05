@@ -48,6 +48,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EditBillsDialog } from "@/app/accounting/pay-bills/components/EditBillsDialog";
 
 type StepType = 'intro' | 'bills' | 'allocation' | 'payments' | 'summary';
 
@@ -141,7 +142,8 @@ interface ChargeLine {
 
 interface Charge {
   id: string;
-  payee_id: string;
+  payee: string;
+  due_date?: Date;
   amount_remaining: {
     lines: ChargeLine[];
     total_amount: number;
@@ -236,6 +238,10 @@ export default function PayBillsPage() {
 
   const [charges, setCharges] = useState<Charge[]>([]);
   
+  // Add state for edit dialog
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedPropertyForEdit, setSelectedPropertyForEdit] = useState<{id: string; name: string; address?: string} | null>(null);
+  
   // Fetch charges when component mounts or when vendors are selected
   useEffect(() => {
     const fetchCharges = async () => {
@@ -246,13 +252,26 @@ export default function PayBillsPage() {
           throw new Error('Failed to fetch charges');
         }
         const data = await response.json();
-        setCharges(data);
+        
+        // Log the full API response to see what we're getting
+        console.log('API Response:', data);
+        
+        // Map the data to ensure we have the correct payee field
+        const mappedCharges = data.map((charge: any) => ({
+          ...charge,
+          // If payee is not directly available, try to get it from vendor_id or other fields
+          payee: charge.payee || charge.vendor_id || charge.vendor || charge.payee_id
+        }));
+        
+        console.log('Mapped charges:', mappedCharges);
+        
+        setCharges(mappedCharges);
         
         // Create a map to store total remaining amount per property
         const balancesByProperty = new Map<string, number>();
         
         // Sum up amounts for each property from all charges
-        data.forEach((charge: Charge) => {
+        mappedCharges.forEach((charge: Charge) => {
           if (charge.amount_remaining && charge.amount_remaining.lines) {
             charge.amount_remaining.lines.forEach((line: ChargeLine) => {
               if (line.property_id) {
@@ -1201,18 +1220,31 @@ export default function PayBillsPage() {
                             
                             // Get balance from propertyBalances, filtered by selected vendors if any
                             const getFilteredBalance = () => {
-                              if (form.bills.scope === 'all') {
+                              // If all bills are selected, return the full balance
+                              if (form.bills.billScope === 'all') {
                                 return propertyBalances.get(propertyId) || 0;
                               }
                               
-                              // If specific vendors are selected, only include charges for those vendors
-                              if (form.bills.scope === 'specific' && form.bills.vendors && form.bills.vendors.length > 0) {
+                              // For specific bills, filter by vendors and date range if specified
+                              if (form.bills.billScope === 'specific') {
                                 let filteredBalance = 0;
+                                
                                 charges.forEach((charge) => {
+                                  // Check if charge matches vendor filter
+                                  const vendorMatches = form.bills.scope === 'all' || 
+                                    (form.bills.vendors?.includes(charge.payee));
+
+                                  // Check if charge matches date filter
+                                  const dateMatches = !form.bills.startDate || !form.bills.endDate ? true :
+                                    (charge.due_date && 
+                                     new Date(charge.due_date) >= form.bills.startDate && 
+                                     new Date(charge.due_date) <= form.bills.endDate);
+
+                                  // Only include charges that match both vendor and date filters
                                   if (charge.amount_remaining && 
                                       charge.amount_remaining.lines && 
-                                      charge.payee_id && 
-                                      form.bills.vendors?.includes(charge.payee_id)) {
+                                      vendorMatches && 
+                                      dateMatches) {
                                     charge.amount_remaining.lines.forEach((line: ChargeLine) => {
                                       if (line.property_id === propertyId) {
                                         filteredBalance += line.amount;
@@ -1220,6 +1252,7 @@ export default function PayBillsPage() {
                                     });
                                   }
                                 });
+                                
                                 return filteredBalance;
                               }
                               
@@ -1339,8 +1372,12 @@ export default function PayBillsPage() {
                                           variant="ghost" 
                                           size="icon"
                                           onClick={() => {
-                                            // Add edit functionality here
-                                            console.log(`Edit property: ${propertyId}`);
+                                            setSelectedPropertyForEdit({
+                                              id: propertyId,
+                                              name: propertyName,
+                                              address: propertyAddress
+                                            });
+                                            setEditDialogOpen(true);
                                           }}
                                         >
                                           <Pencil className="h-4 w-4" />
@@ -1409,6 +1446,19 @@ export default function PayBillsPage() {
           </div>
         </div>
       </Card>
+      
+      {/* Add the dialog at the end of the component */}
+      {selectedPropertyForEdit && (
+        <EditBillsDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          property={selectedPropertyForEdit}
+          charges={charges}
+          startDate={form.bills.startDate}
+          endDate={form.bills.endDate}
+          vendors={form.bills.vendors}
+        />
+      )}
     </div>
   );
 } 

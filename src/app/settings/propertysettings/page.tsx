@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { LateFeeContent } from "../../../components/settingscomponents/LateFee";
+import { ManagementFeeContent } from "../../../components/settingscomponents/ManagementFees";
 
 interface LateFee {
   type: string;
@@ -26,6 +27,26 @@ interface LateFee {
   gracePeriod?: number;
   revenueAccount: string;
   description?: string;
+}
+
+interface ManagementFee {
+  type: string;
+  amount: number;
+  frequency?: string;
+  expenseCategory?: string;
+  revenueAccount?: string;
+  description?: string;
+}
+
+interface MinimumFee {
+  enabled: boolean;
+  amount: number;
+  expenseCategory?: string;
+}
+
+interface PayoutCategory {
+  id: string;
+  account_name: string;
 }
 
 interface LateFeeSettings {
@@ -93,7 +114,11 @@ export default function PropertySettingsPage() {
   const [activeSection, setActiveSection] = useState("Tenant Portal");
   const [isClient, setIsClient] = useState(false);
   const [isEnabled, setIsEnabled] = useState(false);
+  const [isMgmtFeesEnabled, setIsMgmtFeesEnabled] = useState(false);
   const [lateFees, setLateFees] = useState<LateFee[]>([]);
+  const [managementFees, setManagementFees] = useState<ManagementFee[]>([]);
+  const [minimumFee, setMinimumFee] = useState<MinimumFee>({ enabled: false, amount: 0 });
+  const [payoutCategories, setPayoutCategories] = useState<PayoutCategory[]>([]);
   const [maxDailyFeesEnabled, setMaxDailyFeesEnabled] = useState(false);
   const [maxMonthlyFeesEnabled, setMaxMonthlyFeesEnabled] = useState(false);
   const [minBalanceEnabled, setMinBalanceEnabled] = useState(false);
@@ -109,25 +134,37 @@ export default function PropertySettingsPage() {
     // Fetch initial enabled state and settings
     const fetchSettings = async () => {
       try {
-        const response = await fetch('/api/company/settings/late-fees');
-        if (!response.ok) throw new Error('Failed to fetch settings');
-        const data = await response.json();
+        // Fetch late fee settings
+        const lateFeesResponse = await fetch('/api/company/settings/late-fees');
+        if (!lateFeesResponse.ok) throw new Error('Failed to fetch late fee settings');
+        const lateFeesData = await lateFeesResponse.json();
         
-        // Update all state values with fetched data
-        setIsEnabled(data.isEnabled || false);
-        setLateFees(data.lateFees || []);
-        setMaxDailyFeesEnabled(data.maxDailyFeesEnabled || false);
-        setMaxMonthlyFeesEnabled(data.maxMonthlyFeesEnabled || false);
-        setMinBalanceEnabled(data.minBalanceEnabled || false);
-        setApplyToMostRecentEnabled(data.applyToMostRecentEnabled || false);
-        setApplyToSpecificEnabled(data.applyToSpecificEnabled || false);
-        setMaxDailyAmount(data.maxDailyAmount || "");
-        setMaxMonthlyAmount(data.maxMonthlyAmount || "");
-        setMinBalanceAmount(data.minBalanceAmount || "");
-        setSelectedChargeTypes(data.selectedChargeTypes || "");
+        // Update late fee state values with fetched data
+        setIsEnabled(lateFeesData.isEnabled || false);
+        setLateFees(lateFeesData.lateFees || []);
+        setMaxDailyFeesEnabled(lateFeesData.maxDailyFeesEnabled || false);
+        setMaxMonthlyFeesEnabled(lateFeesData.maxMonthlyFeesEnabled || false);
+        setMinBalanceEnabled(lateFeesData.minBalanceEnabled || false);
+        setApplyToMostRecentEnabled(lateFeesData.applyToMostRecentEnabled || false);
+        setApplyToSpecificEnabled(lateFeesData.applyToSpecificEnabled || false);
+        setMaxDailyAmount(lateFeesData.maxDailyAmount || "");
+        setMaxMonthlyAmount(lateFeesData.maxMonthlyAmount || "");
+        setMinBalanceAmount(lateFeesData.minBalanceAmount || "");
+        setSelectedChargeTypes(lateFeesData.selectedChargeTypes || "");
+
+        // Fetch management fee settings
+        const mgmtFeesResponse = await fetch('/api/company/settings/management-fees');
+        if (!mgmtFeesResponse.ok) throw new Error('Failed to fetch management fee settings');
+        const mgmtFeesData = await mgmtFeesResponse.json();
+        
+        // Update management fee state values with fetched data
+        setIsMgmtFeesEnabled(mgmtFeesData.isEnabled || false);
+        setManagementFees(mgmtFeesData.managementFees || []);
+        setMinimumFee(mgmtFeesData.minimumFee || { enabled: false, amount: 0 });
+        setPayoutCategories(mgmtFeesData.payoutCategories || []);
       } catch (error) {
-        console.error('Error fetching late fee settings:', error);
-        toast.error('Failed to fetch late fee settings');
+        console.error('Error fetching settings:', error);
+        toast.error('Failed to fetch settings');
       }
     };
     fetchSettings();
@@ -223,6 +260,66 @@ export default function PropertySettingsPage() {
     }
   };
 
+  const handleToggleMgmtFeesEnabled = async (enabled: boolean) => {
+    setIsMgmtFeesEnabled(enabled);
+    try {
+      const response = await fetch('/api/company/settings/management-fees', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          isEnabled: enabled,
+          managementFees,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update settings');
+      toast.success('Management fee settings updated successfully');
+    } catch (error) {
+      console.error('Error updating management fee settings:', error);
+      toast.error('Failed to update management fee settings');
+      setIsMgmtFeesEnabled(!enabled); // Revert on error
+    }
+  };
+
+  const handleManagementFeeSettingsChange = async (newSettings: Partial<{
+    managementFees: ManagementFee[];
+    minimumFee?: MinimumFee;
+    payoutCategories?: PayoutCategory[];
+  }>) => {
+    try {
+      // Update local state with new settings
+      if (newSettings.managementFees) {
+        setManagementFees(newSettings.managementFees);
+      }
+      if (newSettings.minimumFee) {
+        setMinimumFee(newSettings.minimumFee);
+      }
+      if (newSettings.payoutCategories) {
+        setPayoutCategories(newSettings.payoutCategories);
+      }
+
+      // Save to backend
+      const response = await fetch('/api/company/settings/management-fees', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          isEnabled: isMgmtFeesEnabled,
+          ...newSettings
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update settings');
+      toast.success('Management fee settings updated successfully');
+    } catch (error) {
+      console.error('Error updating management fee settings:', error);
+      toast.error('Failed to update management fee settings');
+    }
+  };
+
   const scrollToSection = (label: string) => {
     setActiveSection(label);
     const element = document.getElementById(`section-${label}`);
@@ -289,8 +386,14 @@ export default function PropertySettingsPage() {
                           onCheckedChange={handleToggleEnabled}
                         />
                       )}
+                      {setting.label === "Management Fees" && (
+                        <Switch 
+                          checked={isMgmtFeesEnabled}
+                          onCheckedChange={handleToggleMgmtFeesEnabled}
+                        />
+                      )}
                     </div>
-                    {setting.label === "Late Fees" && <Separator className="mt-6" />}
+                    {(setting.label === "Late Fees" || setting.label === "Management Fees") && <Separator className="mt-6" />}
                   </div>
 
                   {setting.label === "Late Fees" ? (
@@ -308,6 +411,16 @@ export default function PropertySettingsPage() {
                         minBalanceAmount={minBalanceAmount}
                         selectedChargeTypes={selectedChargeTypes}
                         onSettingsChange={handleLateFeeSettingsChange}
+                      />
+                    </div>
+                  ) : setting.label === "Management Fees" ? (
+                    <div className={cn(!isMgmtFeesEnabled && "opacity-50 pointer-events-none")}>
+                      <ManagementFeeContent 
+                        isEnabled={isMgmtFeesEnabled}
+                        managementFees={managementFees}
+                        minimumFee={minimumFee}
+                        payoutCategories={payoutCategories}
+                        onSettingsChange={handleManagementFeeSettingsChange}
                       />
                     </div>
                   ) : (

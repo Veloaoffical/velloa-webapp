@@ -171,9 +171,11 @@ export default function AccountingPage() {
                 <FileText className="w-4 h-4 me-2 opacity-60" />
                 Create Bill
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <DollarSign className="w-4 h-4 me-2 opacity-60" />
-                Pay Bills
+              <DropdownMenuItem asChild>
+                <Link href="/accounting/pay-bills" className="flex items-center">
+                  <DollarSign className="w-4 h-4 me-2 opacity-60" />
+                  Pay Bills
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setShowAddVendorCreditDialog(true)}>
                 <CreditCard className="w-4 h-4 me-2 opacity-60" />

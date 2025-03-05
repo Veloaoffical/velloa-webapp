@@ -591,7 +591,7 @@ export const LateFeeContent: React.FC<LateFeeContentProps> = ({
         <div className="col-span-1">
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Simulation</h3>
+              <h3 className="font-semibold">Calculator</h3>
               <Button 
                 variant="outline" 
                 size="sm"

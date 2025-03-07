@@ -35,6 +35,7 @@ import { VendorBillDialog } from "./components/VendorBillDialog"
 import { IssueCreditDialog } from "./components/IssueCreditDialog"
 import { IssueRefundDialog } from "./components/IssueRefundDialog"
 import { AddVendorCreditDialog } from "./components/AddVendorCreditDialog"
+
 const profitLossData = [
   { month: "Jan", revenue: 4500, costs: 3000, netIncome: 1500 },
   { month: "Feb", revenue: 5000, costs: 3200, netIncome: 1800 },
@@ -501,6 +502,7 @@ export default function AccountingPage() {
         </Link>
 
         {/* 6. Bills & Expenses */}
+        <Link href="/accounting/bills-expenses">
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">
             <div className="flex items-start space-x-4">
@@ -514,7 +516,7 @@ export default function AccountingPage() {
             </div>
           </CardContent>
         </Card>
-
+        </Link>
         {/* 7. Open Bills */}
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">

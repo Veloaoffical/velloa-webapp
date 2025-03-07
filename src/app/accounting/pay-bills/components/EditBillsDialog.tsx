@@ -1,6 +1,6 @@
 'use client';
 
-import { Info, DollarSign } from "lucide-react";
+import { DollarSign, Building2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,12 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
@@ -38,7 +32,7 @@ interface ChargeLine {
   amount: number;
   category: string;
   line_id: string;
-  reference: string;
+  reference?: string;
   description?: string;
   unit_id?: string;
   credit_amount?: number;
@@ -47,9 +41,14 @@ interface ChargeLine {
 
 interface Category {
   id: string;
-  name: string;
-  type: string;
-  description?: string;
+  account_name: string;
+  account_type: string;
+  account_subtype: string;
+  sub_accounts?: {
+    id: string;
+    account_name: string;
+    account_subtype: string;
+  }[];
 }
 
 interface Charge {
@@ -133,18 +132,27 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
     const fetchCategories = async () => {
       try {
         setIsLoadingCategories(true);
-        const response = await fetch('/api/accounting/categories/list');
+        const response = await fetch('/api/accounting/categories');
         if (!response.ok) {
           throw new Error('Failed to fetch categories');
         }
         const data = await response.json();
         console.log('Categories data:', data);
         
-        // Create a map of category data by ID
-        const categoryMap = data.reduce((acc: Record<string, Category>, category: Category) => {
-          acc[category.id] = category;
-          return acc;
-        }, {});
+        // Create a map of category data by ID, including sub-accounts
+        const categoryMap: Record<string, Category> = {};
+        data.forEach((category: Category) => {
+          categoryMap[category.id] = category;
+          // Add sub-accounts to the map if they exist
+          if (category.sub_accounts) {
+            category.sub_accounts.forEach(subAccount => {
+              categoryMap[subAccount.id] = {
+                ...subAccount,
+                account_type: category.account_type // Inherit parent's account type
+              };
+            });
+          }
+        });
         
         console.log('Category map:', categoryMap);
         setCategoryData(categoryMap);
@@ -182,6 +190,9 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
       <DialogContent className="max-w-7xl bg-card max-h-[95vh] overflow-hidden flex flex-col">
         <DialogHeader className="pb-6">
           <DialogTitle className="flex items-center gap-2">
+            <div className="bg-muted/30 p-2.5 rounded-lg">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+            </div>
             <div>
               Bills Due - {property.name}
             </div>
@@ -190,7 +201,7 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
 
         <div className="flex flex-col flex-1 overflow-hidden">
           {/* Account and Balance Section */}
-          <div className="grid grid-cols-3 gap-6 mb-6">
+          <div className="grid grid-cols-3 gap-6 mb-6 px-6">
             <div className="space-y-2">
               <label className="text-sm font-medium">Pay From Account</label>
               <Select defaultValue="operating-2">
@@ -207,64 +218,37 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Property Account Balance</label>
-              <div className="h-10 px-3 rounded-md border bg-muted/50 flex items-center">
-                <span className="text-muted-foreground">$0.00</span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="ml-2 cursor-pointer">
-                        <Info className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <div className="space-y-2">
-                        <div className="flex justify-between gap-4">
-                          <span className="text-sm">Cash Balance</span>
-                          <span className="text-sm">$0.00</span>
-                        </div>
-                        <div className="flex justify-between gap-4">
-                          <span className="text-sm">Deposits Held</span>
-                          <span className="text-sm">$0.00</span>
-                        </div>
-                        <div className="flex justify-between gap-4">
-                          <span className="text-sm">Property Reserve Funds</span>
-                          <span className="text-sm">$0.00</span>
-                        </div>
-                        <div className="border-t pt-2 flex justify-between gap-4 font-medium">
-                          <span className="text-sm">Available Funds</span>
-                          <span className="text-sm">$0.00</span>
-                        </div>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+              <div className="relative">
+                <Input
+                  type="text"
+                  className="ps-8"
+                  value="0.00"
+                  readOnly
+                />
+                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-muted-foreground/80">
+                  <DollarSign size={12} aria-hidden="true" />
+                </div>
               </div>
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium">Property Available Funds</label>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="cursor-pointer">
-                        <Info className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-sm">Total funds available for this property</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <div className="h-10 px-3 rounded-md border bg-muted/50 flex items-center">
-                <span className="text-destructive">$0.00</span>
+              <label className="text-sm font-medium">Property Available Funds</label>
+              <div className="relative">
+                <Input
+                  type="text"
+                  className="ps-8 text-destructive"
+                  value="0.00"
+                  readOnly
+                />
+                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-destructive/80">
+                  <DollarSign size={12} aria-hidden="true" />
+                </div>
               </div>
             </div>
           </div>
 
           {/* Bills Table - Make this section scrollable */}
-          <div className="flex-1 overflow-y-auto pr-2">
+          <div className="flex-1 overflow-y-auto px-6">
             {isLoadingVendors || isLoadingCategories ? (
               // Loading state
               <div className="space-y-6">
@@ -367,11 +351,9 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
                             const categories = charge.amount_remaining?.lines
                               ?.filter(line => line.property_id === property.id)
                               ?.map(line => {
-                                console.log('Line category:', line.category);
-                                console.log('Category data for line:', categoryData[line.category]);
                                 const category = categoryData[line.category];
                                 return {
-                                  name: category?.name || 'N/A',
+                                  name: category?.account_name || 'N/A',
                                   amount: line.credit_amount || line.debit_amount || 0,
                                   description: line.description || ''
                                 };
@@ -387,11 +369,7 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
                                       <div key={idx} className="text-sm">
                                         <div className="flex items-center justify-between">
                                           <span className="font-medium">{cat.name}</span>
-                                          <span className="text-xs text-muted-foreground ml-2">${cat.amount.toFixed(2)}</span>
                                         </div>
-                                        {cat.description && (
-                                          <div className="text-xs text-muted-foreground mt-0.5">{cat.description}</div>
-                                        )}
                                       </div>
                                     ))}
                                     {categories.length === 0 && (
@@ -412,7 +390,7 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  {charge.amount_remaining.lines[0]?.reference || 'N/A'}
+                                  {charge.amount_remaining.lines[0]?.line_id || 'N/A'}
                                 </TableCell>
                                 <TableCell className="text-right">
                                   ${propertyAmount.toFixed(2)}
@@ -421,10 +399,10 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
                                   <div className="relative w-32 ml-auto">
                                     <Input
                                       type="text"
-                                      className="ps-7 text-right pr-2"
+                                      className="ps-7 text-right px-4"
                                       defaultValue={propertyAmount.toFixed(2)}
                                     />
-                                    <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-2.5 text-muted-foreground/80">
+                                    <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-4 text-muted-foreground/80">
                                       <DollarSign size={14} aria-hidden="true" />
                                     </div>
                                   </div>

@@ -135,15 +135,27 @@ interface ChargeLine {
   property_id: string;
   amount: number;
   category: string;
-  reference: number;
+  line_id: string;
+  reference?: string;
   description?: string;
   unit_id?: string;
+  credit_amount?: number;
+  debit_amount?: number;
 }
 
 interface Charge {
   id: string;
   payee: string;
   due_date?: Date;
+  charge_type: string;
+  vendor_id?: string;
+  vendor?: {
+    id: string;
+    first_name?: string;
+    middle_name?: string;
+    last_name?: string;
+    company?: string;
+  };
   amount_remaining: {
     lines: ChargeLine[];
     total_amount: number;
@@ -247,7 +259,7 @@ export default function PayBillsPage() {
     const fetchCharges = async () => {
       try {
         setIsLoadingBalances(true);
-        const response = await fetch('/api/accounting/charges');
+        const response = await fetch('/api/accounting/charges?charge_type=bill');
         if (!response.ok) {
           throw new Error('Failed to fetch charges');
         }
@@ -256,12 +268,14 @@ export default function PayBillsPage() {
         // Log the full API response to see what we're getting
         console.log('API Response:', data);
         
-        // Map the data to ensure we have the correct payee field
-        const mappedCharges = data.map((charge: any) => ({
-          ...charge,
-          // If payee is not directly available, try to get it from vendor_id or other fields
-          payee: charge.payee || charge.vendor_id || charge.vendor || charge.payee_id
-        }));
+        // Map the data to ensure we have the correct payee field and filter for bills only
+        const mappedCharges = data
+          .filter((charge: Charge) => charge.charge_type === 'bill')
+          .map((charge: Charge) => ({
+            ...charge,
+            // If payee is not directly available, try to get it from vendor_id or other fields
+            payee: charge.payee || charge.vendor_id || (charge.vendor && (charge.vendor.company || [charge.vendor.first_name, charge.vendor.middle_name, charge.vendor.last_name].filter(Boolean).join(' '))) || ''
+          }));
         
         console.log('Mapped charges:', mappedCharges);
         

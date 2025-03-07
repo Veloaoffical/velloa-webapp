@@ -57,38 +57,6 @@ function cn(...classes: string[]) {
   return classes.filter(Boolean).join(' ');
 }
 
-interface AccountForm {
-  name: string;
-  type: string;
-  subtype: string;
-  number: string;
-  description: string;
-  opening_balance: number;
-  opening_balance_date: Date | undefined;
-  lease_integration: boolean;
-  auto_post_rent: boolean;
-  auto_post_fees: boolean;
-  check_printing_enabled: boolean;
-  check_template: string;
-  check_starting_number: number;
-  is_active: boolean;
-  is_sub_account: boolean;
-  parent_account_id?: string;
-  parent_account_name?: string;
-  next_check_number?: string;
-  transit_number?: string;
-  institution_number?: string;
-  account_number?: string;
-}
-
-interface AccountData {
-  id: string;
-  account_type: string;
-  account_name: string;
-  is_sub_account?: boolean;
-  parent_account?: string;
-}
-
 interface BillPaymentForm {
   bills: {
     scope?: 'all' | 'specific' | null;
@@ -123,14 +91,6 @@ interface BillPaymentForm {
   };
 }
 
-interface VendorData {
-  id: string;
-  first_name?: string;
-  middle_name?: string;
-  last_name?: string;
-  company?: string;
-}
-
 interface ChargeLine {
   property_id: string;
   amount: number;
@@ -163,10 +123,12 @@ interface Charge {
   };
 }
 
-interface PropertyBalance {
-  property_id: string;
-  property_name: string;
-  balance: number;
+interface VendorData {
+  id: string;
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
+  company?: string;
 }
 
 export default function PayBillsPage() {
@@ -193,36 +155,6 @@ export default function PayBillsPage() {
       scheduled_date: new Date()
     }
   });
-  const [account, setAccount] = useState<AccountForm>({
-    name: '',
-    type: '',
-    subtype: '',
-    number: '',
-    description: '',
-    opening_balance: 0,
-    opening_balance_date: undefined,
-    lease_integration: false,
-    auto_post_rent: false,
-    auto_post_fees: false,
-    check_printing_enabled: false,
-    check_template: '',
-    check_starting_number: 1000,
-    is_active: true,
-    is_sub_account: false,
-    parent_account_id: '',
-    parent_account_name: '',
-    next_check_number: '',
-    transit_number: '',
-    institution_number: '',
-    account_number: ''
-  });
-  const [parentAccounts, setParentAccounts] = useState<Array<{id: string; name: string; type: string}>>([]);
-  const [isLoadingParentAccounts, setIsLoadingParentAccounts] = useState(false);
-  const [properties, setProperties] = useState<Array<{id: string; name: string; address: string}>>([]);
-  const [propertyBalances, setPropertyBalances] = useState<Map<string, number>>(new Map());
-  const [isLoadingBalances, setIsLoadingBalances] = useState(false);
-  const [selectedProperty, setSelectedProperty] = useState<{id: string; name: string} | null>(null);
-  const [newPropertyBalance, setNewPropertyBalance] = useState<string>('');
   
   // Add new state for dropdowns
   const [propertiesOpen, setPropertiesOpen] = useState(false);
@@ -254,6 +186,10 @@ export default function PayBillsPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedPropertyForEdit, setSelectedPropertyForEdit] = useState<{id: string; name: string; address?: string} | null>(null);
   
+  const [properties, setProperties] = useState<Array<{id: string; name: string; address: string}>>([]);
+  const [propertyBalances, setPropertyBalances] = useState<Map<string, number>>(new Map());
+  const [isLoadingBalances, setIsLoadingBalances] = useState(false);
+
   // Fetch charges when component mounts or when vendors are selected
   useEffect(() => {
     const fetchCharges = async () => {
@@ -390,73 +326,42 @@ export default function PayBillsPage() {
 
   const handleSubmit = async () => {
     try {
-      // Convert propertyBalances Map to array of PropertyBalance objects
-      const allPropertyBalances: PropertyBalance[] = Array.from(propertyBalances.entries()).map(([id, balance]) => ({
-        property_id: id,
-        property_name: properties.find(p => p.id === id)?.name || 'Unknown Property',
-        balance: balance
-      }));
-
-      // Add the first row's data to propertyBalances if it exists
-      if (selectedProperty && newPropertyBalance) {
-        const balance = parseFloat(newPropertyBalance);
-        if (!isNaN(balance)) {
-          allPropertyBalances.push({
-            property_id: selectedProperty.id,
-            property_name: selectedProperty.name,
-            balance: balance
-          });
-        }
-      }
-
-      // Log the data being sent
-      console.log('Submitting account data:', {
-        account,
-        propertyBalances: allPropertyBalances,
-        totalBalance: getTotalPropertyBalances()
-      });
-
-      // Validate property balances match total
-      if (account.type === 'Asset' && Math.abs(getTotalPropertyBalances() - account.opening_balance) > 0.01) {
-        toast.error('Property balances must equal the total account balance');
-        return;
-      }
-
-      const dataToSend = {
-        ...account,
-        propertyBalances: allPropertyBalances.map(pb => ({
-          property_id: pb.property_id,
-          property_name: pb.property_name,
-          balance: parseFloat(pb.balance.toString())
-        }))
+      // Prepare the payment data
+      const paymentData = {
+        properties: form.allocation.properties.map(prop => ({
+          property_id: prop.id,
+          property_name: prop.name,
+          amount: prop.autoPayment ? propertyBalances.get(prop.id) || 0 : prop.amount
+        })),
+        payment: form.payment
       };
 
-      console.log('Sending data to API:', JSON.stringify(dataToSend, null, 2));
+      console.log('Submitting payment data:', paymentData);
 
-      const response = await fetch('/api/accounting/chart-of-accounts', {
+      const response = await fetch('/api/accounting/pay-bills', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(dataToSend)
+        body: JSON.stringify(paymentData)
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.details || 'Failed to create account');
+        throw new Error(error.details || 'Failed to process payments');
       }
 
-      toast.success('Account has been created successfully', {
-        description: 'You will be redirected to the chart of accounts'
+      toast.success('Payments have been processed successfully', {
+        description: 'You will be redirected to the payments page'
       });
       
       setTimeout(() => {
-        router.push('/accounting/chart-of-accounts');
+        router.push('/accounting/payments');
       }, 2000);
 
     } catch (error) {
-      console.error('Error creating account:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to create account. Please try again.');
+      console.error('Error processing payments:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to process payments. Please try again.');
     }
   };
 
@@ -559,58 +464,6 @@ export default function PayBillsPage() {
     } else {
       handleSubmit();
     }
-  };
-
-  // Fetch parent accounts when sub-account is enabled
-  useEffect(() => {
-    const fetchParentAccounts = async () => {
-      if (!account.is_sub_account) return;
-      
-      try {
-        setIsLoadingParentAccounts(true);
-        console.log('Fetching parent accounts...');
-        const response = await fetch('/api/accounting/chart-of-accounts');
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch parent accounts');
-        }
-        
-        const data = await response.json();
-        console.log('Received accounts data:', data);
-        
-        // Filter accounts based on the selected type and exclude sub-accounts
-        const filteredAccounts = data.filter((acc: AccountData) => {
-          const isSubAccount = acc.is_sub_account || acc.parent_account;
-          const typeMatches = !account.type || acc.account_type === account.type;
-          console.log('Account:', acc, 'Type matches:', typeMatches, 'Is not sub-account:', !isSubAccount);
-          return typeMatches && !isSubAccount;
-        }).map((acc: AccountData) => ({
-          id: acc.id,
-          name: acc.account_name,
-          type: acc.account_type
-        }));
-        
-        console.log('Filtered accounts:', filteredAccounts);
-        setParentAccounts(filteredAccounts);
-      } catch (error) {
-        console.error('Error fetching parent accounts:', error);
-        toast.error('Failed to load parent accounts');
-      } finally {
-        setIsLoadingParentAccounts(false);
-      }
-    };
-
-    fetchParentAccounts();
-  }, [account.is_sub_account, account.type]);
-
-  // Update getTotalPropertyBalances to handle Map correctly
-  const getTotalPropertyBalances = () => {
-    let existingTotal = 0;
-    propertyBalances.forEach((value) => {
-      existingTotal += value;
-    });
-    const pendingBalance = selectedProperty && newPropertyBalance ? parseFloat(newPropertyBalance) || 0 : 0;
-    return existingTotal + pendingBalance;
   };
 
   return (
@@ -1471,6 +1324,23 @@ export default function PayBillsPage() {
           startDate={form.bills.startDate}
           endDate={form.bills.endDate}
           vendors={form.bills.vendors}
+          onSave={(propertyId, totalAmount) => {
+            setForm(prev => ({
+              ...prev,
+              allocation: {
+                ...prev.allocation,
+                properties: prev.allocation.properties.map(p => 
+                  p.id === propertyId 
+                    ? { 
+                        ...p, 
+                        amount: totalAmount, // Update with the new total amount from EditBillsDialog
+                        autoPayment: false // Turn off auto-payment since we're using a custom amount
+                      } 
+                    : p
+                )
+              }
+            }));
+          }}
         />
       )}
     </div>

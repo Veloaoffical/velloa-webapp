@@ -1,6 +1,6 @@
 'use client';
 
-import { DollarSign, Building2 } from "lucide-react";
+import { DollarSign, Building2, Info, Receipt, TriangleAlert } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,10 +22,14 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
+  SelectSeparator,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
+import React from "react";
 
 interface ChargeLine {
   property_id: string;
@@ -44,10 +48,12 @@ interface Category {
   account_name: string;
   account_type: string;
   account_subtype: string;
+  account_balance?: number;
   sub_accounts?: {
     id: string;
     account_name: string;
     account_subtype: string;
+    account_balance?: number;
   }[];
 }
 
@@ -78,6 +84,33 @@ interface Vendor {
   company?: string;
 }
 
+interface BankAccountSettings {
+  accounts: {
+    [key: string]: string;
+  } | null;
+  escrow_bank_account: string | null;
+  operating_bank_account: string | null;
+  use_default_bank_accounts: boolean;
+}
+
+interface CompanySettings {
+  lateFees: string;
+  updated_at: string;
+  rentalIncome: string;
+  applicationFee: string;
+  managementFees: string;
+  accountspayable: string;
+  clearingAccount: string;
+  securityDeposit: string;
+  Undepositedfunds: string;
+  trustBankAccount: string;
+  accountreceivable: string;
+  ownerContribution: string;
+  ownerDistribution: string;
+  convenienceFeeIncome: string;
+  operatingBankAccount: string;
+}
+
 interface EditBillsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -90,16 +123,97 @@ interface EditBillsDialogProps {
   startDate?: Date | null;
   endDate?: Date | null;
   vendors?: string[];
+  onSave?: (propertyId: string, totalAmount: number) => void;
 }
 
-export function EditBillsDialog({ open, onOpenChange, property, charges, startDate, endDate, vendors }: EditBillsDialogProps) {
+export function EditBillsDialog({ open, onOpenChange, property, charges, startDate, endDate, vendors, onSave }: EditBillsDialogProps) {
   const [vendorData, setVendorData] = useState<Record<string, Vendor>>({});
   const [categoryData, setCategoryData] = useState<Record<string, Category>>({});
+  const [bankAccounts, setBankAccounts] = useState<Array<{
+    id: string;
+    account_name: string;
+    account_type: string;
+    account_subtype: string;
+    account_balance: number;
+    property_balance: Array<{
+      property_id: string;
+      property_name: string;
+      balance: number;
+    }>;
+  }>>([]);
+  const [propertySettings, setPropertySettings] = useState<BankAccountSettings | null>(null);
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+  const [paymentInputs, setPaymentInputs] = useState<Record<string, string>>({});
   const [isLoadingVendors, setIsLoadingVendors] = useState(false);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+  const [isLoadingBankAccounts, setIsLoadingBankAccounts] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<string>("");
+  const [selectedAccountBalance, setSelectedAccountBalance] = useState<number>(0);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Fetch vendors when component mounts
+  // Initialize payment inputs when charges change
   useEffect(() => {
+    const initialInputs: Record<string, string> = {};
+    charges.forEach(charge => {
+      const propertyAmount = charge.amount_remaining.lines.reduce(
+        (sum, line) => line.property_id === property.id ? sum + line.amount : sum,
+        0
+      );
+      initialInputs[charge.id] = propertyAmount.toFixed(2);
+    });
+    setPaymentInputs(initialInputs);
+  }, [charges, property.id]);
+
+  const handlePaymentChange = (chargeId: string, value: string) => {
+    setPaymentInputs(prev => ({
+      ...prev,
+      [chargeId]: value
+    }));
+  };
+
+  const handlePaymentBlur = (chargeId: string, value: string) => {
+    if (value === '') {
+      setPaymentInputs(prev => ({
+        ...prev,
+        [chargeId]: ''
+      }));
+      return;
+    }
+
+    // Format with 2 decimal places when input loses focus
+    const numericValue = parseFloat(value) || 0;
+    setPaymentInputs(prev => ({
+      ...prev,
+      [chargeId]: numericValue.toFixed(2)
+    }));
+  };
+
+  // Fetch vendors, categories, bank accounts, and settings when component mounts
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        // Fetch property settings
+        const propertySettingsResponse = await fetch(`/api/property/${property.id}/propertySettings`);
+        if (!propertySettingsResponse.ok) {
+          throw new Error('Failed to fetch property settings');
+        }
+        const propertySettingsData = await propertySettingsResponse.json();
+        setPropertySettings(propertySettingsData.bank_accounts || null);
+
+        // If use_default_bank_accounts is true, fetch company settings
+        if (propertySettingsData.bank_accounts?.use_default_bank_accounts) {
+          const companySettingsResponse = await fetch('/api/company/settings');
+          if (!companySettingsResponse.ok) {
+            throw new Error('Failed to fetch company settings');
+          }
+          const companySettingsData = await companySettingsResponse.json();
+          setCompanySettings(companySettingsData);
+        }
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+      }
+    };
+
     const fetchVendors = async () => {
       try {
         setIsLoadingVendors(true);
@@ -137,24 +251,24 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
           throw new Error('Failed to fetch categories');
         }
         const data = await response.json();
-        console.log('Categories data:', data);
         
         // Create a map of category data by ID, including sub-accounts
         const categoryMap: Record<string, Category> = {};
+        
         data.forEach((category: Category) => {
           categoryMap[category.id] = category;
+          
           // Add sub-accounts to the map if they exist
           if (category.sub_accounts) {
             category.sub_accounts.forEach(subAccount => {
               categoryMap[subAccount.id] = {
                 ...subAccount,
-                account_type: category.account_type // Inherit parent's account type
+                account_type: category.account_type
               };
             });
           }
         });
         
-        console.log('Category map:', categoryMap);
         setCategoryData(categoryMap);
       } catch (error) {
         console.error('Error fetching categories:', error);
@@ -163,27 +277,110 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
       }
     };
 
+    const fetchBankAccounts = async () => {
+      try {
+        setIsLoadingBankAccounts(true);
+        const response = await fetch(`/api/accounting/bank-accounts?property_id=${property.id}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch bank accounts');
+        }
+        const data = await response.json();
+        setBankAccounts(data);
+        
+        // Don't set default account here - we'll handle it after settings are loaded
+      } catch (error) {
+        console.error('Error fetching bank accounts:', error);
+      } finally {
+        setIsLoadingBankAccounts(false);
+      }
+    };
+
     if (open) {
+      fetchSettings();
       fetchVendors();
       fetchCategories();
+      fetchBankAccounts();
     }
-  }, [open]);
+  }, [open, property.id]);
 
-  // Filter charges for this property and based on date range/vendors
-  const propertyCharges = charges.filter(charge => {
-    const hasPropertyLine = charge.amount_remaining?.lines?.some(
+  // Set default bank account based on settings
+  useEffect(() => {
+    if (!bankAccounts.length || !propertySettings) return;
+
+    if (propertySettings.use_default_bank_accounts && companySettings?.operatingBankAccount) {
+      // Use company default operating account
+      setSelectedAccount(companySettings.operatingBankAccount);
+      const account = bankAccounts.find(acc => acc.id === companySettings.operatingBankAccount);
+      if (account) {
+        const propertyBalance = account.property_balance?.find(bal => bal.property_id === property.id)?.balance || 0;
+        setSelectedAccountBalance(propertyBalance);
+      }
+    } else if (propertySettings.operating_bank_account) {
+      // Use property-specific operating account
+      setSelectedAccount(propertySettings.operating_bank_account);
+      const account = bankAccounts.find(acc => acc.id === propertySettings.operating_bank_account);
+      if (account) {
+        const propertyBalance = account.property_balance?.find(bal => bal.property_id === property.id)?.balance || 0;
+        setSelectedAccountBalance(propertyBalance);
+      }
+    } else if (bankAccounts.length > 0) {
+      // Fallback to first account
+      setSelectedAccount(bankAccounts[0].id);
+      const propertyBalance = bankAccounts[0].property_balance?.find(bal => bal.property_id === property.id)?.balance || 0;
+      setSelectedAccountBalance(propertyBalance);
+    }
+  }, [bankAccounts, propertySettings, companySettings, property.id]);
+
+  // Filter charges based on property, vendor, and date range
+  const filteredCharges = charges.filter(charge => {
+    // Check if any charge line has the property ID
+    const hasPropertyLine = charge.amount_remaining?.lines.some(
       line => line.property_id === property.id
     );
 
-    const vendorMatches = !vendors?.length || vendors.includes(charge.payee);
+    // Check if vendor matches the filter (if any)
+    const vendorMatches = !vendors || vendors.length === 0 || 
+      (charge.vendor_id && vendors.includes(charge.vendor_id));
 
-    const dateMatches = !startDate || !endDate ? true :
+    // Check if due date is within the date range (if specified)
+    const dateMatches = !startDate || !endDate || 
       (charge.due_date &&
         new Date(charge.due_date) >= startDate &&
         new Date(charge.due_date) <= endDate);
 
     return hasPropertyLine && vendorMatches && dateMatches;
   });
+
+  // Update the account balance when an account is selected
+  const handleAccountChange = (accountId: string) => {
+    setSelectedAccount(accountId);
+    const account = bankAccounts.find(acc => acc.id === accountId);
+    const propertyBalance = account?.property_balance?.find(bal => bal.property_id === property.id)?.balance || 0;
+    setSelectedAccountBalance(propertyBalance);
+  };
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      
+      // Calculate total payment amount
+      const totalPaymentAmount = Object.values(paymentInputs).reduce((sum, value) => {
+        return sum + (parseFloat(value) || 0);
+      }, 0);
+
+      // Call the onSave callback with the total amount if provided
+      if (onSave) {
+        onSave(property.id, totalPaymentAmount);
+      }
+
+      // Close dialog
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Error saving payments:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -200,18 +397,49 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
         </DialogHeader>
 
         <div className="flex flex-col flex-1 overflow-hidden">
+          {/* Insufficient Funds Warning */}
+          {selectedAccountBalance < Object.values(paymentInputs).reduce((total, value) => {
+            return total + (parseFloat(value) || 0);
+          }, 0) && (
+            <div className="rounded-md border border-amber-500/50 px-4 py-3 text-amber-600 mx-6 mb-6">
+              <p className="text-sm">
+                <TriangleAlert
+                  className="me-3 -mt-0.5 inline-flex opacity-60"
+                  size={16}
+                  aria-hidden="true"
+                />
+                Insufficient Funds - The bank account that you have selected does not have enough funds to cover this payment. Would you still like to proceed?
+              </p>
+            </div>
+          )}
+
           {/* Account and Balance Section */}
           <div className="grid grid-cols-3 gap-6 mb-6 px-6">
             <div className="space-y-2">
               <label className="text-sm font-medium">Pay From Account</label>
-              <Select defaultValue="operating-2">
+              <Select 
+                value={selectedAccount} 
+                onValueChange={handleAccountChange}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select account" />
+                  <SelectValue placeholder="Select bank account" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="operating-1">Operating Account 1</SelectItem>
-                  <SelectItem value="operating-2">Operating Account 2</SelectItem>
-                  <SelectItem value="operating-3">Operating Account 3</SelectItem>
+                  {isLoadingBankAccounts ? (
+                    <SelectItem value="loading" disabled>Loading accounts...</SelectItem>
+                  ) : bankAccounts.length === 0 ? (
+                    <SelectItem value="none" disabled>No bank accounts available</SelectItem>
+                  ) : (
+                    <SelectGroup>
+                      <SelectLabel>Bank</SelectLabel>
+                      <SelectSeparator />
+                      {bankAccounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.account_name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -222,7 +450,7 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
                 <Input
                   type="text"
                   className="ps-8"
-                  value="0.00"
+                  value={selectedAccountBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   readOnly
                 />
                 <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-muted-foreground/80">
@@ -236,13 +464,19 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
               <div className="relative">
                 <Input
                   type="text"
-                  className="ps-8 text-destructive"
-                  value="0.00"
+                  className="ps-8 pe-10"
+                  value={selectedAccountBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   readOnly
                 />
-                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-destructive/80">
+                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-muted-foreground/80">
                   <DollarSign size={12} aria-hidden="true" />
                 </div>
+                <button
+                  type="button"
+                  className="absolute inset-y-0 end-0 flex items-center pe-3 text-muted-foreground/80 hover:text-muted-foreground"
+                >
+                  <Info size={16} aria-hidden="true" />
+                </button>
               </div>
             </div>
           </div>
@@ -285,7 +519,7 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
               // Actual content
               <div className="space-y-6">
                 {Object.entries(
-                  propertyCharges.reduce((acc, charge) => {
+                  filteredCharges.reduce((acc, charge) => {
                     const vendorId = charge.payee;
                     if (!acc[vendorId]) {
                       acc[vendorId] = [];
@@ -342,43 +576,32 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
                         </TableHeader>
                         <TableBody>
                           {vendorCharges.map((charge) => {
-                            const propertyAmount = charge.amount_remaining?.lines?.reduce(
+                            const propertyAmount = charge.amount_remaining.lines.reduce(
                               (sum, line) => line.property_id === property.id ? sum + line.amount : sum,
                               0
                             ) || 0;
-
-                            // Get all unique categories from the charge lines
-                            const categories = charge.amount_remaining?.lines
-                              ?.filter(line => line.property_id === property.id)
-                              ?.map(line => {
-                                const category = categoryData[line.category];
-                                return {
-                                  name: category?.account_name || 'N/A',
-                                  amount: line.credit_amount || line.debit_amount || 0,
-                                  description: line.description || ''
-                                };
-                              }) || [];
-
-                            console.log('Processed categories:', categories);
 
                             return (
                               <TableRow key={charge.id}>
                                 <TableCell>
                                   <div className="space-y-1">
-                                    {categories.map((cat, idx) => (
-                                      <div key={idx} className="text-sm">
-                                        <div className="flex items-center justify-between">
-                                          <span className="font-medium">{cat.name}</span>
+                                    {charge.amount_remaining.lines.map((line) => {
+                                      const category = categoryData[line.category];
+                                      return (
+                                        <div key={line.line_id} className="text-sm">
+                                          <div className="flex items-center gap-2">
+                                            <div className="bg-emerald-500/10 p-1.5 rounded">
+                                              <Receipt className="h-3.5 w-3.5 text-emerald-500" />
+                                            </div>
+                                            <span className="font-medium">{category?.account_name || 'N/A'}</span>
+                                          </div>
                                         </div>
-                                      </div>
-                                    ))}
-                                    {categories.length === 0 && (
-                                      <div className="text-sm text-muted-foreground">N/A</div>
-                                    )}
+                                      );
+                                    })}
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-col gap-1">
                                     <div className="text-sm">
                                       {charge.due_date ? new Date(charge.due_date).toLocaleDateString() : 'N/A'}
                                     </div>
@@ -400,7 +623,9 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
                                     <Input
                                       type="text"
                                       className="ps-7 text-right px-4"
-                                      defaultValue={propertyAmount.toFixed(2)}
+                                      value={paymentInputs[charge.id] || ''}
+                                      onChange={(e) => handlePaymentChange(charge.id, e.target.value)}
+                                      onBlur={(e) => handlePaymentBlur(charge.id, e.target.value)}
                                     />
                                     <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-4 text-muted-foreground/80">
                                       <DollarSign size={14} aria-hidden="true" />
@@ -423,18 +648,14 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
         <DialogFooter className="mt-2 border-t pt-4 px-6 flex-shrink-0">
           <div className="flex items-center justify-between w-full">
             <div>
-              <div className="text-sm text-muted-foreground">Total Bills: {propertyCharges.length}</div>
+              <div className="text-sm text-muted-foreground">Total Bills: {filteredCharges.length}</div>
             </div>
             <div className="flex items-center gap-4">
               <div>
-                <div className="text-sm text-muted-foreground">Total Amount</div>
+                <div className="text-sm text-muted-foreground">Total Payment</div>
                 <div className="font-medium text-xl">
-                  ${propertyCharges.reduce((total, charge) => {
-                    const propertyAmount = charge.amount_remaining?.lines?.reduce(
-                      (sum, line) => line.property_id === property.id ? sum + line.amount : sum,
-                      0
-                    ) || 0;
-                    return total + propertyAmount;
+                  ${Object.values(paymentInputs).reduce((total, value) => {
+                    return total + (parseFloat(value) || 0);
                   }, 0).toFixed(2)}
                 </div>
               </div>
@@ -442,11 +663,11 @@ export function EditBillsDialog({ open, onOpenChange, property, charges, startDa
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Cancel
                 </Button>
-                <Button onClick={() => {
-                  // TODO: Implement save functionality
-                  onOpenChange(false);
-                }}>
-                  Save
+                <Button 
+                  onClick={handleSave}
+                  disabled={isSaving || !selectedAccount || Object.values(paymentInputs).every(value => !parseFloat(value))}
+                >
+                  {isSaving ? 'Saving...' : 'Save'}
                 </Button>
               </div>
             </div>

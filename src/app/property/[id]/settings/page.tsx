@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from 'react';
-import { GeneralInfoForm, PropertyTypeForm, AmenitiesForm, PetPolicyForm, PhotosForm, OwnersForm, LateFeeForm } from "../components/settings/SettingsForms";
+import { GeneralInfoForm, PropertyTypeForm, AmenitiesForm, PetPolicyForm, PhotosForm, OwnersForm, LateFeeForm, BankAccountForm } from "../components/settings/SettingsForms";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
@@ -87,11 +87,7 @@ const settings = [
     icon: <Landmark className="w-5 h-5 text-green-600" />,
     label: "Bank Accounts",
     description: "Update the bank accounts for this property.",
-    component: () => (
-      <div className="text-muted-foreground">
-        Form content for Bank Accounts will go here...
-      </div>
-    )
+    component: BankAccountForm
   },
   {
     id: 'reserve-funds',

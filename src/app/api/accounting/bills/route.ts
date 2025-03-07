@@ -26,7 +26,7 @@ interface ChargeData {
       unit_id: string | null;
     }[];
     total_amount: number;
-    accounts_receivable_id?: string;
+    accounts_payable_id?: string;
   };
   amount_remaining: {
     lines: {
@@ -39,7 +39,7 @@ interface ChargeData {
       unit_id: string | null;
     }[];
     total_amount: number;
-    accounts_receivable_id?: string;
+    accounts_payable_id?: string;
   };
   memo?: unknown;
   reference?: string;
@@ -153,17 +153,6 @@ export async function POST(request: NextRequest) {
       console.error('Accounts payable account not configured in company settings');
       return NextResponse.json(
         { error: 'Accounts payable account not configured in company settings' },
-        { status: 400 }
-      );
-    }
-    
-    // Get the accounts receivable account ID from company settings
-    const accountsReceivableId = settings?.default_account?.accountreceivable;
-    
-    if (!accountsReceivableId) {
-      console.error('Accounts receivable account not configured in company settings');
-      return NextResponse.json(
-        { error: 'Accounts receivable account not configured in company settings' },
         { status: 400 }
       );
     }
@@ -440,12 +429,12 @@ export async function POST(request: NextRequest) {
       charge_amount: {
         lines: transformedLines,
         total_amount: totalAmount,
-        accounts_receivable_id: accountsReceivableId
+        accounts_payable_id: accountsPayableId
       },
       amount_remaining: {
         lines: transformedLines,
         total_amount: totalAmount,
-        accounts_receivable_id: accountsReceivableId
+        accounts_payable_id: accountsPayableId
       },
       memo: processedMemo,
       reference: billData.reference,
@@ -478,12 +467,12 @@ export async function POST(request: NextRequest) {
         charge_amount: {
           lines: transformedLines,
           total_amount: totalAmount,
-          accounts_receivable_id: accountsReceivableId
+          accounts_payable_id: accountsPayableId
         },
         amount_remaining: {
           lines: transformedLines,
           total_amount: totalAmount,
-          accounts_receivable_id: accountsReceivableId
+          accounts_payable_id: accountsPayableId
         },
         memo: processedMemo,
         reference: billData.reference,

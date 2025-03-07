@@ -64,6 +64,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Check, ChevronDown } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { LateFeeContent } from "@/components/settingscomponents/LateFee"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface GeneralInfoForm {
   name: string
@@ -1838,4 +1839,159 @@ export function LateFeeForm({ enabled = true }: LateFeeFormProps) {
       )}
     </div>
   );
+}
+
+export function BankAccountForm() {
+  const paramsPromise = useParams()
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [useDefaultAccounts, setUseDefaultAccounts] = React.useState(true)
+  const [operatingAccount, setOperatingAccount] = React.useState("")
+  const [escrowAccount, setEscrowAccount] = React.useState("")
+  const [accounts, setAccounts] = React.useState<Array<{ id: string; account_name: string }>>([])
+
+  React.useEffect(() => {
+    async function fetchData() {
+      try {
+        setIsLoading(true)
+        const params = await paramsPromise
+        
+        // Fetch bank accounts data
+        const [accountsResponse, propertyResponse] = await Promise.all([
+          fetch('/api/accounting/bank-accounts'),
+          fetch(`/api/property/${params.id}/propertySettings`)
+        ])
+
+        if (!accountsResponse.ok || !propertyResponse.ok) {
+          throw new Error("Failed to fetch bank accounts data")
+        }
+
+        const accountsData = await accountsResponse.json()
+        const propertyData = await propertyResponse.json()
+
+        // Transform accounts data to match the expected format
+        const transformedAccounts = accountsData.map((account: { id: string; account_name: string }) => ({
+          id: account.id,
+          account_name: account.account_name
+        }))
+
+        setAccounts(transformedAccounts)
+        setUseDefaultAccounts(propertyData.use_default_bank_accounts ?? true)
+        setOperatingAccount(propertyData.operating_bank_account || "")
+        setEscrowAccount(propertyData.escrow_bank_account || "")
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load bank accounts data")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [paramsPromise])
+
+  const handleSave = async () => {
+    try {
+      setIsLoading(true)
+      const params = await paramsPromise
+      const response = await fetch(`/api/property/${params.id}/propertySettings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          use_default_bank_accounts: useDefaultAccounts,
+          operating_bank_account: operatingAccount,
+          escrow_bank_account: escrowAccount
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to update bank accounts")
+      }
+
+      toast.success("Bank accounts updated successfully")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update bank accounts")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          You can set different bank accounts for each property as needed, or use your default accounts.
+        </p>
+
+        <div className="space-y-4">
+          <RadioGroup 
+            value={useDefaultAccounts ? "default" : "custom"}
+            onValueChange={(value) => setUseDefaultAccounts(value === "default")}
+            className="grid gap-4"
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="default" id="default" disabled={isLoading} />
+              <Label htmlFor="default">Use company default bank accounts</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="custom" id="custom" disabled={isLoading} />
+              <Label htmlFor="custom">Specify a bank account for this property</Label>
+            </div>
+          </RadioGroup>
+        </div>
+
+        {!useDefaultAccounts && (
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label>Which account should we use as the operating bank account?</Label>
+              <Select
+                value={operatingAccount}
+                onValueChange={setOperatingAccount}
+                disabled={isLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.account_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Which account should we use as the escrow bank account for lease deposits?</Label>
+              <p className="text-xs text-muted-foreground mb-2">(Can be the same as the operating bank account)</p>
+              <Select
+                value={escrowAccount}
+                onValueChange={setEscrowAccount}
+                disabled={isLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.account_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end">
+        <Button
+          onClick={handleSave}
+          disabled={isLoading || (!useDefaultAccounts && (!operatingAccount || !escrowAccount))}
+        >
+          Save Changes
+        </Button>
+      </div>
+    </div>
+  )
 } 

@@ -45,10 +45,11 @@ export default function VendorCombobox({
   })
 
   const getVendorDisplayName = (vendor: Vendor) => {
-    if (vendor.company) {
-      return vendor.company
+    const fullName = [vendor.first_name, vendor.last_name].filter(Boolean).join(" ")
+    if (fullName && vendor.company) {
+      return `${fullName} - ${vendor.company}`
     }
-    return [vendor.first_name, vendor.last_name].filter(Boolean).join(" ") || "Unnamed Vendor"
+    return fullName || vendor.company || "Unnamed Vendor"
   }
 
   return (
@@ -111,7 +112,16 @@ export default function VendorCombobox({
                       setOpen(false)
                     }}
                   >
-                    {getVendorDisplayName(vendor)}
+                    <div className="flex flex-col">
+                      <span>
+                        {[vendor.first_name, vendor.last_name].filter(Boolean).join(" ") || "Unnamed Vendor"}
+                      </span>
+                      {vendor.company && (
+                        <span className="text-xs text-muted-foreground">
+                          {vendor.company}
+                        </span>
+                      )}
+                    </div>
                     {value === vendor.id && <CheckIcon size={16} className="ml-auto" />}
                   </div>
                 ))}

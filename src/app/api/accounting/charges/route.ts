@@ -433,7 +433,7 @@ export async function POST(request: NextRequest) {
         status: 'unpaid',
         created_by: user.id,
         share_with_tenants: chargeData.share_with_tenants || false,
-        charge_type: chargeData.charge_type || 'charge'
+        charge_type: chargeData.charge_type || 'expense'
       })
       .select()
       .single();

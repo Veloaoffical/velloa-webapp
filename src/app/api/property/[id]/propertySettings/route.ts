@@ -12,11 +12,18 @@ interface PetPolicy {
   description?: string
 }
 
-interface BankAccount {
+interface BankAccountEntry {
   accountName: string
   accountNumber: string
   routingNumber: string
   isDefault: boolean
+}
+
+interface BankAccountSettings {
+  use_default_bank_accounts?: boolean
+  operating_bank_account?: string | null
+  escrow_bank_account?: string | null
+  accounts?: BankAccountEntry[] | null
 }
 
 interface Owner {
@@ -34,7 +41,7 @@ interface PropertySettings {
   amenities: string[] | null
   pet_policy: PetPolicy | null
   owners: Owner[] | null
-  bank_accounts: BankAccount[] | null
+  bank_accounts: BankAccountSettings | null
   property_description: string | null
   value: string
 }
@@ -58,6 +65,7 @@ interface PropertyResponse extends Omit<Property, 'property_settings'> {
   amenities: string[] | null
   pet_policy: PetPolicy | null
   owners: Owner[] | null
+  bank_accounts: BankAccountSettings | null
 }
 
 export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
@@ -113,7 +121,8 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       description: settings.property_description || "",
       amenities: settings.amenities || [],
       pet_policy: settings.pet_policy || null,
-      owners: settings.owners || []
+      owners: settings.owners || [],
+      bank_accounts: settings.bank_accounts || null
     }
 
     console.log("Successfully fetched property:", responseData)
@@ -212,6 +221,30 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
       }))
     }
 
+    // Handle bank account settings
+    if (body.use_default_bank_accounts !== undefined) {
+      updateData.bank_accounts = {
+        use_default_bank_accounts: body.use_default_bank_accounts,
+        operating_bank_account: body.use_default_bank_accounts ? null : body.operating_bank_account,
+        escrow_bank_account: body.use_default_bank_accounts ? null : body.escrow_bank_account,
+        accounts: body.use_default_bank_accounts ? null : (body.bank_accounts || []).map((account: BankAccountEntry) => ({
+          accountName: account.accountName,
+          accountNumber: account.accountNumber,
+          routingNumber: account.routingNumber,
+          isDefault: account.isDefault
+        }))
+      };
+    } else if (!body.use_default_bank_accounts) {
+      // Only update specific bank account fields if not using defaults
+      const existingBankAccounts = property.property_settings?.bank_accounts || {};
+      updateData.bank_accounts = {
+        ...existingBankAccounts,
+        operating_bank_account: body.operating_bank_account,
+        escrow_bank_account: body.escrow_bank_account,
+        accounts: body.bank_accounts || existingBankAccounts.accounts || []
+      };
+    }
+
     // If property already has settings, update them
     if (property.property_settings) {
       console.log("Updating existing settings:", property.property_settings.id)
@@ -241,7 +274,10 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
           property_description: body.description,
           amenities: body.amenities || [], // Initialize empty array if no amenities provided
           pet_policy: body.pet_policy || null,
-          owners: body.owners || [] // Initialize empty array if no owners provided
+          owners: body.owners || [], // Initialize empty array if no owners provided
+          use_default_bank_accounts: body.use_default_bank_accounts,
+          operating_bank_account: body.operating_bank_account,
+          escrow_bank_account: body.escrow_bank_account
         })
         .select()
         .single()
@@ -301,7 +337,8 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
       description: settings.property_description || "",
       amenities: settings.amenities || [],
       pet_policy: settings.pet_policy || null,
-      owners: settings.owners || []
+      owners: settings.owners || [],
+      bank_accounts: settings.bank_accounts || null
     }
 
     return NextResponse.json(responseData)

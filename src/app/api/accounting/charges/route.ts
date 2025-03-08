@@ -42,6 +42,7 @@ interface DbCharge {
     accounts_receivable_id?: string;
   };
   due_date: string;
+  bill_date: string;
   memo: string | null;
   reference: string;
   status: string;
@@ -428,6 +429,7 @@ export async function POST(request: NextRequest) {
           accounts_receivable_id: accountsReceivableId
         },
         due_date: chargeData.due_date,
+        bill_date: new Date().toISOString(),
         memo: processedMemo,
         reference: chargeData.reference || nanoid().substring(0, 8).toUpperCase(),
         status: 'unpaid',
@@ -512,6 +514,7 @@ export async function GET(request: NextRequest) {
           charge_amount,
           amount_remaining,
           due_date,
+          bill_date,
           memo,
           payee,
           reference,

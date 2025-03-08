@@ -35,6 +35,7 @@ import PropertyCombobox from "@/components/PropertyCombobox"
 import UnitCombobox from "@/components/UnitCombobox"
 import VendorCombobox from "@/components/VendorCombobox"
 import { BillsExpensesClientProps, Unit } from "./types"
+import { VendorBillDialog } from "./bill-expenses-dialog"
 
 function LoadingRow({ colSpan }: { colSpan: number }) {
   return (
@@ -79,6 +80,8 @@ export function BillsExpensesClient({
   const [selectedVendor, setSelectedVendor] = useState<string>('all')
   const [accounts, setAccounts] = useState(initialAccounts)
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [selectedBill, setSelectedBill] = useState<any>(null)
   
   const tableId = useId()
   const currentDateTime = new Date()
@@ -482,6 +485,8 @@ export function BillsExpensesClient({
                     <SelectValue placeholder="Payment Method" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="all">All Payment Methods</SelectItem>
+                    <SelectSeparator />
                     <SelectGroup>
                       <SelectLabel>In App</SelectLabel>
                       <SelectItem value="velloa-pay">Velloa Pay</SelectItem>
@@ -573,15 +578,22 @@ export function BillsExpensesClient({
                     return typeMatch && accountMatch && vendorMatch;
                   })
                   .map((charge) => (
-                    <TableRow key={charge.id} className="has-[[data-state=checked]]:bg-muted/50">
-                      <TableCell>
+                    <TableRow 
+                      key={charge.id} 
+                      className="has-[[data-state=checked]]:bg-muted/50 cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        setSelectedBill(charge)
+                        setIsDialogOpen(true)
+                      }}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <Checkbox 
                           id={`table-checkbox-${charge.id}`}
                           checked={selectedCharges.has(charge.id)}
                           onCheckedChange={() => toggleCharge(charge.id)}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{format(new Date(charge.created_at), 'MM/dd/yyyy')}</TableCell>
+                      <TableCell className="font-medium">{format(new Date(charge.bill_date), 'MM/dd/yyyy')}</TableCell>
                       <TableCell>{format(new Date(charge.due_date), 'MM/dd/yyyy')}</TableCell>
                       <TableCell>{charge.charge_type}</TableCell>
                       <TableCell>
@@ -649,6 +661,12 @@ export function BillsExpensesClient({
           </p>
         </div>
       </CardContent>
+
+      <VendorBillDialog 
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        selectedBill={selectedBill}
+      />
     </Card>
   )
 } 

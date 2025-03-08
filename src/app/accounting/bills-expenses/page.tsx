@@ -288,6 +288,7 @@ async function fetchInitialCharges(): Promise<Charge[]> {
       charge_amount,
       amount_remaining,
       due_date,
+      bill_date,
       memo,
       reference,
       status,

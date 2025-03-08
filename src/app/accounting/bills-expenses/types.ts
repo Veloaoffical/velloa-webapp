@@ -119,6 +119,7 @@ export interface Charge {
     accounts_receivable_id?: string
   }
   due_date: string
+  bill_date: string
   memo?: {
     type: string
     content: string

@@ -575,6 +575,7 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
         }))
         setLines(formattedLines)
       }
+      
 
       // Set memo if available and not empty
       if (selectedBill.memo) {

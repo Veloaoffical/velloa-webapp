@@ -1,130 +1,142 @@
-"use client"
+import { createClient } from "@/utils/supabase/server"
+import { Suspense } from "react"
+import AccountingPageClient from "./accounting-page-client"
 
-import Link from "next/link"
-import { XAxis, Legend, Area, AreaChart, CartesianGrid } from "recharts"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { 
-  DollarSign, Receipt, FileText, CircleDollarSign, ArrowUpRight,
-  ArrowRightLeft, FileSpreadsheet, Printer, CreditCard, Clock, Calculator, BanknoteIcon,
-  ChevronDown, Wallet, ArrowLeftRight,
-  Banknote,
-  HandCoins,
-  ChartPie
-} from "lucide-react"
-import { motion, useInView, useMotionValue, useTransform, animate } from "framer-motion"
-import { useRef, useEffect, useState } from "react"
-import { JournalEntryDialog } from "./components/JournalEntryDialog"
-import { BankTransferDialog } from "./components/BankTransferDialog"
-import { PostChargeDialog } from "./components/PostChargeDialog"
-import { ExpenseDialog } from "./components/ExpenseDialog"
-import { CheckDialog } from "./components/CheckDialog"
-import { BankDepositDialog } from "./components/BankDepositDialog"
-import { ReceivePaymentDialog } from "./components/ReceivePaymentDialog"
-import { VendorBillDialog } from "./components/VendorBillDialog"
-import { IssueCreditDialog } from "./components/IssueCreditDialog"
-import { IssueRefundDialog } from "./components/IssueRefundDialog"
-import { AddVendorCreditDialog } from "./components/AddVendorCreditDialog"
-
-const profitLossData = [
-  { month: "Jan", revenue: 4500, costs: 3000, netIncome: 1500 },
-  { month: "Feb", revenue: 5000, costs: 3200, netIncome: 1800 },
-  { month: "Mar", revenue: 4800, costs: 3100, netIncome: 1700 },
-  { month: "Apr", revenue: 5200, costs: 3500, netIncome: 1700 },
-  { month: "May", revenue: 5000, costs: 3400, netIncome: 1600 },
-  { month: "Jun", revenue: 5500, costs: 3600, netIncome: 1900 }
-]
-
-const profitLossConfig = {
-  revenue: {
-    label: 'Revenue',
-    color: 'hsl(142, 76%, 36%)', // green-600
-  },
-  costs: {
-    label: 'Costs',
-    color: 'hsl(0, 84%, 60%)', // red-600
-  },
-  netIncome: {
-    label: 'Net Income',
-    color: 'hsl(217, 91%, 60%)', // blue-600
-  }
-} satisfies ChartConfig
-
-const monthlyTrendsData = [
-  { month: "Jan", income: 2500, expenses: 1800 },
-  { month: "Feb", income: 3000, expenses: 2200 },
-  { month: "Mar", income: 2800, expenses: 2000 },
-  { month: "Apr", income: 3200, expenses: 2400 },
-  { month: "May", income: 3000, expenses: 2200 },
-  { month: "Jun", income: 3500, expenses: 2600 }
-]
-
-const monthlyTrendsConfig = {
-  income: {
-    label: 'Income',
-    color: 'hsl(217, 91%, 60%)', // blue-600
-  },
-  expenses: {
-    label: 'Expenses',
-    color: 'hsl(0, 84%, 60%)', // red-600
-  }
-} satisfies ChartConfig
-
-interface AnimatedNumberProps {
-  value: number
-  prefix?: string
-  suffix?: string
+// Define interface for financial data
+export interface FinancialData {
+  totalExpenses: number;
+  totalRevenue: number;
+  netIncome: number;
+  outstanding: number;
 }
 
-function AnimatedNumber({ value, prefix = "", suffix = "" }: AnimatedNumberProps) {
-  const ref = useRef(null)
-  const isInView = useInView(ref, { once: true })
-  const motionValue = useMotionValue(0)
-  const rounded = useTransform(motionValue, (latest) => 
-    Math.round(latest).toLocaleString('en-US')
-  )
+// Define transaction interface to avoid using 'any'
+interface Transaction {
+  id: string;
+  transaction_type: string;
+  data?: {
+    total_amount?: number | string;
+    [key: string]: unknown;
+  };
+}
 
-  useEffect(() => {
-    if (isInView) {
-      const controls = animate(motionValue, value, {
-        duration: 1.5,
-        ease: "easeOut"
-      })
-      return controls.stop
-    }
-  }, [isInView, value, motionValue])
-
+// Loading component for SSR
+function AccountingLoading() {
   return (
-    <motion.span ref={ref} className="text-2xl font-semibold">
-      {prefix}
-      <motion.span>{rounded}</motion.span>
-      {suffix}
-    </motion.span>
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Accounting</h1>
+          <p className="text-muted-foreground">Loading financial data...</p>
+        </div>
+        {/* Button skeleton */}
+        <div className="h-10 w-[160px] bg-primary rounded-md animate-pulse opacity-20"></div>
+      </div>
+
+      {/* Charts and Stats Section Skeleton */}
+      <div className="overflow-x-auto pb-4">
+        <div className="min-w-[1200px]">
+          <div className="grid grid-cols-12 gap-4">
+            {/* Revenue/Cost Chart Skeleton */}
+            <div className="col-span-4 bg-card text-card-foreground p-6 rounded-lg shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="h-5 w-36 bg-muted animate-pulse rounded mb-2"></div>
+                  <div className="h-4 w-44 bg-muted animate-pulse rounded opacity-70"></div>
+                </div>
+                <div className="h-8 w-24 bg-primary/10 rounded-md animate-pulse"></div>
+              </div>
+              <div className="h-[200px] bg-muted animate-pulse rounded-md"></div>
+            </div>
+
+            {/* Monthly Trends Chart Skeleton */}
+            <div className="col-span-4 bg-card text-card-foreground p-6 rounded-lg shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="h-5 w-32 bg-muted animate-pulse rounded mb-2"></div>
+                  <div className="h-4 w-40 bg-muted animate-pulse rounded opacity-70"></div>
+                </div>
+                <div className="h-8 w-24 bg-primary/10 rounded-md animate-pulse"></div>
+              </div>
+              <div className="h-[200px] bg-muted animate-pulse rounded-md"></div>
+            </div>
+
+            {/* Quick Stats 2x2 Grid Skeleton */}
+            <div className="col-span-4 grid grid-cols-2 gap-4">
+              {/* Total Revenue */}
+              <div className="bg-card text-card-foreground p-6 rounded-lg shadow">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-4 w-4 rounded-full bg-green-600 opacity-60"></div>
+                  <div className="h-4 w-24 bg-muted animate-pulse rounded"></div>
+                </div>
+                <div className="mt-1">
+                  <div className="h-8 w-28 bg-muted animate-pulse rounded mb-1"></div>
+                  <div className="h-3 w-20 bg-muted animate-pulse rounded opacity-70"></div>
+                </div>
+              </div>
+              
+              {/* Total Expenses */}
+              <div className="bg-card text-card-foreground p-6 rounded-lg shadow">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-4 w-4 rounded-full bg-red-600 opacity-60"></div>
+                  <div className="h-4 w-28 bg-muted animate-pulse rounded"></div>
+                </div>
+                <div className="mt-1">
+                  <div className="h-8 w-28 bg-muted animate-pulse rounded mb-1"></div>
+                  <div className="h-3 w-20 bg-muted animate-pulse rounded opacity-70"></div>
+                </div>
+              </div>
+
+              {/* Net Income */}
+              <div className="bg-card text-card-foreground p-6 rounded-lg shadow">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-4 w-4 rounded-full bg-blue-600 opacity-60"></div>
+                  <div className="h-4 w-20 bg-muted animate-pulse rounded"></div>
+                </div>
+                <div className="mt-1">
+                  <div className="h-8 w-28 bg-muted animate-pulse rounded mb-1"></div>
+                  <div className="h-3 w-20 bg-muted animate-pulse rounded opacity-70"></div>
+                </div>
+              </div>
+
+              {/* Outstanding */}
+              <div className="bg-card text-card-foreground p-6 rounded-lg shadow">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-4 w-4 rounded-full bg-yellow-600 opacity-60"></div>
+                  <div className="h-4 w-24 bg-muted animate-pulse rounded"></div>
+                </div>
+                <div className="mt-1">
+                  <div className="h-8 w-28 bg-muted animate-pulse rounded mb-1"></div>
+                  <div className="h-3 w-20 bg-muted animate-pulse rounded opacity-70"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions Grid Skeleton */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[...Array(12)].map((_, i) => (
+          <div key={i} className="bg-card text-card-foreground hover:bg-accent/5 transition-colors cursor-pointer p-6 rounded-lg shadow">
+            <div className="flex items-start space-x-4">
+              <div className="p-2 bg-primary/10 rounded-lg h-9 w-9 flex items-center justify-center">
+                <div className="h-5 w-5 bg-primary/30 rounded"></div>
+              </div>
+              <div className="flex-1">
+                <div className="h-5 w-32 bg-muted animate-pulse rounded mb-1 font-medium"></div>
+                <div className="h-4 w-48 bg-muted animate-pulse rounded opacity-70"></div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
-export default function AccountingPage() {
-  const [showJournalEntryDialog, setShowJournalEntryDialog] = useState(false)
-  const [showBankTransferDialog, setShowBankTransferDialog] = useState(false)
-  const [showPostChargeDialog, setShowPostChargeDialog] = useState(false)
-  const [showExpenseDialog, setShowExpenseDialog] = useState(false)
-  const [showCheckDialog, setShowCheckDialog] = useState(false)
-  const [showBankDepositDialog, setShowBankDepositDialog] = useState(false)
-  const [showReceivePaymentDialog, setShowReceivePaymentDialog] = useState(false)
-  const [showBillsDialog, setShowBillsDialog] = useState(false)
-  const [showIssueCreditDialog, setShowIssueCreditDialog] = useState(false)
-  const [showIssueRefundDialog, setShowIssueRefundDialog] = useState(false)
-  const [showAddVendorCreditDialog, setShowAddVendorCreditDialog] = useState(false)
+// Error display component for server-side errors
+function AccountingErrorDisplay({ errorMessage }: { errorMessage: string }) {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -132,526 +144,127 @@ export default function AccountingPage() {
           <h1 className="text-3xl font-bold tracking-tight">Accounting</h1>
           <p className="text-muted-foreground">Manage your financial records and transactions.</p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button className="gap-2">
-              <DollarSign className="w-4 h-4" />
-              New Transaction
-              <ChevronDown className="w-4 h-4 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[240px]">
-            <DropdownMenuLabel>Tenant Transactions</DropdownMenuLabel>
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => setShowPostChargeDialog(true)}>
-                <Banknote className="w-4 h-4 me-2 opacity-60" />
-                Post Charge
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowReceivePaymentDialog(true)}>
-                <HandCoins className="w-4 h-4 me-2 opacity-60" />
-                Receive Payment
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowIssueCreditDialog(true)}>
-                <CreditCard className="w-4 h-4 me-2 opacity-60" />
-                Issue Credit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowIssueRefundDialog(true)}>
-                <ArrowLeftRight className="w-4 h-4 me-2 opacity-60" />
-                Give Refund
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Wallet className="w-4 h-4 me-2 opacity-60" />
-                Withhold Deposit
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Vendor Transactions</DropdownMenuLabel>
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => setShowBillsDialog(true)}>
-                <FileText className="w-4 h-4 me-2 opacity-60" />
-                Create Bill
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/accounting/pay-bills" className="flex items-center">
-                  <DollarSign className="w-4 h-4 me-2 opacity-60" />
-                  Pay Bills
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowAddVendorCreditDialog(true)}>
-                <CreditCard className="w-4 h-4 me-2 opacity-60" />
-                Add Credit
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Receipt className="w-4 h-4 me-2 opacity-60" />
-                Management Fees
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Owner Transactions</DropdownMenuLabel>
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <Banknote className="w-4 h-4 me-2 opacity-60" />
-                Owner Contribution
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <ChartPie className="w-4 h-4 me-2 opacity-60" />
-                Owner Distribution
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Other Transactions</DropdownMenuLabel>
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => setShowJournalEntryDialog(true)}>
-                <FileText className="w-4 h-4 me-2 opacity-60" />
-                Journal Entry
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowBankTransferDialog(true)}>
-                <ArrowLeftRight className="w-4 h-4 me-2 opacity-60" />
-                Bank Transfer
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowBankDepositDialog(true)}>
-                <Wallet className="w-4 h-4 me-2 opacity-60" />
-                Bank Deposit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowExpenseDialog(true)}>
-                <Receipt className="w-4 h-4 me-2 opacity-60" />
-                Expense
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowCheckDialog(true)}>
-                <CreditCard className="w-4 h-4 me-2 opacity-60" />
-                Check
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
-
-      {/* Charts and Stats Section */}
-      <div className="overflow-x-auto pb-4">
-        <div className="min-w-[1200px]">
-          {/* Main Content Grid */}
-          <div className="grid grid-cols-12 gap-4">
-            {/* Revenue/Cost Chart */}
-            <Card className="col-span-4">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base font-medium">Revenue & Costs</CardTitle>
-                    <CardDescription>Monthly financial overview</CardDescription>
-                  </div>
-                  <Button variant="ghost" className="text-xs text-primary hover:underline">
-                    View details
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <ChartContainer config={profitLossConfig}>
-                  <AreaChart
-                    width={500}
-                    height={200}
-                    data={profitLossData}
-                    margin={{
-                      top: 5,
-                      right: 10,
-                      left: 10,
-                      bottom: 0,
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="month"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      fontSize={11}
-                    />
-                    <Legend wrapperStyle={{ fontSize: '11px' }} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Area
-                      type="monotone"
-                      dataKey="revenue"
-                      stroke="var(--color-revenue)"
-                      fill="var(--color-revenue)"
-                      fillOpacity={0.4}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="costs"
-                      stroke="var(--color-costs)"
-                      fill="var(--color-costs)"
-                      fillOpacity={0.4}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="netIncome"
-                      stroke="var(--color-netIncome)"
-                      fill="var(--color-netIncome)"
-                      fillOpacity={0.4}
-                    />
-                  </AreaChart>
-                </ChartContainer>
-              </CardContent>
-            </Card>
-
-            {/* Monthly Trends Chart */}
-            <Card className="col-span-4">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base font-medium">Monthly Trends</CardTitle>
-                    <CardDescription>Income vs Expenses</CardDescription>
-                  </div>
-                  <Button variant="ghost" className="text-xs text-primary hover:underline">
-                    View details
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <ChartContainer config={monthlyTrendsConfig}>
-                  <AreaChart
-                    width={500}
-                    height={200}
-                    data={monthlyTrendsData}
-                    margin={{
-                      top: 5,
-                      right: 10,
-                      left: 10,
-                      bottom: 0,
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="month"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      fontSize={11}
-                    />
-                    <Legend wrapperStyle={{ fontSize: '11px' }} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Area
-                      type="monotone"
-                      dataKey="income"
-                      stroke="var(--color-income)"
-                      fill="var(--color-income)"
-                      fillOpacity={0.4}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="expenses"
-                      stroke="var(--color-expenses)"
-                      fill="var(--color-expenses)"
-                      fillOpacity={0.4}
-                    />
-                  </AreaChart>
-                </ChartContainer>
-              </CardContent>
-            </Card>
-
-            {/* Quick Stats 2x2 Grid */}
-            <div className="col-span-4 grid grid-cols-2 gap-4">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2 mb-1">
-                      <DollarSign className="h-4 w-4 text-green-600" />
-                      <p className="text-sm text-muted-foreground">Total Revenue</p>
-                    </div>
-                    <div className="mt-1">
-                      <AnimatedNumber value={30000} prefix="$" />
-                      <div className="flex items-center mt-1">
-                        <ArrowUpRight className="w-3 h-3 text-green-600" />
-                        <span className="text-xs text-green-600">+12% from last month</span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Receipt className="h-4 w-4 text-red-600" />
-                      <p className="text-sm text-muted-foreground">Total Expenses</p>
-                    </div>
-                    <div className="mt-1">
-                      <AnimatedNumber value={19800} prefix="$" />
-                      <p className="text-xs text-muted-foreground mt-1">This month</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2 mb-1">
-                      <CircleDollarSign className="h-4 w-4 text-blue-600" />
-                      <p className="text-sm text-muted-foreground">Net Income</p>
-                    </div>
-                    <div className="mt-1">
-                      <AnimatedNumber value={10200} prefix="$" />
-                      <p className="text-xs text-muted-foreground mt-1">This month</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2 mb-1">
-                      <FileText className="h-4 w-4 text-yellow-600" />
-                      <p className="text-sm text-muted-foreground">Outstanding</p>
-                    </div>
-                    <div className="mt-1">
-                      <AnimatedNumber value={5400} prefix="$" />
-                      <p className="text-xs text-muted-foreground mt-1">To collect</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </div>
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-md">
+        <h3 className="text-red-800 dark:text-red-400 font-medium">Error loading financial data</h3>
+        <p className="text-red-700 dark:text-red-300 mt-1">
+          {errorMessage || "An unexpected error occurred. Please try again later."}
+        </p>
       </div>
-
-      {/* Quick Actions Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* 1. Chart of Accounts */}
-        <Link href="/accounting/chart-of-accounts">
-          <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-            <CardContent className="p-6">
-              <div className="flex items-start space-x-4">
-                <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                  <FileSpreadsheet className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-medium leading-none mb-1">Chart of Accounts</h3>
-                  <p className="text-sm text-muted-foreground">View and manage account charts</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        {/* 2. Banking */}
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <ArrowRightLeft className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Banking</h3>
-                <p className="text-sm text-muted-foreground">Manage bank accounts</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 3. Reconciliation */}
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <Calculator className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Reconciliation</h3>
-                <p className="text-sm text-muted-foreground">Reconcile your accounts</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 4. Budgeting */}
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <Clock className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Budgeting</h3>
-                <p className="text-sm text-muted-foreground">Manage your budgets</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 5. Print Checks */}
-        <Link href="/accounting/print-checks">
-          <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-            <CardContent className="p-6">
-              <div className="flex items-start space-x-4">
-                <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                  <Printer className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-medium leading-none mb-1">Print Checks</h3>
-                  <p className="text-sm text-muted-foreground">Print and manage checks</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        {/* 6. Bills & Expenses */}
-        <Link href="/accounting/bills-expenses">
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <FileText className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Bills & Expenses</h3>
-                <p className="text-sm text-muted-foreground">Manage bills and expenses</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        </Link>
-        {/* 7. Open Bills */}
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <Receipt className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Open Bills</h3>
-                <p className="text-sm text-muted-foreground">View and manage open bills</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 8. Recurring Transactions */}
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <CircleDollarSign className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Recurring Transactions</h3>
-                <p className="text-sm text-muted-foreground">Manage recurring payments</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 9. Incoming Payments */}
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <ArrowRightLeft className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Incoming Payments</h3>
-                <p className="text-sm text-muted-foreground">Manage incoming payments</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 10. Outgoing Payments */}
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <BanknoteIcon className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Outgoing Payments</h3>
-                <p className="text-sm text-muted-foreground">Manage outgoing payments</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 11. Unpaid Rent */}
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <Receipt className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Unpaid Rent</h3>
-                <p className="text-sm text-muted-foreground">View and manage unpaid rent</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 12. Charge & Payments */}
-        <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                <CreditCard className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-medium leading-none mb-1">Charge & Payments</h3>
-                <p className="text-sm text-muted-foreground">Manage charge payments</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <JournalEntryDialog
-        open={showJournalEntryDialog}
-        onOpenChange={setShowJournalEntryDialog}
-      />
-      <BankTransferDialog
-        open={showBankTransferDialog}
-        onOpenChange={setShowBankTransferDialog}
-      />
-      <PostChargeDialog 
-        open={showPostChargeDialog}
-        onOpenChange={setShowPostChargeDialog}
-      />
-      <ExpenseDialog
-        open={showExpenseDialog}
-        onOpenChange={setShowExpenseDialog}
-      />
-      <CheckDialog
-        open={showCheckDialog}
-        onOpenChange={setShowCheckDialog}
-      />
-      <BankDepositDialog
-        open={showBankDepositDialog}
-        onOpenChange={setShowBankDepositDialog}
-      />
-      <ReceivePaymentDialog
-        open={showReceivePaymentDialog}
-        onOpenChange={setShowReceivePaymentDialog}
-      />
-      <VendorBillDialog
-        open={showBillsDialog}
-        onOpenChange={setShowBillsDialog}
-      />
-      <IssueCreditDialog
-        open={showIssueCreditDialog}
-        onOpenChange={setShowIssueCreditDialog}
-      />
-      <IssueRefundDialog
-        open={showIssueRefundDialog}
-        onOpenChange={setShowIssueRefundDialog}
-      />
-      <AddVendorCreditDialog
-        open={showAddVendorCreditDialog}
-        onOpenChange={setShowAddVendorCreditDialog}
-      />
     </div>
   )
+}
+
+export default async function AccountingPage() {
+  try {
+    return (
+      <Suspense fallback={<AccountingLoading />}>
+        <AccountingContent />
+      </Suspense>
+    )
+  } catch (error) {
+    console.error("Error in AccountingPage:", error);
+    return <AccountingErrorDisplay errorMessage={(error as Error).message || "An unexpected error occurred"} />;
+  }
+}
+
+// Main content component with data fetching
+async function AccountingContent() {
+  try {
+    // Fetch financial data on the server
+    const financialData = await fetchFinancialData()
+    
+    // Pass the data to the client component
+    return <AccountingPageClient initialFinancialData={financialData} />
+  } catch (error) {
+    console.error("Error in AccountingContent:", error);
+    return <AccountingErrorDisplay errorMessage={(error as Error).message || "Failed to load financial data"} />;
+  }
+}
+
+async function fetchFinancialData(): Promise<FinancialData> {
+  try {
+    const supabase = await createClient()
+    
+    // Calculate date range for last 30 days
+    const endDate = new Date()
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - 30)
+    
+    // Format dates for database query
+    const formattedStartDate = startDate.toISOString().split('T')[0]
+    const formattedEndDate = endDate.toISOString().split('T')[0]
+    
+    // Run all queries in parallel for faster loading
+    const [expensesResult, revenueResult, accountsReceivableResult] = await Promise.all([
+      // Query transactions for expenses
+      supabase
+        .from('transaction')
+        .select('id, transaction_type, data')
+        .in('transaction_type', ['expense', 'bill', 'check'])
+        .gte('start_date', formattedStartDate)
+        .lte('start_date', formattedEndDate),
+      
+      // Query transactions for revenue
+      supabase
+        .from('transaction')
+        .select('id, transaction_type, data')
+        .in('transaction_type', ['payment', 'receipt', 'charge'])
+        .gte('start_date', formattedStartDate)
+        .lte('start_date', formattedEndDate),
+      
+      // Query accounts receivable for outstanding amounts
+      supabase
+        .from('chart_of_accounts')
+        .select('id, account_name, account_balance')
+        .eq('account_name', 'Accounts Receivable')
+        .single()
+    ]);
+    
+    // Handle potential errors from Supabase queries
+    if (expensesResult.error) {
+      throw new Error(`Error fetching expenses: ${expensesResult.error.message}`)
+    }
+    
+    if (revenueResult.error) {
+      throw new Error(`Error fetching revenue: ${revenueResult.error.message}`)
+    }
+    
+    if (accountsReceivableResult.error && accountsReceivableResult.error.code !== 'PGRST116') {
+      // PGRST116 is "no rows returned" which is acceptable for accounts receivable
+      throw new Error(`Error fetching accounts receivable: ${accountsReceivableResult.error.message}`)
+    }
+    
+    const expenseTransactions = expensesResult.data || [] as Transaction[];
+    const revenueTransactions = revenueResult.data || [] as Transaction[];
+    const accountsReceivable = accountsReceivableResult.data;
+    
+    // Calculate total expenses
+    const totalExpenses = expenseTransactions.reduce((sum: number, transaction: Transaction) => {
+      const amount = transaction.data?.total_amount || 0
+      return sum + Number(amount)
+    }, 0)
+    
+    // Calculate total revenue
+    const totalRevenue = revenueTransactions.reduce((sum: number, transaction: Transaction) => {
+      const amount = transaction.data?.total_amount || 0
+      return sum + Number(amount)
+    }, 0)
+    
+    // Calculate net income
+    const netIncome = totalRevenue - totalExpenses
+    
+    // Get outstanding amount from accounts receivable
+    const outstanding = accountsReceivable ? Number(accountsReceivable.account_balance) || 0 : 0
+    
+    return {
+      totalExpenses,
+      totalRevenue,
+      netIncome,
+      outstanding
+    }
+  } catch (error) {
+    console.error("Error fetching financial data:", error)
+    throw error // Rethrow to be handled by the parent component
+  }
 } 

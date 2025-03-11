@@ -428,6 +428,11 @@ export default function TransactionsListReport() {
           start: parseDate(format(subDays(currentDateTime, 7), "yyyy-MM-dd")),
           end: parseDate(format(currentDateTime, "yyyy-MM-dd"))
         }
+      case 'last-30-days':
+        return {
+          start: parseDate(format(subDays(currentDateTime, 30), "yyyy-MM-dd")),
+          end: parseDate(format(currentDateTime, "yyyy-MM-dd"))
+        }
       case 'month':
         return {
           start: parseDate(format(startOfMonth(currentDateTime), "yyyy-MM-dd")),
@@ -694,6 +699,7 @@ export default function TransactionsListReport() {
                     <SelectItem value="all-time">All Time</SelectItem>
                     <SelectItem value="day">Today</SelectItem>
                     <SelectItem value="last-7-days">Last 7 Days</SelectItem>
+                    <SelectItem value="last-30-days">Last 30 Days</SelectItem>
                     <SelectItem value="month">This Month</SelectItem>
                     <SelectItem value="year">This Year</SelectItem>
                     <SelectItem value="custom">Custom</SelectItem>

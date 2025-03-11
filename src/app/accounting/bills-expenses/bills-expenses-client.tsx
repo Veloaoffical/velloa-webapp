@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { CalendarIcon, FileSpreadsheet, Printer, SlidersHorizontal, X } from "lucide-react"
+import { IconFileOff } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { format, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns"
 import { RangeCalendar } from "@/components/ui/calendar-rac"
@@ -54,11 +55,147 @@ function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {
   return (
     <TableRow>
       <TableCell colSpan={colSpan} className="text-center py-8 text-muted-foreground">
-        {message}
+        <div className="flex flex-col items-center justify-center gap-2">
+          <IconFileOff size={50} className="text-muted-foreground/70" />
+          <span>{message}</span>
+        </div>
       </TableCell>
     </TableRow>
   )
 }
+
+// Add the print styles to the head
+const printStyles = `
+@media print {
+  /* Hide elements that shouldn't be printed */
+  header, nav, aside, button, .no-print {
+    display: none !important;
+  }
+  
+  /* Show only the table when printing */
+  body * {
+    visibility: hidden;
+  }
+  
+  .print-container, .print-container * {
+    visibility: visible;
+  }
+  
+  .print-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background-color: white !important;
+    color: black !important;
+    padding: 20px;
+  }
+  
+  /* Make sure the table is visible and properly formatted */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  /* Add borders to table cells for better readability */
+  th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    color: black !important;
+    background-color: white !important;
+  }
+  
+  /* Ensure all text is visible with proper print colors */
+  .print-container * {
+    color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color: black !important;
+    background-color: white !important;
+    border-color: #ddd !important;
+  }
+  
+  /* Add page breaks where needed */
+  tr {
+    page-break-inside: avoid;
+  }
+  
+  /* Remove hover effects */
+  tr:hover {
+    background-color: white !important;
+  }
+  
+  /* Make sure checkboxes don't print */
+  input[type="checkbox"], 
+  [data-state="checked"] {
+    display: none !important;
+  }
+  
+  /* Hide checkbox column */
+  table th:first-child, 
+  table td:first-child {
+    display: none;
+  }
+  
+  /* Hide any dialog that might be open */
+  [role="dialog"] {
+    display: none !important;
+  }
+  
+  /* Add a title to the printed page */
+  .print-title {
+    display: block !important;
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: black !important;
+  }
+  
+  /* Style for print info */
+  .print-info {
+    display: block !important;
+    margin-bottom: 15px;
+    font-size: 12px;
+    color: black !important;
+  }
+  
+  .print-info-item {
+    margin-bottom: 5px;
+    color: black !important;
+  }
+  
+  /* Add page number */
+  @page {
+    margin: 0.5cm;
+  }
+  
+  /* Add footer with date */
+  .print-footer {
+    display: block !important;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    text-align: center;
+    font-size: 10px;
+    padding: 10px 0;
+    border-top: 1px solid #ddd;
+    color: black !important;
+    background-color: white !important;
+  }
+  
+  /* Force light mode for printing */
+  html {
+    background-color: white !important;
+    color: black !important;
+  }
+  
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+}
+`;
 
 export function BillsExpensesClient({
   initialAccounts,
@@ -222,9 +359,11 @@ export function BillsExpensesClient({
     
     switch (period) {
       case 'day':
+        // Set both start and end to today's date
+        const today = format(currentDateTime, "yyyy-MM-dd")
         return {
-          start: parseDate(format(currentDateTime, "yyyy-MM-dd")),
-          end: parseDate(format(currentDateTime, "yyyy-MM-dd"))
+          start: parseDate(today),
+          end: parseDate(today)
         }
       case 'last-7-days':
         return {
@@ -235,6 +374,12 @@ export function BillsExpensesClient({
         return {
           start: parseDate(format(startOfMonth(currentDateTime), "yyyy-MM-dd")),
           end: parseDate(format(endOfMonth(currentDateTime), "yyyy-MM-dd"))
+        }
+      case 'last-month':
+        const lastMonth = subDays(startOfMonth(currentDateTime), 1)
+        return {
+          start: parseDate(format(startOfMonth(lastMonth), "yyyy-MM-dd")),
+          end: parseDate(format(endOfMonth(lastMonth), "yyyy-MM-dd"))
         }
       case 'year':
         return {
@@ -309,6 +454,155 @@ export function BillsExpensesClient({
     link.click()
     document.body.removeChild(link)
   }
+
+  // Add the handlePrint function
+  const handlePrint = () => {
+    // Add the print styles to the document
+    const style = document.createElement('style');
+    style.innerHTML = printStyles;
+    document.head.appendChild(style);
+    
+    // Get filtered charges
+    const filteredCharges = charges.filter(charge => {
+      // First filter by type if specified
+      const typeMatch = selectedType === 'all' 
+        ? ['bill', 'expense'].includes(charge.charge_type.toLowerCase())
+        : charge.charge_type.toLowerCase() === selectedType.toLowerCase();
+      
+      // Then filter by account if specified
+      const accountMatch = selectedAccount === 'all' || (
+        charge.charge_amount?.lines?.some(line => 
+          line.category_id === selectedAccount || 
+          line.category === selectedAccount
+        )
+      );
+
+      // Filter by vendor if specified
+      const vendorMatch = selectedVendor === 'all' || charge.people_id === selectedVendor;
+      
+      // Filter by date range
+      let dateMatch = true;
+      if (dateRange?.start && dateRange?.end && selectedPeriod !== 'all-time') {
+        const chargeDate = new Date(charge.bill_date);
+        const startDate = new Date(dateRange.start.toString().split('T')[0]);
+        const endDate = new Date(dateRange.end.toString().split('T')[0]);
+        // Set hours to 0 to compare dates only
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+        chargeDate.setHours(0, 0, 0, 0);
+        
+        dateMatch = chargeDate >= startDate && chargeDate <= endDate;
+      }
+      
+      return typeMatch && accountMatch && vendorMatch && dateMatch;
+    });
+    
+    // Add print title and info
+    const tableContainer = document.querySelector('.table-container');
+    if (tableContainer) {
+      // Add title
+      const printTitle = document.createElement('div');
+      printTitle.className = 'print-title';
+      printTitle.style.display = 'none';
+      printTitle.innerText = 'Bills and Expenses';
+      tableContainer.prepend(printTitle);
+      
+      // Add filter info
+      const printInfo = document.createElement('div');
+      printInfo.className = 'print-info';
+      printInfo.style.display = 'none';
+      
+      // Date range info
+      let dateRangeText = 'Date Range: All Time';
+      if (dateRange?.start && dateRange?.end) {
+        const startDateStr = format(new Date(dateRange.start.toString()), 'MM/dd/yyyy');
+        const endDateStr = format(new Date(dateRange.end.toString()), 'MM/dd/yyyy');
+        dateRangeText = `Date Range: ${startDateStr} to ${endDateStr}`;
+      }
+      
+      // Account filter info
+      let accountText = 'Account: All Accounts';
+      if (selectedAccount !== 'all') {
+        const accountName = accounts.find(a => a.id === selectedAccount)?.account_name || selectedAccount;
+        accountText = `Account: ${accountName}`;
+      }
+      
+      // Type filter info
+      let typeText = 'Type: All Types';
+      if (selectedType !== 'all') {
+        typeText = `Type: ${selectedType.charAt(0).toUpperCase() + selectedType.slice(1)}`;
+      }
+      
+      // Vendor filter info
+      let vendorText = 'Vendor: All Vendors';
+      if (selectedVendor !== 'all') {
+        const vendor = initialPeople.find(p => p.id === selectedVendor);
+        const vendorName = vendor 
+          ? `${vendor.first_name || ''} ${vendor.last_name || ''} ${vendor.company ? `(${vendor.company})` : ''}`.trim()
+          : selectedVendor;
+        vendorText = `Vendor: ${vendorName}`;
+      }
+      
+      // Add total count and amount
+      const totalAmount = filteredCharges.reduce((sum, charge) => sum + (charge.charge_amount.total_amount || 0), 0);
+      const formattedTotal = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD'
+      }).format(totalAmount);
+      
+      printInfo.innerHTML = `
+        <div class="print-info-item">${dateRangeText}</div>
+        <div class="print-info-item">${accountText}</div>
+        <div class="print-info-item">${typeText}</div>
+        <div class="print-info-item">${vendorText}</div>
+        <div class="print-info-item">Total Records: ${filteredCharges.length}</div>
+        <div class="print-info-item">Total Amount: ${formattedTotal}</div>
+      `;
+      
+      tableContainer.insertBefore(printInfo, tableContainer.children[1]);
+      
+      // Add footer with date
+      const printFooter = document.createElement('div');
+      printFooter.className = 'print-footer';
+      printFooter.style.display = 'none';
+      printFooter.innerText = `Printed on ${format(new Date(), 'MM/dd/yyyy hh:mm a')}`;
+      document.body.appendChild(printFooter);
+      
+      // Add print-container class
+      tableContainer.classList.add('print-container');
+    }
+    
+    // Print the document
+    window.print();
+    
+    // Remove the style element and clean up after printing
+    setTimeout(() => {
+      document.head.removeChild(style);
+      
+      // Remove print title
+      const printTitle = document.querySelector('.print-title');
+      if (printTitle && printTitle.parentNode) {
+        printTitle.parentNode.removeChild(printTitle);
+      }
+      
+      // Remove print info
+      const printInfo = document.querySelector('.print-info');
+      if (printInfo && printInfo.parentNode) {
+        printInfo.parentNode.removeChild(printInfo);
+      }
+      
+      // Remove print footer
+      const printFooter = document.querySelector('.print-footer');
+      if (printFooter && printFooter.parentNode) {
+        printFooter.parentNode.removeChild(printFooter);
+      }
+      
+      // Remove print-container class
+      if (tableContainer) {
+        tableContainer.classList.remove('print-container');
+      }
+    }, 1000);
+  };
   
   return (
     <Card>
@@ -329,6 +623,7 @@ export function BillsExpensesClient({
                   <SelectItem value="day">Today</SelectItem>
                   <SelectItem value="last-7-days">Last 7 Days</SelectItem>
                   <SelectItem value="month">This Month</SelectItem>
+                  <SelectItem value="last-month">Last Month</SelectItem>
                   <SelectItem value="year">This Year</SelectItem>
                   <SelectItem value="custom">Custom</SelectItem>
                 </SelectContent>
@@ -336,7 +631,7 @@ export function BillsExpensesClient({
 
               <DateRangePicker 
                 className="flex items-center gap-2"
-                value={dateRange}
+                value={selectedPeriod === 'all-time' ? null : dateRange}
                 onChange={(newRange) => {
                   if (newRange?.start && newRange?.end) {
                     setDateRange(newRange as { start: CalendarDate; end: CalendarDate })
@@ -424,7 +719,12 @@ export function BillsExpensesClient({
                 >
                   <FileSpreadsheet className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className={cn(dateInputStyle, "w-9 h-9 p-0")}>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={handlePrint} 
+                  className={cn(dateInputStyle, "w-9 h-9 p-0")}
+                >
                   <Printer className="h-4 w-4" />
                 </Button>
               </div>
@@ -512,7 +812,7 @@ export function BillsExpensesClient({
         </div>
 
         {/* Table */}
-        <div className="space-y-2">
+        <div className="space-y-2 table-container">
           <Table>
             <TableHeader className="bg-muted">
               <TableRow className="hover:bg-transparent">
@@ -553,7 +853,21 @@ export function BillsExpensesClient({
                   // Filter by vendor if specified
                   const vendorMatch = selectedVendor === 'all' || charge.people_id === selectedVendor;
                   
-                  return typeMatch && accountMatch && vendorMatch;
+                  // Filter by date range
+                  let dateMatch = true;
+                  if (dateRange?.start && dateRange?.end && selectedPeriod !== 'all-time') {
+                    const chargeDate = new Date(charge.bill_date);
+                    const startDate = new Date(dateRange.start.toString().split('T')[0]);
+                    const endDate = new Date(dateRange.end.toString().split('T')[0]);
+                    // Set hours to 0 to compare dates only
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate.setHours(23, 59, 59, 999);
+                    chargeDate.setHours(0, 0, 0, 0);
+                    
+                    dateMatch = chargeDate >= startDate && chargeDate <= endDate;
+                  }
+                  
+                  return typeMatch && accountMatch && vendorMatch && dateMatch;
                 }).length === 0 ? (
                 <EmptyRow colSpan={9} message="No charges found" />
               ) : (
@@ -575,7 +889,21 @@ export function BillsExpensesClient({
                     // Filter by vendor if specified
                     const vendorMatch = selectedVendor === 'all' || charge.people_id === selectedVendor;
                     
-                    return typeMatch && accountMatch && vendorMatch;
+                    // Filter by date range
+                    let dateMatch = true;
+                    if (dateRange?.start && dateRange?.end && selectedPeriod !== 'all-time') {
+                      const chargeDate = new Date(charge.bill_date);
+                      const startDate = new Date(dateRange.start.toString().split('T')[0]);
+                      const endDate = new Date(dateRange.end.toString().split('T')[0]);
+                      // Set hours to 0 to compare dates only
+                      startDate.setHours(0, 0, 0, 0);
+                      endDate.setHours(23, 59, 59, 999);
+                      chargeDate.setHours(0, 0, 0, 0);
+                      
+                      dateMatch = chargeDate >= startDate && chargeDate <= endDate;
+                    }
+                    
+                    return typeMatch && accountMatch && vendorMatch && dateMatch;
                   })
                   .map((charge) => (
                     <TableRow 
@@ -595,7 +923,7 @@ export function BillsExpensesClient({
                       </TableCell>
                       <TableCell className="font-medium">{format(new Date(charge.bill_date), 'MM/dd/yyyy')}</TableCell>
                       <TableCell>{format(new Date(charge.due_date), 'MM/dd/yyyy')}</TableCell>
-                      <TableCell>{charge.charge_type}</TableCell>
+                      <TableCell>{charge.charge_type.charAt(0).toUpperCase() + charge.charge_type.slice(1)}</TableCell>
                       <TableCell>
                         {charge.amount_remaining?.lines?.[0]?.category_info ? (
                           charge.amount_remaining.lines[0].category_info.account_name
@@ -664,7 +992,69 @@ export function BillsExpensesClient({
 
       <VendorBillDialog 
         open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
+        onOpenChange={(open) => {
+          setIsDialogOpen(open)
+          if (!open) {
+            setSelectedBill(null)
+          }
+        }}
+        onSaveSuccess={() => {
+          // Trigger a refresh of the charges data
+          const fetchCharges = async () => {
+            try {
+              setIsLoadingCharges(true)
+              const params = new URLSearchParams()
+              
+              if (selectedType !== 'all') {
+                params.append('charge_type', selectedType.toLowerCase())
+              } else {
+                params.append('charge_type', 'bill,expense')
+              }
+              
+              if (selectedAccount && selectedAccount !== 'all') {
+                params.append('account_id', selectedAccount)
+                const selectedAccountData = initialAccounts.find(a => a.id === selectedAccount)
+                if (selectedAccountData?.sub_accounts?.length) {
+                  selectedAccountData.sub_accounts.forEach(sa => {
+                    params.append('sub_account_ids[]', sa.id)
+                  })
+                }
+              }
+
+              if (dateRange?.start) {
+                params.append('start_date', dateRange.start.toString().split('T')[0])
+              }
+              
+              if (dateRange?.end) {
+                params.append('end_date', dateRange.end.toString().split('T')[0])
+              }
+
+              if (selectedProperty && selectedProperty !== 'all') {
+                params.append('property_id', selectedProperty)
+              }
+
+              if (selectedUnit && selectedUnit !== 'all') {
+                params.append('unit_id', selectedUnit)
+              }
+
+              if (selectedVendor && selectedVendor !== 'all') {
+                params.append('vendor_id', selectedVendor)
+              }
+
+              const response = await fetch(`/api/accounting/charges?${params.toString()}`)
+              if (!response.ok) {
+                throw new Error(`Failed to fetch charges: ${response.statusText}`)
+              }
+              const data = await response.json()
+              setCharges(data)
+            } catch (error) {
+              console.error('Error fetching charges:', error)
+            } finally {
+              setIsLoadingCharges(false)
+            }
+          }
+          fetchCharges()
+        }}
         selectedBill={selectedBill}
       />
     </Card>

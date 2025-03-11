@@ -48,6 +48,7 @@
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.10",
     "@svgr/cli": "^8.1.0",
+    "@tabler/icons-react": "^3.31.0",
     "@tanstack/react-table": "^8.20.6",
     "@types/jsonwebtoken": "^9.0.8",
     "@types/tus-js-client": "^1.8.0",

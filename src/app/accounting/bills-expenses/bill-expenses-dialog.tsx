@@ -85,6 +85,7 @@ interface VendorBillDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   selectedBill?: Bill
+  onSaveSuccess?: () => void
 }
 
 interface Vendor {
@@ -215,7 +216,7 @@ function LexicalErrorBoundary({ children }: { children: React.ReactNode }) {
   return <div>{children}</div>;
 }
 
-export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBillDialogProps) {
+export function VendorBillDialog({ open, onOpenChange, selectedBill, onSaveSuccess }: VendorBillDialogProps) {
   const vendorSelectId = useId();
   const generateReference = () => {
     const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 8)
@@ -254,7 +255,7 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
   const [units, setUnits] = useState<Unit[]>([])
   const [categories, setCategories] = useState<ChargeCategory[]>([])
   const [reference, setReference] = useState<string>(generateReference())
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [vendorSearchOpen, setVendorSearchOpen] = useState(false)
   const [vendorSearchQuery, setVendorSearchQuery] = useState("")
@@ -268,9 +269,14 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
   // Load vendors and properties when dialog opens
   useEffect(() => {
     if (open) {
-      loadVendors();
-      loadProperties();
-      loadCategories();
+      setIsLoading(true); // Ensure loading is true when dialog opens
+      Promise.all([
+        loadVendors(),
+        loadProperties(),
+        loadCategories()
+      ]).finally(() => {
+        setIsLoading(false);
+      });
     }
   }, [open]);
 
@@ -308,7 +314,6 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
   // Function to load vendors
   const loadVendors = async () => {
     try {
-      setIsLoading(true);
       console.log('Loading vendors from API...');
       
       // Fetch people from general API endpoint
@@ -400,15 +405,12 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
       }
       
       setVendors([]);
-    } finally {
-      setIsLoading(false);
     }
   };
 
   // Function to load properties
   const loadProperties = useCallback(async () => {
     try {
-      setIsLoading(true);
       console.log('Loading properties from API...');
       
       // Get the selected vendor first
@@ -425,7 +427,6 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
       if (!selectedVendorObj.service_address) {
         console.log('No service_address configured for vendor');
         setProperties([]);
-        setIsLoading(false);
         return;
       }
 
@@ -435,7 +436,6 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
            selectedVendorObj.service_address.property_ids.length === 0)) {
         console.log('Vendor has no properties assigned');
         setProperties([]);
-        setIsLoading(false);
         return;
       }
 
@@ -508,8 +508,6 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
       }
       
       setProperties([]);
-    } finally {
-      setIsLoading(false);
     }
   }, [selectedVendor, vendors]);
 
@@ -696,6 +694,7 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
         memo: memo && memo !== emptyEditorState ? memo : null,
         reference: reference,
         status: selectedBill?.status || "unpaid",
+        ...(selectedBill ? { id: selectedBill.id } : {}),
         ...(billType === "recurring" ? {
           start_date: startDate ? format(startDate, "yyyy-MM-dd") : null,
           frequency: frequency,
@@ -705,7 +704,7 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
 
       // Determine if this is an update or create
       const url = selectedBill 
-        ? `/api/accounting/bills/${selectedBill.id}` 
+        ? `/api/accounting/bills/update-bills` 
         : "/api/accounting/bills"
       
       const method = selectedBill ? "PUT" : "POST"
@@ -738,7 +737,7 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
         
         const errorMessage = responseData && typeof responseData.error === 'string' 
           ? responseData.error 
-          : `Failed to create bill: ${response.status} ${response.statusText}`;
+          : `Failed to ${selectedBill ? 'update' : 'create'} bill: ${response.status} ${response.statusText}`;
         
         throw new Error(errorMessage);
       }
@@ -773,6 +772,8 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
 
       toast.success(selectedBill ? "Bill updated successfully" : "Bill created successfully")
       setStep("confirmation")
+      // Call onSaveSuccess callback after successful save
+      onSaveSuccess?.()
     } catch (error) {
       console.error("Error saving bill:", error)
       toast.error(error instanceof Error ? error.message : "Failed to save bill")
@@ -1410,23 +1411,34 @@ export function VendorBillDialog({ open, onOpenChange, selectedBill }: VendorBil
                   <div className="flex gap-2">
                     {selectedBill && (
                       <Button 
-                        variant="destructive" 
+                        variant="destructive"
                         onClick={async () => {
                           try {
                             setIsLoading(true)
+
+                            // First check if any charges are paid
+                            if (selectedBill.status === 'paid') {
+                              toast.error('Cannot delete a paid bill')
+                              setIsLoading(false)
+                              return
+                            }
+
+                            // Delete the bill and associated records
                             const response = await fetch(`/api/accounting/bills/${selectedBill.id}`, {
                               method: 'DELETE'
                             })
                             
                             if (!response.ok) {
-                              throw new Error('Failed to delete bill')
+                              const errorData = await response.json()
+                              throw new Error(errorData.error || 'Failed to delete bill')
                             }
                             
                             toast.success('Bill deleted successfully')
                             onOpenChange(false)
+                            onSaveSuccess?.() // Refresh the bills list
                           } catch (error) {
                             console.error('Error deleting bill:', error)
-                            toast.error('Failed to delete bill')
+                            toast.error(error instanceof Error ? error.message : 'Failed to delete bill')
                           } finally {
                             setIsLoading(false)
                           }

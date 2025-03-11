@@ -1,40 +1,23 @@
-"use client"
-
-import React from "react"
-import { useState, useEffect } from "react"
+import { Suspense } from "react"
 import Link from "next/link"
 import { Button as ButtonUI } from "@/components/ui/button"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  SelectGroup,
-  SelectLabel,
-} from "@/components/ui/select"
-import { ArrowLeft, CalendarIcon, SlidersHorizontal, X, Settings } from "lucide-react"
-import { format, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns"
-import { cn } from "@/lib/utils"
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card"
-import { RangeCalendar } from "@/components/ui/calendar-rac"
-import { DateInput, dateInputStyle } from "@/components/ui/datefield-rac"
-import { Button, DateRangePicker, Dialog, Group, Popover } from "react-aria-components"
-import { parseDate, type CalendarDate } from "@internationalized/date"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Checkbox } from "@/components/ui/checkbox"
-import { useRouter } from "next/navigation"
+import { ArrowLeft, AlertCircle } from "lucide-react"
+import React from "react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { createClient } from "@/utils/supabase/server"
+import { PrintChecksClient } from "./print-checks-client"
+
+function ErrorAlert({ error }: { error: Error }) {
+  return (
+    <Alert variant="destructive">
+      <AlertCircle className="h-4 w-4" />
+      <AlertTitle>Error</AlertTitle>
+      <AlertDescription>
+        {error.message}
+      </AlertDescription>
+    </Alert>
+  )
+}
 
 interface TransactionData {
   lines: {
@@ -91,633 +74,167 @@ interface ChartOfAccount {
   parent_account?: string
 }
 
-export default function PrintChecksPage() {
-  const [showFilters, setShowFilters] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [selectedChecks, setSelectedChecks] = useState<string[]>([])
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [accounts, setAccounts] = useState<ChartOfAccount[]>([])
-  const [accountsLoading, setAccountsLoading] = useState(false)
-  const currentDateTime = new Date()
-  const router = useRouter()
+async function fetchChartOfAccounts(): Promise<ChartOfAccount[]> {
+  const supabase = await createClient();
+  
+  // Get the authenticated user
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  
+  if (authError || !user) {
+    throw new Error('Unauthorized');
+  }
+
+  // Get company_id from the user's session
+  const { data: companyMember, error: companyError } = await supabase
+    .from('company_members')
+    .select('company_id')
+    .eq('id', user.id)
+    .single();
+
+  if (companyError || !companyMember) {
+    throw new Error('Failed to get company data');
+  }
+
+  const company_id = companyMember.company_id;
   
   // Fetch chart of accounts
-  const fetchChartOfAccounts = async () => {
-    try {
-      setAccountsLoading(true)
-      const response = await fetch('/api/accounting/chart-of-accounts')
-      if (!response.ok) {
-        throw new Error('Failed to fetch chart of accounts')
-      }
-      const data = await response.json()
-      setAccounts(data)
-    } catch (error) {
-      console.error('Error fetching chart of accounts:', error)
-      setAccounts([])
-    } finally {
-      setAccountsLoading(false)
-    }
+  const { data, error } = await supabase
+    .from('chart_of_accounts')
+    .select('*')
+    .eq('company_id', company_id);
+
+  if (error) {
+    throw new Error(`Failed to fetch accounts: ${error.message}`);
   }
 
-  // Fetch accounts when component mounts
-  useEffect(() => {
-    fetchChartOfAccounts()
-  }, [])
+  return data as ChartOfAccount[];
+}
 
-  const getDateRangeForPeriod = (period: string) => {
-    switch (period) {
-      case 'day':
-        return {
-          start: parseDate(format(currentDateTime, "yyyy-MM-dd")),
-          end: parseDate(format(currentDateTime, "yyyy-MM-dd"))
-        }
-      case 'last-7-days':
-        return {
-          start: parseDate(format(subDays(currentDateTime, 7), "yyyy-MM-dd")),
-          end: parseDate(format(currentDateTime, "yyyy-MM-dd"))
-        }
-      case 'month':
-        return {
-          start: parseDate(format(startOfMonth(currentDateTime), "yyyy-MM-dd")),
-          end: parseDate(format(endOfMonth(currentDateTime), "yyyy-MM-dd"))
-        }
-      case 'year':
-        return {
-          start: parseDate(format(startOfYear(currentDateTime), "yyyy-MM-dd")),
-          end: parseDate(format(endOfYear(currentDateTime), "yyyy-MM-dd"))
-        }
-      default:
-        return {
-          start: parseDate(format(subDays(currentDateTime, 7), "yyyy-MM-dd")),
-          end: parseDate(format(currentDateTime, "yyyy-MM-dd"))
-        }
-    }
+async function fetchInitialTransactions(): Promise<Transaction[]> {
+  const supabase = await createClient();
+  
+  // Get the authenticated user
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  
+  if (authError || !user) {
+    throw new Error('Unauthorized');
   }
 
-  const [selectedPeriod, setSelectedPeriod] = useState('last-7-days')
-  const [dateRange, setDateRange] = useState(getDateRangeForPeriod('last-7-days'))
-  const [selectedAccount, setSelectedAccount] = useState<string>('')
-  const [selectedProperty, setSelectedProperty] = useState<string>('')
-  const [selectedTransactionType, setSelectedTransactionType] = useState<string>('all')
+  // Get company_id from the user's session
+  const { data: companyMember, error: companyError } = await supabase
+    .from('company_members')
+    .select('company_id')
+    .eq('id', user.id)
+    .single();
 
-  // Fetch transactions when filters change
-  const fetchTransactions = async () => {
-    try {
-      setLoading(true)
-      const params = new URLSearchParams()
-      
-      if (selectedAccount && selectedAccount !== 'all') {
-        params.append('data->lines->category', selectedAccount)
-      }
-      
-      if (dateRange.start) {
-        params.append('start_date', dateRange.start.toString())
-      }
-      
-      if (dateRange.end) {
-        params.append('end_date', dateRange.end.toString())
-      }
-
-      if (selectedProperty && selectedProperty !== 'all') {
-        params.append('property_id', selectedProperty)
-      }
-
-      if (selectedTransactionType && selectedTransactionType !== 'all') {
-        params.append('transaction_type', selectedTransactionType)
-      }
-
-      // Add payment method filter
-      params.append('data->payment_method', 'check_inapp')
-
-      const response = await fetch(`/api/accounting/transactions?${params.toString()}`)
-      if (!response.ok) {
-        console.error('API Response not OK:', response.status, response.statusText)
-        throw new Error('Failed to fetch transactions')
-      }
-      
-      const rawData = await response.json()
-      console.log('Raw API response:', rawData)
-      
-      try {
-        // Handle both data.data and direct data array formats
-        const data = rawData.data || rawData
-        console.log('Extracted data:', data)
-        
-        if (!Array.isArray(data)) {
-          console.error('Data is not an array:', data)
-          throw new Error('Invalid data format')
-        }
-
-        const parsedData: Transaction[] = data.map((item: RawTransaction) => ({
-          ...item,
-          data: {
-            ...item.data,
-            payment_method: item.data?.payment_method || 'unknown'
-          }
-        }))
-        
-        console.log('Parsed transaction data:', parsedData)
-        
-        const checkTransactions = parsedData.filter((transaction: Transaction) => {
-          const paymentMethod = transaction?.data?.payment_method
-          console.log('Checking transaction:', transaction.id, 'payment method:', paymentMethod)
-          return paymentMethod === 'check_inapp'
-        })
-        
-        console.log('Filtered check transactions:', checkTransactions)
-
-        // Fetch payee details for filtered transactions
-        const transactionsWithPayees = await fetchPayeeDetails(checkTransactions)
-        
-        console.log('Transactions with payee details:', transactionsWithPayees)
-        setTransactions(transactionsWithPayees)
-      } catch (error) {
-        console.error('Error parsing transaction data:', error)
-        setTransactions([])
-      }
-    } catch (error) {
-      console.error('Error fetching transactions:', error)
-      setTransactions([])
-    } finally {
-      setLoading(false)
-    }
+  if (companyError || !companyMember) {
+    throw new Error('Failed to get company data');
   }
 
-  // Fetch data when component mounts and when filters change
-  useEffect(() => {
-    fetchTransactions()
-  }, [selectedAccount, dateRange, selectedProperty, selectedTransactionType])
+  const company_id = companyMember.company_id;
+  
+  // Get first and last day of the previous month for default filter
+  const currentDate = new Date();
+  const firstDayLastMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+  const lastDayLastMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0);
+  
+  // Format dates for query
+  const startDate = firstDayLastMonth.toISOString().split('T')[0];
+  const endDate = lastDayLastMonth.toISOString().split('T')[0];
 
-  // Fetch payee details for a list of transactions
-  const fetchPayeeDetails = async (transactions: Transaction[]): Promise<Transaction[]> => {
-    try {
-      // Get unique payee IDs
-      const payeeIds = [...new Set(transactions.filter(t => t.payee).map(t => t.payee))]
-      
-      if (payeeIds.length === 0) return transactions
+  // Fetch transactions with check_inapp payment method
+  const { data, error } = await supabase
+    .from('transaction')
+    .select('*')
+    .eq('company', company_id)
+    .gte('start_date', startDate)
+    .lte('start_date', endDate)
+    .eq('data->>payment_method', 'check_inapp');
 
-      // Create a map to store payee details
-      const payeeMap = new Map<string, PayeeDetails>()
-
-      // Fetch from each role-based endpoint
-      const endpoints = [
-        '/api/people/owner/search',
-        '/api/people/vendor/search',
-        '/api/people/tenants/search'
-      ]
-
-      // Fetch from all endpoints in parallel
-      const responses = await Promise.all(endpoints.map(endpoint => fetch(endpoint)))
-      const results = await Promise.all(responses.map(r => r.json()))
-
-      // Combine all results
-      const allPeople = results.flat()
-
-      // Create a map of payee details
-      allPeople.forEach(person => {
-        if (payeeIds.includes(person.id)) {
-          payeeMap.set(person.id, {
-            id: person.id,
-            full_name: `${person.first_name || ''} ${person.last_name || ''}`.trim(),
-            company_name: person.company
-          })
-        }
-      })
-
-      // Add payee details to transactions
-      return transactions.map(transaction => ({
-        ...transaction,
-        payeeDetails: transaction.payee ? payeeMap.get(transaction.payee) : undefined
-      }))
-    } catch (error) {
-      console.error('Error fetching payee details:', error)
-      return transactions
-    }
+  if (error) {
+    throw new Error(`Failed to fetch transactions: ${error.message}`);
   }
 
-  const handlePeriodChange = (period: string) => {
-    setSelectedPeriod(period)
-    if (period !== 'custom') {
-      setDateRange(getDateRangeForPeriod(period))
+  // Parse the transactions
+  const parsedTransactions = data.map((item: RawTransaction) => ({
+    ...item,
+    data: {
+      ...item.data,
+      payment_method: item.data?.payment_method || 'unknown'
     }
+  }));
+
+  // Fetch payee details for the transactions
+  return await fetchPayeeDetails(parsedTransactions);
+}
+
+async function fetchPayeeDetails(transactions: Transaction[]): Promise<Transaction[]> {
+  const supabase = await createClient();
+  
+  // Get unique payee IDs
+  const payeeIds = [...new Set(transactions.filter(t => t.payee).map(t => t.payee))];
+  
+  if (payeeIds.length === 0) return transactions;
+
+  // Create a map to store payee details
+  const payeeMap = new Map<string, PayeeDetails>();
+
+  // Fetch people data for all roles
+  const { data: people, error } = await supabase
+    .from('people')
+    .select('id, first_name, last_name, company')
+    .in('id', payeeIds);
+
+  if (error) {
+    console.error('Error fetching payee details:', error);
+    return transactions;
   }
 
-  // Format transaction type helper
-  const formatTransactionType = (type: string | null): string => {
-    if (!type) return 'Check'
-    switch (type.toLowerCase()) {
-      case 'expense':
-        return 'Expense'
-      default:
-        return type.charAt(0).toUpperCase() + type.slice(1)
-    }
-  }
+  // Create a map of payee details
+  people.forEach(person => {
+    payeeMap.set(person.id, {
+      id: person.id,
+      full_name: `${person.first_name || ''} ${person.last_name || ''}`.trim(),
+      company_name: person.company
+    });
+  });
 
-  return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link href="/accounting">
-          <ButtonUI variant="ghost" size="icon" className="rounded-full">
-            <ArrowLeft className="h-4 w-4" />
-          </ButtonUI>
-        </Link>
-        <h1 className="text-xl font-semibold">Print Checks</h1>
-      </div>
+  // Add payee details to transactions
+  return transactions.map(transaction => ({
+    ...transaction,
+    payeeDetails: transaction.payee ? payeeMap.get(transaction.payee) : undefined
+  }));
+}
 
-      {/* Main Card with Table */}
-      <Card>
-        <CardContent className="space-y-6 pt-6">
-          {/* Filters */}
-          <div className="space-y-4">
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <Select 
-                  value={selectedPeriod}
-                  onValueChange={handlePeriodChange}
-                >
-                  <SelectTrigger className={cn(dateInputStyle, "w-[180px]")}>
-                    <SelectValue placeholder="Select period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="day">Today</SelectItem>
-                    <SelectItem value="last-7-days">Last 7 Days</SelectItem>
-                    <SelectItem value="month">This Month</SelectItem>
-                    <SelectItem value="year">This Year</SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
-                  </SelectContent>
-                </Select>
+export default async function PrintChecksPage() {
+  try {
+    // Fetch initial data
+    const [accounts, transactions] = await Promise.all([
+      fetchChartOfAccounts(),
+      fetchInitialTransactions()
+    ]);
 
-                <DateRangePicker 
-                  className="flex items-center gap-2"
-                  value={dateRange}
-                  onChange={(newRange) => {
-                    if (newRange?.start && newRange?.end) {
-                      setDateRange(newRange as { start: CalendarDate; end: CalendarDate })
-                      setSelectedPeriod('custom')
-                    }
-                  }}
-                >
-                  <div className="flex">
-                    <Group className={cn(dateInputStyle, "pe-9")}>
-                      <DateInput slot="start" unstyled />
-                      <span aria-hidden="true" className="px-2 text-muted-foreground/70">
-                        -
-                      </span>
-                      <DateInput slot="end" unstyled />
-                    </Group>
-                    <Button className="z-10 -me-px -ms-9 flex w-9 items-center justify-center rounded-e-lg text-muted-foreground/80 outline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none data-[focus-visible]:outline data-[focus-visible]:outline-2 data-[focus-visible]:outline-ring/70">
-                      <CalendarIcon size={16} strokeWidth={2} />
-                    </Button>
-                  </div>
-                  <Popover
-                    className="z-50 rounded-lg border border-border bg-background text-popover-foreground shadow-lg shadow-black/5 outline-none data-[entering]:animate-in data-[exiting]:animate-out data-[entering]:fade-in-0 data-[exiting]:fade-out-0 data-[entering]:zoom-in-95 data-[exiting]:zoom-out-95 data-[placement=bottom]:slide-in-from-top-2 data-[placement=left]:slide-in-from-right-2 data-[placement=right]:slide-in-from-left-2 data-[placement=top]:slide-in-from-bottom-2"
-                    offset={4}
-                  >
-                    <Dialog className="max-h-[inherit] overflow-auto p-2">
-                      <RangeCalendar 
-                        value={dateRange} 
-                        onChange={(newRange) => {
-                          if (newRange?.start && newRange?.end) {
-                            setDateRange(newRange as { start: CalendarDate; end: CalendarDate })
-                            setSelectedPeriod('custom')
-                          }
-                        }}
-                      />
-                    </Dialog>
-                  </Popover>
-                </DateRangePicker>
-
-                <Select
-                  value={selectedAccount}
-                  onValueChange={setSelectedAccount}
-                >
-                  <SelectTrigger className="w-[180px] bg-background">
-                    <SelectValue placeholder={accountsLoading ? "Loading..." : "Account"}>
-                      {selectedAccount && accounts.reduce((name, account) => {
-                        if (account.id === selectedAccount) {
-                          return account.account_name;
-                        }
-                        return name;
-                      }, "")}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    <SelectItem value="all">All Accounts</SelectItem>
-                    {Object.entries(
-                      accounts.reduce((acc, account) => {
-                        if (!account.sub_account) {
-                          if (!acc[account.account_type]) {
-                            acc[account.account_type] = [];
-                          }
-                          // Add main account with its sub-accounts
-                          const subAccounts = accounts.filter(a => 
-                            a.sub_account && a.parent_account === account.id
-                          );
-                          acc[account.account_type].push({
-                            ...account,
-                            subAccounts
-                          });
-                        }
-                        return acc;
-                      }, {} as Record<string, (ChartOfAccount & { subAccounts: ChartOfAccount[] })[]>)
-                    ).map(([type, mainAccounts]) => (
-                      <SelectGroup key={type}>
-                        <SelectLabel>{type}</SelectLabel>
-                        {mainAccounts.map((mainAccount) => (
-                          <React.Fragment key={mainAccount.id}>
-                            <SelectItem value={mainAccount.id}>
-                              <div className="flex flex-col">
-                                <span>{mainAccount.account_name}</span>
-                                <span className="text-xs text-muted-foreground">{mainAccount.account_subtype}</span>
-                              </div>
-                            </SelectItem>
-                            {mainAccount.subAccounts.length > 0 && (
-                              <SelectGroup>
-                                <SelectLabel className="pl-4 text-xs">
-                                  {mainAccount.account_name} Sub-accounts
-                                </SelectLabel>
-                                {mainAccount.subAccounts.map((subAccount) => (
-                                  <SelectItem 
-                                    key={subAccount.id} 
-                                    value={subAccount.id}
-                                    className="pl-6"
-                                  >
-                                    <div className="flex flex-col">
-                                      <span>{subAccount.account_name}</span>
-                                      <span className="text-xs text-muted-foreground">{subAccount.account_subtype}</span>
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={selectedTransactionType}
-                  onValueChange={setSelectedTransactionType}
-                >
-                  <SelectTrigger className="w-[180px] bg-background">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="expense">Expense</SelectItem>
-                    <SelectItem value="bill">Bill</SelectItem>
-                    <SelectItem value="check">Check</SelectItem>
-                    <SelectItem value="payment">Payment</SelectItem>
-                    <SelectItem value="transfer">Transfer</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <ButtonUI 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={cn(dateInputStyle, "w-9 h-9 p-0", showFilters && "bg-muted")}
-                >
-                  {showFilters ? (
-                    <X className="h-4 w-4" />
-                  ) : (
-                    <SlidersHorizontal className="h-4 w-4" />
-                  )}
-                </ButtonUI>
-
-                <div className="flex-1" />
-
-                <ButtonUI
-                  variant="ghost"
-                  size="icon"
-                  className={cn(dateInputStyle, "w-9 h-9 p-0")}
-                  onClick={() => router.push('/accounting/print-checks/settings')}
-                >
-                  <Settings className="h-4 w-4" />
-                </ButtonUI>
-              </div>
-
-              {showFilters && (
-                <div className="grid grid-cols-6 gap-4 animate-in slide-in-from-top-2 duration-200 fade-in-0 data-[state=closed]:animate-out data-[state=closed]:slide-out-to-top-2 data-[state=closed]:fade-out-0">
-                  <Select
-                    value={selectedProperty}
-                    onValueChange={setSelectedProperty}
-                  >
-                    <SelectTrigger className={cn(dateInputStyle, "text-sm h-9")}>
-                      <SelectValue placeholder="Property" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Properties</SelectItem>
-                      {/* Add property options here */}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-
-            <div className="border-b"></div>
-          </div>
-
-          {/* Table */}
-          <div className="space-y-2">
-            {loading ? (
-              <Table>
-                <TableHeader className="bg-muted">
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[30px]">
-                      <Checkbox
-                        checked={false}
-                        disabled
-                      />
-                    </TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Check Number</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Payee</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Memo</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[...Array(10)].map((_, index) => (
-                    <TableRow key={index}>
-                      <TableCell><Skeleton className="h-4 w-4" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                      <TableCell className="text-right"><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : transactions.length === 0 ? (
-              <Table>
-                <TableHeader className="bg-muted">
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[30px]">
-                      <Checkbox
-                        checked={false}
-                        disabled
-                      />
-                    </TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Check Number</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Payee</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Memo</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-4">
-                      No checks found
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            ) : (
-              <>
-                <Table>
-                  <TableHeader className="bg-muted">
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-[30px]">
-                        <Checkbox
-                          checked={selectedChecks.length === transactions.length}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedChecks(transactions.map(t => t.id))
-                            } else {
-                              setSelectedChecks([])
-                            }
-                          }}
-                        />
-                      </TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Check Number</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Payee</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Memo</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactions.map((transaction) => {
-                      // Safely format the date from start_date
-                      let formattedDate = '-'
-                      try {
-                        if (transaction.start_date) {
-                          // Parse the timestampz
-                          const date = new Date(transaction.start_date)
-                          if (!isNaN(date.getTime())) {
-                            formattedDate = format(date, "MM/dd/yyyy")
-                          }
-                        }
-                      } catch (error) {
-                        console.error('Error formatting date:', error)
-                      }
-
-                      return (
-                        <TableRow key={transaction.id}>
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedChecks.includes(transaction.id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedChecks([...selectedChecks, transaction.id])
-                                } else {
-                                  setSelectedChecks(selectedChecks.filter(id => id !== transaction.id))
-                                }
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>{formattedDate}</TableCell>
-                          <TableCell>{transaction.data.check_number || '-'}</TableCell>
-                          <TableCell>{formatTransactionType(transaction.transaction_type)}</TableCell>
-                          <TableCell>
-                            {transaction.payeeDetails ? (
-                              <div>
-                                <div className="font-medium">{transaction.payeeDetails.full_name}</div>
-                                {transaction.payeeDetails.company_name && (
-                                  <div className="text-sm text-muted-foreground">{transaction.payeeDetails.company_name}</div>
-                                )}
-                              </div>
-                            ) : '-'}
-                          </TableCell>
-                          <TableCell>{transaction.data.lines[0]?.description || '-'}</TableCell>
-                          <TableCell className="text-right">
-                            {new Intl.NumberFormat('en-US', {
-                              style: 'currency',
-                              currency: 'USD'
-                            }).format(transaction.data.total_amount)}
-                          </TableCell>
-                          <TableCell>{transaction.data.memo || '-'}</TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </>
-            )}
-            <p className="text-center text-sm text-muted-foreground">
-              {format(currentDateTime, "MMM d, yyyy h:mm a")}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Summary Card */}
-      {transactions.length > 0 && (
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-8">
-              <div>
-                <div className="text-sm text-muted-foreground">Account Balance</div>
-                <div className="text-lg font-medium">
-                  {new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD'
-                  }).format(selectedAccount && selectedAccount !== 'all' 
-                    ? accounts.find(a => a.id === selectedAccount)?.account_balance || 0
-                    : 0)}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Checks Selected</div>
-                <div className="text-lg font-medium">{selectedChecks.length}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Selected Total</div>
-                <div className="text-lg font-medium">
-                  {new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD'
-                  }).format(transactions
-                    .filter(t => selectedChecks.includes(t.id))
-                    .reduce((sum, t) => sum + (t.data.total_amount || 0), 0)
-                  )}
-                </div>
-              </div>
-            </div>
-            <ButtonUI 
-              variant="default"
-              disabled={selectedChecks.length === 0}
-              onClick={() => router.push(`/accounting/print-checks/check-preview?checks=${selectedChecks.join(',')}`)}
-            >
-              Print Selected Checks
+    return (
+      <Suspense fallback={<div className="p-6">Loading...</div>}>
+        <PrintChecksClient 
+          initialAccounts={accounts} 
+          initialTransactions={transactions} 
+        />
+      </Suspense>
+    );
+  } catch (error) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center gap-4 mb-6">
+          <Link href="/accounting">
+            <ButtonUI variant="ghost" size="icon" className="rounded-full">
+              <ArrowLeft className="h-4 w-4" />
             </ButtonUI>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  )
+          </Link>
+          <h1 className="text-xl font-semibold">Print Checks</h1>
+        </div>
+        <ErrorAlert error={error as Error} />
+      </div>
+    );
+  }
 } 

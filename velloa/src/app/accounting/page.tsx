@@ -8,12 +8,19 @@ export interface FinancialData {
   totalRevenue: number;
   netIncome: number;
   outstanding: number;
+  transactions: {
+    date: string;
+    amount: number;
+    type: 'expense' | 'revenue';
+  }[];
 }
 
 // Define transaction interface to avoid using 'any'
 interface Transaction {
   id: string;
   transaction_type: string;
+  start_date: string;
+  due_date?: string;
   data?: {
     total_amount?: number | string;
     [key: string]: unknown;
@@ -186,10 +193,10 @@ async function fetchFinancialData(): Promise<FinancialData> {
   try {
     const supabase = await createClient()
     
-    // Calculate date range for last 30 days
+    // Calculate date range for last 6 months to ensure we have enough data for charts
     const endDate = new Date()
     const startDate = new Date()
-    startDate.setDate(startDate.getDate() - 30)
+    startDate.setMonth(startDate.getMonth() - 6)
     
     // Format dates for database query
     const formattedStartDate = startDate.toISOString().split('T')[0]
@@ -200,7 +207,7 @@ async function fetchFinancialData(): Promise<FinancialData> {
       // Query transactions for expenses
       supabase
         .from('transaction')
-        .select('id, transaction_type, data')
+        .select('id, transaction_type, data, start_date, due_date')
         .in('transaction_type', ['expense', 'bill', 'check'])
         .gte('start_date', formattedStartDate)
         .lte('start_date', formattedEndDate),
@@ -208,7 +215,7 @@ async function fetchFinancialData(): Promise<FinancialData> {
       // Query transactions for revenue
       supabase
         .from('transaction')
-        .select('id, transaction_type, data')
+        .select('id, transaction_type, data, start_date, due_date')
         .in('transaction_type', ['payment', 'receipt', 'charge'])
         .gte('start_date', formattedStartDate)
         .lte('start_date', formattedEndDate),
@@ -257,11 +264,26 @@ async function fetchFinancialData(): Promise<FinancialData> {
     // Get outstanding amount from accounts receivable
     const outstanding = accountsReceivable ? Number(accountsReceivable.account_balance) || 0 : 0
     
+    // Format transactions for the client component
+    const formattedTransactions = [
+      ...expenseTransactions.map(t => ({
+        date: t.due_date || t.start_date,
+        amount: Number(t.data?.total_amount || 0),
+        type: 'expense' as const
+      })),
+      ...revenueTransactions.map(t => ({
+        date: t.due_date || t.start_date,
+        amount: Number(t.data?.total_amount || 0),
+        type: 'revenue' as const
+      }))
+    ];
+    
     return {
       totalExpenses,
       totalRevenue,
       netIncome,
-      outstanding
+      outstanding,
+      transactions: formattedTransactions
     }
   } catch (error) {
     console.error("Error fetching financial data:", error)

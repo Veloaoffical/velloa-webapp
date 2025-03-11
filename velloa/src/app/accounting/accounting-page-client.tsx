@@ -42,56 +42,76 @@ interface FinancialData {
   totalRevenue: number;
   netIncome: number;
   outstanding: number;
-  startDate?: string; // Optional start date for the data period
-  endDate?: string; // Optional end date for the data period
+  transactions: {
+    date: string;
+    amount: number;
+    type: 'expense' | 'revenue';
+  }[];
 }
 
-// Helper function to determine the number of months to display
-const determineMonthsToShow = () => {
-  // Get current date
-  const now = new Date();
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(now.getMonth() - 6);
-  
-  const threeMonthsAgo = new Date();
-  threeMonthsAgo.setMonth(now.getMonth() - 3);
-  
-  // Check if we have enough data for 6 months
-  if (sixMonthsAgo.getFullYear() === now.getFullYear() || 
-      (sixMonthsAgo.getFullYear() === now.getFullYear() - 1 && sixMonthsAgo.getMonth() >= now.getMonth())) {
-    return 6;
-  }
-  
-  // Check if we have enough data for 3 months
-  if (threeMonthsAgo.getFullYear() === now.getFullYear() || 
-      (threeMonthsAgo.getFullYear() === now.getFullYear() - 1 && threeMonthsAgo.getMonth() >= now.getMonth())) {
-    return 3;
-  }
-  
-  // Default to 1 month if not enough data
-  return 1;
+// Helper function to determine the number of months to display based on actual transaction data
+const determineMonthsToShow = (transactions: FinancialData['transactions'] = []) => {
+  if (!transactions || transactions.length === 0) return 3; // Default to 3 months if no data
+
+  // Get the earliest and latest transaction dates
+  const dates = transactions.map(t => new Date(t.date));
+  const earliestDate = new Date(Math.min(...dates.map(d => d.getTime())));
+  const latestDate = new Date(Math.max(...dates.map(d => d.getTime())));
+
+  // Calculate the difference in months
+  const monthsDiff = (latestDate.getFullYear() - earliestDate.getFullYear()) * 12 + 
+                    (latestDate.getMonth() - earliestDate.getMonth()) + 1;
+
+  // Return either 3 or 6 months based on the actual data span
+  if (monthsDiff <= 3) return 3;
+  return Math.min(6, monthsDiff); // Cap at 6 months
 }
 
 // Generate chart data based on the number of months we can show
-const generateProfitLossData = (totalRevenue: number, totalExpenses: number, netIncome: number) => {
-  const monthsToShow = determineMonthsToShow();
+const generateProfitLossData = (totalRevenue: number, totalExpenses: number, netIncome: number, transactions: FinancialData['transactions'] = []) => {
+  const monthsToShow = determineMonthsToShow(transactions);
   const now = new Date();
   const data = [];
   
+  // Get the latest transaction date to use as reference point
+  const latestTransactionDate = transactions && transactions.length > 0 
+    ? new Date(Math.max(...transactions.map(t => new Date(t.date).getTime())))
+    : now;
+  
   // Generate data for each month
   for (let i = monthsToShow - 1; i >= 0; i--) {
-    const monthDate = new Date();
-    monthDate.setMonth(now.getMonth() - i);
+    const monthDate = new Date(latestTransactionDate);
+    monthDate.setMonth(latestTransactionDate.getMonth() - i);
     
     // Format month name (e.g., "Jan", "Feb")
     const monthName = monthDate.toLocaleString('en-US', { month: 'short' });
     
-    // Calculate values based on distribution
-    // More recent months get slightly higher values to show growth trend
-    const factor = 1 + (i / (monthsToShow * 2)); // Creates a slight upward trend
-    const monthRevenue = Math.round((totalRevenue / monthsToShow) * factor);
-    const monthCosts = Math.round((totalExpenses / monthsToShow) * factor);
-    const monthNetIncome = Math.round((netIncome / monthsToShow) * factor);
+    if (!transactions || transactions.length === 0) {
+      // If no transactions at all, show zeros for all months
+      data.push({
+        month: monthName,
+        revenue: 0,
+        costs: 0,
+        netIncome: 0
+      });
+      continue;
+    }
+    
+    // Filter transactions for this month
+    const monthTransactions = transactions.filter(t => {
+      const tDate = new Date(t.date);
+      return tDate.getMonth() === monthDate.getMonth() && 
+             tDate.getFullYear() === monthDate.getFullYear();
+    });
+
+    // Calculate actual values for this month
+    const monthRevenue = monthTransactions
+      .filter(t => t.type === 'revenue')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const monthCosts = monthTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const monthNetIncome = monthRevenue - monthCosts;
     
     data.push({
       month: monthName,
@@ -104,24 +124,48 @@ const generateProfitLossData = (totalRevenue: number, totalExpenses: number, net
   return data;
 };
 
-const generateMonthlyTrendsData = (totalRevenue: number, totalExpenses: number) => {
-  const monthsToShow = determineMonthsToShow();
+const generateMonthlyTrendsData = (totalRevenue: number, totalExpenses: number, transactions: FinancialData['transactions'] = []) => {
+  const monthsToShow = determineMonthsToShow(transactions);
   const now = new Date();
   const data = [];
   
+  // Get the latest transaction date to use as reference point
+  const latestTransactionDate = transactions && transactions.length > 0 
+    ? new Date(Math.max(...transactions.map(t => new Date(t.date).getTime())))
+    : now;
+  
   // Generate data for each month
   for (let i = monthsToShow - 1; i >= 0; i--) {
-    const monthDate = new Date();
-    monthDate.setMonth(now.getMonth() - i);
+    const monthDate = new Date(latestTransactionDate);
+    monthDate.setMonth(latestTransactionDate.getMonth() - i);
     
     // Format month name (e.g., "Jan", "Feb")
     const monthName = monthDate.toLocaleString('en-US', { month: 'short' });
     
-    // Calculate values based on distribution
-    // More recent months get slightly higher values to show growth trend
-    const factor = 1 + (i / (monthsToShow * 2)); // Creates a slight upward trend
-    const monthIncome = Math.round((totalRevenue / monthsToShow) * factor);
-    const monthExpenses = Math.round((totalExpenses / monthsToShow) * factor);
+    if (!transactions || transactions.length === 0) {
+      // If no transactions at all, show zeros for all months
+      data.push({
+        month: monthName,
+        income: 0,
+        expenses: 0
+      });
+      continue;
+    }
+    
+    // Filter transactions for this month
+    const monthTransactions = transactions.filter(t => {
+      const tDate = new Date(t.date);
+      return tDate.getMonth() === monthDate.getMonth() && 
+             tDate.getFullYear() === monthDate.getFullYear();
+    });
+
+    // Calculate actual values for this month
+    const monthIncome = monthTransactions
+      .filter(t => t.type === 'revenue')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const monthExpenses = monthTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
     
     data.push({
       month: monthName,
@@ -211,15 +255,15 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
   const [showIssueRefundDialog, setShowIssueRefundDialog] = useState(false);
   const [showAddVendorCreditDialog, setShowAddVendorCreditDialog] = useState(false);
   
-  // Use the server-provided data
-  const { totalExpenses, totalRevenue, netIncome, outstanding } = initialFinancialData;
+  // Use the server-provided data including transactions, with default empty array for transactions
+  const { totalExpenses = 0, totalRevenue = 0, netIncome = 0, outstanding = 0, transactions = [] } = initialFinancialData || {};
   
-  // Generate chart data based on real financial data
-  const profitLossData = generateProfitLossData(totalRevenue, totalExpenses, netIncome);
-  const monthlyTrendsData = generateMonthlyTrendsData(totalRevenue, totalExpenses);
+  // Generate chart data based on real financial data and transactions
+  const profitLossData = generateProfitLossData(totalRevenue, totalExpenses, netIncome, transactions);
+  const monthlyTrendsData = generateMonthlyTrendsData(totalRevenue, totalExpenses, transactions);
   
   // Get the number of months being displayed for the chart title
-  const monthsDisplayed = determineMonthsToShow();
+  const monthsDisplayed = determineMonthsToShow(transactions);
 
   return (
     <div className="p-6 space-y-6">
@@ -336,7 +380,7 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="text-base font-medium">Revenue & Costs</CardTitle>
-                    <CardDescription>Last {monthsDisplayed} {monthsDisplayed === 1 ? 'month' : 'months'}</CardDescription>
+                    <CardDescription>Last {monthsDisplayed} months</CardDescription>
                   </div>
                   <Button variant="ghost" className="text-xs text-primary hover:underline">
                     View details
@@ -398,7 +442,7 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="text-base font-medium">Monthly Trends</CardTitle>
-                    <CardDescription>Last {monthsDisplayed} {monthsDisplayed === 1 ? 'month' : 'months'}</CardDescription>
+                    <CardDescription>Last {monthsDisplayed} months</CardDescription>
                   </div>
                   <Button variant="ghost" className="text-xs text-primary hover:underline">
                     View details
@@ -595,7 +639,7 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
         </Link>
 
         {/* 6. Bills & Expenses */}
-        <Link href="/accounting/bills-expenses">
+        <Link href="/accounting/bills">
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">
             <div className="flex items-start space-x-4">
@@ -627,6 +671,7 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
         </Card>
         </Link>
         {/* 8. Recurring Transactions */}
+        <Link href="/accounting/recurring-transactions">
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">
             <div className="flex items-start space-x-4">
@@ -640,7 +685,7 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
             </div>
           </CardContent>
         </Card>
-
+        </Link>
         {/* 9. Incoming Payments */}
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">

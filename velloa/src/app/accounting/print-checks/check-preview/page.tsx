@@ -206,19 +206,7 @@ export default function CheckPreviewPage() {
 
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center gap-4">
-          <Link href="/accounting/print-checks">
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <h1 className="text-xl font-semibold">Check Preview</h1>
-        </div>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      </div>
+      <LoadingState />
     )
   }
 
@@ -519,4 +507,114 @@ function numberToWords(num: number): string {
   }
 
   return result
+}
+
+function LoadingState() {
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/accounting/print-checks">
+            <Button variant="ghost" size="icon" className="rounded-full">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <h1 className="text-xl font-semibold">Check Preview</h1>
+        </div>
+        <Button disabled className="opacity-70">
+          <Printer className="h-4 w-4 mr-2" />
+          Print Checks
+        </Button>
+      </div>
+      
+      {/* Skeleton Loading UI */}
+      <div className="space-y-8">
+        {[1, 2].map((item) => (
+          <div key={item} className="space-y-4">
+            <div className="animate-pulse">
+              {/* Main Check Skeleton */}
+              <div className="relative border border-gray-200 bg-card w-[8.5in] h-[3.5in] mx-auto p-6">
+                {/* Date Skeleton */}
+                <div className="absolute top-[72px] right-8">
+                  <div className="h-5 w-24 bg-gray-200 rounded"></div>
+                </div>
+                
+                {/* Payee Name Skeleton */}
+                <div className="absolute left-8 top-32">
+                  <div className="h-5 w-48 bg-gray-200 rounded ml-[0.65in]"></div>
+                </div>
+                
+                {/* Amount in Numbers Skeleton */}
+                <div className="absolute top-32 right-8">
+                  <div className="h-5 w-36 bg-gray-200 rounded"></div>
+                </div>
+                
+                {/* Amount in Words Skeleton */}
+                <div className="absolute left-8 top-40">
+                  <div className="h-5 w-[5in] bg-gray-200 rounded ml-[0.65in]"></div>
+                </div>
+                
+                {/* Bank Account Address Skeleton */}
+                <div className="absolute left-8 top-48">
+                  <div className="space-y-2 ml-[0.65in]">
+                    <div className="h-4 w-40 bg-gray-200 rounded"></div>
+                    <div className="h-4 w-48 bg-gray-200 rounded"></div>
+                    <div className="h-4 w-36 bg-gray-200 rounded"></div>
+                  </div>
+                </div>
+                
+                {/* Memo Line Skeleton */}
+                <div className="absolute left-8 bottom-16">
+                  <div className="h-4 w-64 bg-gray-200 rounded ml-[0.65in]"></div>
+                </div>
+                
+                {/* MICR Line Skeleton */}
+                <div className="absolute left-[1.58in] bottom-[0.13in]">
+                  <div className="h-8 w-[4in] bg-gray-200 rounded"></div>
+                </div>
+              </div>
+              
+              {/* Transaction Details Skeleton - First Section */}
+              <div className="relative border border-gray-200 bg-card w-[8.5in] h-[3.5in] mx-auto p-6 mt-2">
+                {/* Header Skeleton */}
+                <div className="flex justify-between mb-4">
+                  <div className="flex gap-4">
+                    <div className="h-4 w-24 bg-gray-200 rounded"></div>
+                    <div className="h-4 w-36 bg-gray-200 rounded"></div>
+                  </div>
+                  <div className="h-4 w-16 bg-gray-200 rounded"></div>
+                </div>
+                
+                {/* Transaction Lines Skeleton */}
+                <div className="space-y-2">
+                  {[1, 2, 3, 4].map((line) => (
+                    <div key={line} className="grid grid-cols-[80px_80px_150px_100px_120px_80px] gap-1">
+                      <div className="h-4 bg-gray-200 rounded"></div>
+                      <div className="h-4 bg-gray-200 rounded"></div>
+                      <div className="h-4 bg-gray-200 rounded"></div>
+                      <div className="h-4 bg-gray-200 rounded"></div>
+                      <div className="h-4 bg-gray-200 rounded"></div>
+                      <div className="h-4 bg-gray-200 rounded"></div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Footer Skeleton */}
+                <div className="mt-8 grid grid-cols-[300px_1fr_120px] gap-4 items-start">
+                  <div className="space-y-2">
+                    <div className="h-4 w-48 bg-gray-200 rounded"></div>
+                    <div className="h-4 w-40 bg-gray-200 rounded"></div>
+                    <div className="h-4 w-36 bg-gray-200 rounded"></div>
+                    <div className="h-4 w-44 bg-gray-200 rounded"></div>
+                  </div>
+                  <div className="h-4 w-64 bg-gray-200 rounded justify-self-end"></div>
+                  <div className="h-4 w-20 bg-gray-200 rounded justify-self-end"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }

@@ -16,20 +16,18 @@ export async function GET() {
     const supabase = await createClient();
 
     // The middleware has already authenticated the user
-    // We can directly access the user ID from the session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // We can directly access the user ID using getUser instead of getSession
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     console.log('👤 Auth User:', {
-      id: session?.user?.id,
-      email: session?.user?.email,
-      role: session?.user?.role
+      id: user?.id,
+      email: user?.email,
+      role: user?.role
     });
 
-    if (sessionError || !session?.user) {
-      console.error('❌ Auth error:', sessionError);
+    if (userError || !user) {
+      console.error('❌ Auth error:', userError);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
-    const user = session.user;
     
     // Get the company membership
     const { data: companyMember, error: companyError } = await supabase
@@ -131,20 +129,18 @@ export async function POST(req: Request) {
     const data = await req.json();
 
     // The middleware has already authenticated the user
-    // We can directly access the user ID from the session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // We can directly access the user ID using getUser instead of getSession
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     console.log('👤 Auth User:', {
-      id: session?.user?.id,
-      email: session?.user?.email,
-      role: session?.user?.role
+      id: user?.id,
+      email: user?.email,
+      role: user?.role
     });
 
-    if (sessionError || !session?.user) {
-      console.error('❌ Auth error:', sessionError);
+    if (userError || !user) {
+      console.error('❌ Auth error:', userError);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
-    const user = session.user;
     
     // Get the company membership
     const { data: companyMember, error: companyError } = await supabase
@@ -321,20 +317,18 @@ export async function PUT(request: Request) {
     const { id, ...data } = await request.json();
 
     // The middleware has already authenticated the user
-    // We can directly access the user ID from the session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // We can directly access the user ID using getUser instead of getSession
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     console.log('👤 Auth User:', {
-      id: session?.user?.id,
-      email: session?.user?.email,
-      role: session?.user?.role
+      id: user?.id,
+      email: user?.email,
+      role: user?.role
     });
 
-    if (sessionError || !session?.user) {
-      console.error('❌ Auth error:', sessionError);
+    if (userError || !user) {
+      console.error('❌ Auth error:', userError);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
-    const user = session.user;
     
     // Get the company membership
     const { data: companyMember, error: companyError } = await supabase
@@ -453,20 +447,18 @@ export async function DELETE(request: Request) {
     const id = searchParams.get('id');
 
     // The middleware has already authenticated the user
-    // We can directly access the user ID from the session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // We can directly access the user ID using getUser instead of getSession
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     console.log('👤 Auth User:', {
-      id: session?.user?.id,
-      email: session?.user?.email,
-      role: session?.user?.role
+      id: user?.id,
+      email: user?.email,
+      role: user?.role
     });
 
-    if (sessionError || !session?.user) {
-      console.error('❌ Auth error:', sessionError);
+    if (userError || !user) {
+      console.error('❌ Auth error:', userError);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
-    const user = session.user;
     
     // Get the company membership
     const { data: companyMember, error: companyError } = await supabase

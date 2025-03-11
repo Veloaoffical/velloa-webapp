@@ -5,11 +5,14 @@ export async function GET() {
   try {
     const supabase = await createClient();
 
-    // Get the authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
+    // The middleware has already authenticated the user
+    // We can directly access the user ID from the session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    
+    const user = session.user;
 
     const { data, error } = await supabase
       .from('profiles')
@@ -36,11 +39,14 @@ export async function POST(request: Request) {
   try {
     const supabase = await createClient();
 
-    // Get the authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
+    // The middleware has already authenticated the user
+    // We can directly access the user ID from the session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    
+    const user = session.user;
 
     const settings = await request.json();
 

@@ -14,11 +14,14 @@ export async function GET(request: Request) {
     const transaction_type = searchParams.get("transaction_type")
     const status = searchParams.get("status")
 
-    // Get the authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-    if (userError || !user) {
+    // The middleware has already authenticated the user
+    // We can directly access the user ID from the session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError || !session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    
+    const user = session.user
 
     // Get the company membership
     const { data: companyMember, error: companyError } = await supabase

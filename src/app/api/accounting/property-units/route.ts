@@ -11,13 +11,16 @@ export async function GET() {
   try {
     const supabase = await createClient()
     
-    // Get the authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    // The middleware has already authenticated the user
+    // We can directly access the user ID from the session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
     
-    if (authError || !user) {
-      console.error('Auth error:', authError)
+    if (sessionError || !session?.user) {
+      console.error('Auth error:', sessionError)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    
+    const user = session.user
     
     // Get the authenticated user's company ID
     const { data: companyMember, error: companyError } = await supabase

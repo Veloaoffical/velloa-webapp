@@ -121,21 +121,24 @@ export async function POST(request: Request) {
       }
     }
 
-    // Get the authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    // The middleware has already authenticated the user
+    // We can directly access the user ID from the session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
     console.log('👤 Auth User:', {
-      id: user?.id,
-      email: user?.email,
-      role: user?.role
+      id: session?.user?.id,
+      email: session?.user?.email,
+      role: session?.user?.role
     });
 
-    if (userError || !user) {
-      console.error('❌ Auth error:', userError);
+    if (sessionError || !session?.user) {
+      console.error('❌ Auth error:', sessionError);
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
       )
     }
+    
+    const user = session.user
 
     // Get the user's profile
     console.log('🔍 Getting user profile...');

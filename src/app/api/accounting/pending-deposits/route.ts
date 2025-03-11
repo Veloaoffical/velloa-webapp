@@ -6,12 +6,15 @@ export async function GET() {
     // Create Supabase client
     const supabase = await createClient()
 
-    // Get the authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-    if (userError || !user) {
-      console.error('Authentication error:', userError)
+    // The middleware has already authenticated the user
+    // We can directly access the user ID from the session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError || !session?.user) {
+      console.error('Authentication error:', sessionError)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    
+    const user = session.user
 
     // Get the user's profile
     const { data: profile, error: profileError } = await supabase

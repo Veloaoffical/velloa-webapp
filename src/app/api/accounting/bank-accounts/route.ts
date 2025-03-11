@@ -41,12 +41,15 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const propertyId = searchParams.get('property_id')
     
-    // Get the authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    // The middleware has already authenticated the user
+    // We can directly access the user ID from the session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
     
-    if (authError || !user) {
+    if (sessionError || !session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    
+    const user = session.user
     
     // Get the user's company ID
     const { data: companyMember, error: companyError } = await supabase

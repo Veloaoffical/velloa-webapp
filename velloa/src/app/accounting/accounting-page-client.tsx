@@ -639,7 +639,7 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
         </Link>
 
         {/* 6. Bills & Expenses */}
-        <Link href="/accounting/bills">
+        <Link href="/accounting/bills-expenses">
         <Card className="hover:bg-accent/5 transition-colors cursor-pointer">
           <CardContent className="p-6">
             <div className="flex items-start space-x-4">

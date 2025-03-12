@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "date-fns": "https://esm.sh/date-fns@2.30.0",
+    "supabase": "https://esm.sh/@supabase/supabase-js@2.45.0",
+    "jsr:@supabase/functions-js": "https://esm.sh/@supabase/functions-js@2.45.0"
+  }
+}

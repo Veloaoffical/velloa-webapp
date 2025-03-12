@@ -295,11 +295,16 @@ async function fetchInitialCharges(): Promise<Charge[]> {
       created_at,
       created_by,
       share_with_tenants,
-      charge_type
+      charge_type,
+      frequency,
+      start_date,
+      repeat_infinite,
+      end_date
     `)
     .eq('company_id', company_id)
     .in('charge_type', ['bill', 'expense'])
     .neq('status', 'paid')
+    .not('frequency', 'is', null)  // Only select charges with frequency
     .order('due_date', { ascending: false });
 
   if (error) {
@@ -368,6 +373,10 @@ async function fetchInitialCharges(): Promise<Charge[]> {
     created_by: string;
     share_with_tenants: boolean;
     charge_type: string;
+    frequency?: string;
+    start_date?: string;
+    repeat_infinite?: boolean;
+    end_date?: string;
   }
 
   // Get unique category IDs from all charge lines

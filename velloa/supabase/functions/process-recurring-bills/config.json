@@ -1,0 +1,9 @@
+{
+  "name": "process-recurring-bills",
+  "version": "1.0",
+  "description": "Process recurring bills and create new bills when due",
+  "verify_jwt": false,
+  "schedule": {
+    "cron": "0 0 * * *"
+  }
+} 

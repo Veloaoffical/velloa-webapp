@@ -92,6 +92,11 @@ interface BillLine {
 interface BillResponse {
   id: string
   error?: string
+  details?: {
+    [key: string]: {
+      _errors?: string[]
+    } | unknown
+  }
 }
 
 function Placeholder() {
@@ -521,22 +526,39 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
         }
       }
 
-      if (!lines[0].property) {
-        toast.error("Please select a property")
-        setIsLoading(false)
-        return
-      }
+      // Validate line items
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        if (!line.property) {
+          toast.error(`Please select a property for line item ${i + 1}`)
+          setIsLoading(false)
+          return
+        }
 
-      if (!lines[0].category) {
-        toast.error("Please select a category")
-        setIsLoading(false)
-        return
-      }
+        if (!line.category) {
+          toast.error(`Please select a category for line item ${i + 1}`)
+          setIsLoading(false)
+          return
+        }
 
-      if (!lines[0].amount || parseFloat(lines[0].amount) <= 0) {
-        toast.error("Please enter a valid amount")
-        setIsLoading(false)
-        return
+        // Validate amount is a valid number
+        const amount = parseFloat(line.amount);
+        if (isNaN(amount) || amount <= 0) {
+          toast.error(`Please enter a valid amount for line item ${i + 1}`)
+          setIsLoading(false)
+          return
+        }
+
+        // Debug: Log line item details
+        console.log(`Line item ${i + 1} details:`, {
+          property: line.property,
+          unit: line.unit,
+          category: line.category,
+          description: line.description,
+          amount: line.amount,
+          parsedAmount: parseFloat(line.amount)
+        });
       }
 
       // Verify that we have valid vendor data
@@ -551,47 +573,93 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
       const newReference = generateReference()
       setReference(newReference)
 
-      // Prepare the payload
-      const billData = {
+      // Debug: Check memo format
+      console.log("Memo value:", {
+        memo,
+        isEmptyEditorState: memo === emptyEditorState,
+        memoType: typeof memo
+      });
+
+      // Prepare the payload - ensure all dates are properly formatted
+      // We've already validated that billDate exists at this point
+      interface BillDataType {
+        people_id: string;
+        bill_date: string;
+        due_date: string;
+        lines: {
+          description: string;
+          amount: number;
+          category_id: string;
+          property_id: string | null;
+          unit_id: string | null;
+        }[];
+        memo: string | null;
+        reference: string;
+        status: string;
+        charge_type: string;
+        start_date?: string;
+        frequency?: string;
+        repeat_infinite?: boolean;
+        end_date?: string;
+      }
+
+      const billData: BillDataType = {
         people_id: selectedVendor,
-        bill_date: billDate ? format(billDate, "yyyy-MM-dd") : null,
-        due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
+        bill_date: format(billDate!, "yyyy-MM-dd"),
+        due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : format(billDate!, "yyyy-MM-dd"), // Ensure due_date is always provided
         lines: lines.map(line => ({
           description: line.description || '',
           amount: parseFloat(line.amount) || 0,
           category_id: line.category,
           property_id: line.property || null,
-          unit_id: line.unit ? line.unit : null
+          unit_id: line.unit || null // Ensure unit_id is always a string or null, not undefined
         })),
         memo: memo && memo !== emptyEditorState ? memo : null,
         reference: newReference,
         status: "unpaid",
-        ...(billType === "recurring" ? {
-          start_date: startDate ? format(startDate, "yyyy-MM-dd") : null,
-          frequency: frequency,
-          repeat_infinite: repeatForever
-        } : {})
+        charge_type: "bill"
+      };
+
+      // Add recurring bill fields only if it's a recurring bill
+      if (billType === "recurring") {
+        if (startDate) {
+          billData.start_date = format(startDate, "yyyy-MM-dd");
+        }
+        billData.frequency = frequency;
+        billData.repeat_infinite = repeatForever;
+        if (!repeatForever && endDate) {
+          billData.end_date = format(endDate, "yyyy-MM-dd");
+        }
       }
 
       console.log("Submitting bill data:", JSON.stringify(billData, null, 2));
 
-      // Save the bill - assuming we'll create an API endpoint for this
+      // Save the bill
       const response = await fetch("/api/accounting/bills", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(billData),
-      })
+      });
 
       console.log("Response status:", response.status);
+      console.log("Response headers:", Object.fromEntries([...response.headers.entries()]));
 
+      // Try to parse the response as JSON
       let responseData: BillResponse | null = null;
+      let responseText = "";
       
       try {
+        // First get the raw text for debugging
+        responseText = await response.clone().text();
+        console.log("Raw response:", responseText);
+        
+        // Then try to parse as JSON
         responseData = await response.json();
       } catch (jsonError) {
         console.error('Error parsing response JSON:', jsonError);
+        console.error('Raw response text:', responseText);
         throw new Error('Failed to parse server response');
       }
 
@@ -599,12 +667,41 @@ export function VendorBillDialog({ open, onOpenChange }: VendorBillDialogProps) 
         console.error('Bill creation error:', {
           status: response.status,
           statusText: response.statusText,
-          data: responseData
-        })
+          data: responseData,
+          rawResponse: responseText
+        });
         
-        const errorMessage = responseData && typeof responseData.error === 'string' 
-          ? responseData.error 
-          : `Failed to create bill: ${response.status} ${response.statusText}`;
+        // Log more detailed validation errors if available
+        if (responseData?.details) {
+          console.error('Validation details:', JSON.stringify(responseData.details, null, 2));
+        }
+        
+        let errorMessage = 'Failed to create bill';
+        
+        if (responseData?.error) {
+          errorMessage = responseData.error;
+          
+          // Extract field-specific errors
+          const fieldErrors: string[] = [];
+          
+          // Only process details if they exist
+          if (responseData.details) {
+            Object.entries(responseData.details).forEach(([field, error]) => {
+              if (field !== '_errors' && error && typeof error === 'object' && '_errors' in error) {
+                const errors = (error as { _errors: string[] })._errors;
+                if (Array.isArray(errors)) {
+                  fieldErrors.push(`${field}: ${errors.join(', ')}`);
+                }
+              }
+            });
+          }
+          
+          if (fieldErrors.length > 0) {
+            errorMessage += `: ${fieldErrors.join('; ')}`;
+          }
+        } else {
+          errorMessage = `Failed to create bill: ${response.status} ${response.statusText}`;
+        }
         
         throw new Error(errorMessage);
       }

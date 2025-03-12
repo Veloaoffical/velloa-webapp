@@ -152,6 +152,10 @@ export interface Charge {
     unit_name: string
     property_name: string
   }[]
+  frequency?: string
+  start_date?: string
+  end_date?: string
+  repeat_infinite?: boolean
 }
 
 export interface RecurringTransactionsClientProps {

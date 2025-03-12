@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { CalendarIcon, SlidersHorizontal, X, Receipt, CreditCard, FileText } from "lucide-react"
+import { CalendarIcon, SlidersHorizontal, X, Receipt, CreditCard, FileText, CalendarDays, Clock9 } from "lucide-react"
 import { IconFileOff } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { format, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns"
@@ -34,7 +34,7 @@ import AccountCombobox from "@/components/AccountCombobox"
 import PropertyCombobox from "@/components/PropertyCombobox"
 import UnitCombobox from "@/components/UnitCombobox"
 import VendorCombobox from "@/components/VendorCombobox"
-import { RecurringTransactionsClientProps, Unit } from "./types"
+import { RecurringTransactionsClientProps, Unit, Charge } from "./types"
 import { VendorBillDialog } from "../components/VendorBillDialog"
 import { ExpenseDialog } from "../components/ExpenseDialog"
 
@@ -87,6 +87,21 @@ export function RecurringTransactionsClient({
   const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState<string>("")
   const currentDateTime = new Date()
+  
+  // Safe date formatting function
+  const formatSafeDate = (dateString: string | undefined | null): string => {
+    if (!dateString) return 'N/A';
+    
+    try {
+      // Use the same approach as the Date column
+      const date = new Date(dateString);
+      return format(date, 'MM/dd/yyyy');
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_) {
+      // Return the original string if parsing fails
+      return dateString;
+    }
+  };
   
   // Date range state
   const [selectedPeriod, setSelectedPeriod] = useState('all-time')
@@ -195,12 +210,23 @@ export function RecurringTransactionsClient({
           params.append('vendor_id', selectedVendor)
         }
 
+        // Always include recurring parameter to only fetch recurring transactions
+        params.append('recurring', 'true')
+
         const response = await fetch(`/api/accounting/charges?${params.toString()}`)
         if (!response.ok) {
           throw new Error(`Failed to fetch charges: ${response.statusText}`)
         }
         const data = await response.json()
-        setCharges(data)
+        
+        // Filter to only include charges with frequency
+        const recurringCharges = data.filter((charge: Charge) => 
+          charge.frequency !== undefined && 
+          charge.frequency !== null && 
+          charge.frequency !== ''
+        )
+        
+        setCharges(recurringCharges)
       } catch (error) {
         console.error('Error fetching charges:', error)
       } finally {
@@ -283,7 +309,7 @@ export function RecurringTransactionsClient({
               <div className="relative w-80">
                 <input
                   type="text"
-                  placeholder="Search transactions..."
+                  placeholder="Search recurring transactions..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className={cn(dateInputStyle, "w-full pl-3 pr-10")}
@@ -513,12 +539,13 @@ export function RecurringTransactionsClient({
                 <TableHead>Due Date</TableHead>
                 <TableHead>Account</TableHead>
                 <TableHead>Property</TableHead>
+                <TableHead>Term</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoadingCharges ? (
-                <LoadingRow colSpan={7} />
+                <LoadingRow colSpan={8} />
               ) : charges.filter(charge => {
                   // First filter by type if specified
                   const typeMatch = selectedType === 'all' 
@@ -600,7 +627,7 @@ export function RecurringTransactionsClient({
                   
                   return typeMatch && accountMatch && vendorMatch && dateMatch && searchMatch;
                 }).length === 0 ? (
-                <EmptyRow colSpan={7} message="No charges found" />
+                <EmptyRow colSpan={8} message="No recurring charges found" />
               ) : (
                 charges
                   .filter(charge => {
@@ -728,8 +755,8 @@ export function RecurringTransactionsClient({
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="font-medium">{format(new Date(charge.bill_date), 'MM/dd/yyyy')}</TableCell>
-                      <TableCell>{format(new Date(charge.due_date), 'MM/dd/yyyy')}</TableCell>
+                      <TableCell className="font-medium">{formatSafeDate(charge.bill_date)}</TableCell>
+                      <TableCell>{formatSafeDate(charge.due_date)}</TableCell>
                       <TableCell>
                         {charge.charge_amount?.lines?.[0]?.category_info ? (
                           charge.charge_amount.lines[0].category_info.account_name
@@ -747,6 +774,25 @@ export function RecurringTransactionsClient({
                       </TableCell>
                       <TableCell>
                         {initialProperties.find(p => p.id === charge.property_id)?.name || charge.property_id}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          {charge.frequency && (
+                            <div className="text-sm mb-1 flex items-center">
+                              <CalendarDays className="h-4 w-4 mr-1 text-muted-foreground" />
+                              <span className="font-medium capitalize">{charge.frequency}</span>
+                              {charge.repeat_infinite && (
+                                <span className="ml-1 text-xs text-muted-foreground">(Repeats indefinitely)</span>
+                              )}
+                            </div>
+                          )}
+                          <div className="flex items-center">
+                            <Clock9 className="h-4 w-4 mr-1 text-muted-foreground" />
+                            <span className="text-sm">
+                              {charge.start_date ? formatSafeDate(charge.start_date) : 'Not specified'} - {charge.end_date ? formatSafeDate(charge.end_date) : (charge.repeat_infinite ? "Indefinite" : "Not specified")}
+                            </span>
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         {new Intl.NumberFormat('en-US', {

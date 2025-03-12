@@ -50,6 +50,10 @@ interface DbCharge {
   created_by: string;
   share_with_tenants: boolean;
   charge_type: string;
+  frequency?: string;
+  start_date?: string;
+  end_date?: string;
+  repeat_infinite?: boolean;
   lease_contracts?: {
     tenant_name: string;
     unit_name: string;
@@ -501,9 +505,10 @@ export async function GET(request: NextRequest) {
     const tenant_id = searchParams.get('tenant_id');
     const status = searchParams.get('status');
     const category_id = searchParams.get('category_id');
+    const recurring = searchParams.get('recurring');
 
     console.log('Fetching charges with params:', { 
-      lease_id, property_id, unit_id, tenant_id, status, category_id, company_id 
+      lease_id, property_id, unit_id, tenant_id, status, category_id, company_id, recurring 
     });
 
     try {
@@ -525,10 +530,14 @@ export async function GET(request: NextRequest) {
           payee,
           reference,
           status,
+          end_date,
           created_at,
           created_by,
           share_with_tenants,
-          charge_type
+          charge_type,
+          frequency,
+          start_date,
+          repeat_infinite
         `)
         .eq('company_id', company_id);
 
@@ -538,6 +547,11 @@ export async function GET(request: NextRequest) {
       if (unit_id) query = query.eq('unit_id', unit_id);
       if (tenant_id) query = query.eq('people_id', tenant_id);
       if (status) query = query.eq('status', status);
+      
+      // Filter for recurring transactions if requested
+      if (recurring === 'true') {
+        query = query.not('frequency', 'is', null);
+      }
       
       // Order by due date if available
       query = query.order('due_date', { ascending: false });

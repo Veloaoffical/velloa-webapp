@@ -74,6 +74,7 @@ const BillCreateSchema = z.object({
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   frequency: z.string().optional(),
   repeat_infinite: z.boolean().optional(),
+  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   charge_type: z.string().default('bill')
 });
 
@@ -456,6 +457,9 @@ export async function POST(request: NextRequest) {
 
     console.log("Creating charge with data:", chargeData);
 
+    // For recurring bills, set the last_generated_date to the start_date
+    const lastGeneratedDate = billData.start_date && billData.frequency ? billData.start_date : undefined;
+
     // Create the charge record
     const { data: charge, error: chargeError } = await supabase
       .from("charges")
@@ -485,7 +489,9 @@ export async function POST(request: NextRequest) {
         frequency: billData.frequency,
         repeat_infinite: billData.repeat_infinite,
         charge_type: billData.charge_type || 'bill',
-        transaction_id: transactionId
+        transaction_id: transactionId,
+        last_generated_date: lastGeneratedDate,
+        end_date: billData.repeat_infinite ? null : billData.end_date
       })
       .select()
       .single();

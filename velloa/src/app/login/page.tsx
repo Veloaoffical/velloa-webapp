@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { login } from './actions';
+import { useSearchParams } from 'next/navigation';
 
 const testimonials = [
   {
@@ -24,7 +25,16 @@ const testimonials = [
 ];
 
 export default function LoginPage() {
-  const [error] = useState<string>('');
+  const searchParams = useSearchParams();
+  const [error, setError] = useState<string>('');
+
+  // Check for error message in URL
+  useEffect(() => {
+    const errorParam = searchParams.get('error');
+    if (errorParam) {
+      setError(errorParam);
+    }
+  }, [searchParams]);
 
   return (
     <div className="min-h-screen flex">

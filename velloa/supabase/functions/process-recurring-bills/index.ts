@@ -4,8 +4,113 @@
 
 // Setup type definitions for built-in Supabase Runtime APIs
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1"
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.7.1"
 import { format, addDays, addWeeks, addMonths, addYears, isBefore, isEqual } from "https://esm.sh/date-fns@2.30.0"
+
+// Define database schema types
+interface Database {
+  public: {
+    Tables: {
+      chart_of_sub_accounts: {
+        Row: {
+          id: string
+          account_balance: string
+          account_type: string
+          parent_account: string
+        }
+      }
+      chart_of_accounts: {
+        Row: {
+          id: string
+          account_balance: string
+          account_type: string
+        }
+      }
+      charges: {
+        Row: {
+          id: string
+          company_id: string
+          people_id: string
+          bill_date: string
+          due_date: string
+          payee: string | null
+          property_id: string | null
+          unit_id: string | null
+          charge_amount: Record<string, unknown>
+          amount_remaining: Record<string, unknown>
+          memo?: string | null
+          reference?: string
+          status: string
+          created_by: string
+          start_date: string
+          frequency: string
+          repeat_infinite: boolean
+          end_date?: string
+          charge_type: string
+          transaction_id: string
+          last_generated_date?: string
+          [key: string]: unknown
+        }
+        Insert: {
+          company_id: string
+          people_id: string
+          bill_date: string
+          due_date: string
+          payee: string | null
+          property_id: string | null
+          unit_id: string | null
+          charge_amount: Record<string, unknown>
+          amount_remaining: Record<string, unknown>
+          memo?: string | null
+          reference?: string
+          status: string
+          created_by: string
+          charge_type: string
+          transaction_id: string
+          recurring_bill_id?: string
+          [key: string]: unknown
+        }
+      }
+      transaction: {
+        Row: {
+          id: string
+          created_at: string
+          transaction_type: string
+          property: string | null
+          due_date: string
+          data: Record<string, unknown>
+          company: string
+          memo: string | null
+          reference: string
+          share_files: boolean
+          status: string
+          created_by: string
+          payee: string | null
+          [key: string]: unknown
+        }
+        Insert: {
+          id: string
+          created_at: string
+          transaction_type: string
+          property: string | null
+          due_date: string
+          data: Record<string, unknown>
+          company: string
+          memo: string | null
+          reference: string
+          share_files: boolean
+          status: string
+          created_by: string
+          payee: string | null
+          [key: string]: unknown
+        }
+      }
+    }
+  }
+}
+
+// Define a type for the Supabase client with our database schema
+type TypedSupabaseClient = SupabaseClient<Database>
 
 interface BillLine {
   line_id: string
@@ -89,7 +194,7 @@ function generateReference(): string {
 
 // Function to update account balances for transaction lines
 async function updateAccountBalances(
-  supabase: ReturnType<typeof createClient>,
+  supabase: TypedSupabaseClient,
   transactionLines: TransactionLine[]
 ): Promise<void> {
   for (const line of transactionLines) {
@@ -199,7 +304,7 @@ async function updateAccountBalances(
 
 // Function to create a new bill based on a recurring bill template
 async function createNewBill(
-  supabase: ReturnType<typeof createClient>,
+  supabase: TypedSupabaseClient,
   recurringBill: RecurringBill,
   newBillDate: Date,
   newDueDate: Date
@@ -315,7 +420,7 @@ serve(async () => {
     // Create a Supabase client with the project URL and service role key
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = createClient<Database>(supabaseUrl, supabaseKey)
     
     // Get today's date
     const today = new Date()
@@ -383,7 +488,7 @@ serve(async () => {
             const nextDueDate = addDays(nextBillDate, daysDifference)
             
             // Create the new bill
-            const newBillId = await createNewBill(supabase, bill, nextBillDate, nextDueDate)
+            const newBillId = await createNewBill(supabase as TypedSupabaseClient, bill as RecurringBill, nextBillDate, nextDueDate)
             
             if (newBillId) {
               // Update the last generated date for the recurring bill

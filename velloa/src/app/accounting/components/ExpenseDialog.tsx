@@ -48,6 +48,29 @@ interface ExpenseLine {
   reference: string
 }
 
+interface ExpenseDataType {
+  people_id: string;
+  bill_date: string;
+  due_date?: string;
+  lines: {
+    description: string;
+    amount: number;
+    category_id: string;
+    property_id: string | null;
+    unit_id: string | null;
+  }[];
+  memo: string | null;
+  reference: string;
+  status: string;
+  charge_type: string;
+  payment_method: string;
+  pay_from_account: string;
+  start_date?: string;
+  frequency?: string;
+  repeat_infinite?: boolean;
+  end_date?: string;
+}
+
 interface Property {
   id: string
   name: string
@@ -474,26 +497,38 @@ export function ExpenseDialog({ open, onOpenChange }: ExpenseDialogProps) {
         return !isNaN(amount) && amount > 0 && line.category
       })
 
-      const expenseData = {
-        payee,
-        expense_type: expenseType,
-        expense_date: format(expenseDate!, "yyyy-MM-dd"),
-        start_date: startDate ? format(startDate, "yyyy-MM-dd") : undefined,
-        end_date: !repeatForever && endDate ? format(endDate, "yyyy-MM-dd") : undefined,
-        frequency,
-        repeat_forever: expenseType === "recurring" ? repeatForever : undefined,
-        payment_method: paymentMethod,
-        pay_from_account: payFromAccount,
+      // Prepare the expense data in a format similar to bill data
+      const expenseData: ExpenseDataType = {
+        people_id: payee,
+        bill_date: format(expenseDate!, "yyyy-MM-dd"),
+        due_date: expenseType === "one_time" 
+          ? format(expenseDate!, "yyyy-MM-dd") 
+          : undefined,
         lines: expenseLines.map(line => ({
-          category: line.category,
-          property: line.property,
-          unit: line.unit || "",
-          description: line.description || "",
-          credit_amount: parseFloat(line.credit_amount || '0'),
-          reference: line.reference
+          description: line.description || '',
+          amount: parseFloat(line.credit_amount || '0'),
+          category_id: line.category,
+          property_id: line.property || null,
+          unit_id: line.unit || null
         })),
-        memo: memo || undefined,
-        reference
+        memo: memo && memo !== emptyEditorState ? memo : null,
+        reference: reference,
+        status: "unpaid",
+        charge_type: "expense", // Set charge type to expense
+        payment_method: paymentMethod,
+        pay_from_account: payFromAccount
+      };
+
+      // Add recurring expense fields only if it's a recurring expense
+      if (expenseType === "recurring") {
+        if (startDate) {
+          expenseData.start_date = format(startDate, "yyyy-MM-dd");
+        }
+        expenseData.frequency = frequency;
+        expenseData.repeat_infinite = repeatForever;
+        if (!repeatForever && endDate) {
+          expenseData.end_date = format(endDate, "yyyy-MM-dd");
+        }
       }
 
       console.log('Final expense data:', JSON.stringify(expenseData, null, 2))

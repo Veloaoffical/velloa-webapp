@@ -15,10 +15,25 @@ export async function login(formData: FormData) {
     password: formData.get('password') as string,
   }
 
-  const { error } = await supabase.auth.signInWithPassword(data)
+  const { error, data: authData } = await supabase.auth.signInWithPassword(data)
 
   if (error) {
     redirect('/error')
+  }
+
+  // Check if the user has a tenant role
+  if (authData?.user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', authData.user.id)
+      .single()
+
+    // If the user is a tenant, sign them out and redirect to login with error
+    if (profile && profile.role === 'tenant') {
+      await supabase.auth.signOut()
+      redirect('/login?error=Tenant accounts are not allowed to access the system')
+    }
   }
 
   revalidatePath('/', 'layout')

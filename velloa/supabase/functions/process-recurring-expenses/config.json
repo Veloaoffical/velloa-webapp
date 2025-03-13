@@ -1,0 +1,9 @@
+{
+  "name": "process-recurring-expenses",
+  "version": "1.0",
+  "description": "Process recurring expenses and create new expenses when due",
+  "verify_jwt": false,
+  "schedule": {
+    "cron": "0 0 * * *"
+  }
+} 

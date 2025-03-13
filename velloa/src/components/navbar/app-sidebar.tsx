@@ -15,12 +15,14 @@ import {
   LayoutTemplate,
   Calendar,
   Bell,
+  Search,
+  Command,
 } from "lucide-react"
 
 import { NavUser } from "@/components/navbar/nav-user"
-import { SearchForm } from "@/components/ui/search-form"
 import { NotificationDialog } from "@/components/notification-dialog"
 import { useCommandPalette } from "@/components/command-palette"
+import { Input } from "@/components/ui/input"
 
 import {
   Sidebar,
@@ -167,20 +169,57 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </div>
         </div>
         <hr className="border-t border-border mx-2 -mt-px" />
-        <div className="group-data-[collapsible=icon]:hidden">
-          <SearchForm 
-            className="mt-3 px-2" 
-            onSearchClick={() => setCommandPaletteOpen(true)}
-          />
-        </div>
-        <div className="group-data-[collapsible=icon]:block group-data-[collapsible=icon]:h-[40px] hidden">
-          {/* This empty div maintains spacing when search is hidden */}
-        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent className="px-2">
             <SidebarMenu>
+              {/* Search icon only shown when collapsed */}
+              <div className="group-data-[collapsible=icon]:block hidden">
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => setCommandPaletteOpen(true)}
+                    className="group/menu-button font-light gap-3 h-9 rounded-lg hover:bg-accent/50 hover:text-accent-foreground"
+                    tooltip="Search"
+                  >
+                    <Search
+                      className="text-foreground/60 mx-auto"
+                      size={22}
+                      aria-hidden="true"
+                    />
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </div>
+              
+              {/* Search input shown when expanded */}
+              <div className="group-data-[collapsible=icon]:hidden mb-2">
+                <SidebarMenuItem>
+                  <div 
+                    className="relative w-full px-1 py-1"
+                    onClick={() => setCommandPaletteOpen(true)}
+                  >
+                    <div className="relative flex items-center">
+                      <Search
+                        className="absolute left-2.5 text-muted-foreground"
+                        size={16}
+                      />
+                      <Input
+                        readOnly
+                        placeholder="Search..."
+                        className="pl-8 pr-10 h-8 text-sm bg-background/80 border-border/50 hover:bg-accent/10 cursor-pointer"
+                      />
+                      <div className="absolute right-2.5 flex items-center justify-center">
+                        <Command
+                          className="text-muted-foreground"
+                          size={12}
+                        />
+                        <span className="text-muted-foreground text-[14px] ml-0.5">k</span>
+                      </div>
+                    </div>
+                  </div>
+                </SidebarMenuItem>
+              </div>
+              
               {data.navMain.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton

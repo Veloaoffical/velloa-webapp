@@ -1,18 +1,14 @@
 import { NextResponse } from "next/server"
 import { createClient } from '@/utils/supabase/server'
+import { customAlphabet } from "nanoid"
+
+// Create a custom nanoid that only uses capital letters and numbers
+const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 8);
 
 interface PropertyBalance {
   property_id: string;
   property_name: string;
   balance: number;
-}
-
-interface ExpenseLine {
-  category: string
-  property: string
-  unit: string
-  description: string
-  credit_amount: number
 }
 
 interface TransactionLine {
@@ -22,6 +18,62 @@ interface TransactionLine {
   description: string;
   debit_amount: number;
   credit_amount: number;
+  reference?: string;
+}
+
+// Define interface for expense line from request
+interface ExpenseLineRequest {
+  amount: number;
+  category_id: string;
+  property_id: string;
+  unit_id?: string | null;
+  description?: string;
+}
+
+// Define interface for charge data
+interface ChargeData {
+  company_id: string;
+  people_id: string;
+  bill_date: string;
+  due_date: string;
+  payee: string | null;
+  property_id: string | null;
+  charge_amount: {
+    lines: {
+      line_id: string;
+      amount: number;
+      category: string;
+      reference: string;
+      description?: string;
+      property_id: string | null;
+      unit_id: string | null;
+    }[];
+    total_amount: number;
+    accounts_payable_id?: string;
+  };
+  amount_remaining: {
+    lines: {
+      line_id: string;
+      amount: number;
+      category: string;
+      reference: string;
+      description?: string;
+      property_id: string | null;
+      unit_id: string | null;
+    }[];
+    total_amount: number;
+    accounts_payable_id?: string;
+  };
+  memo?: unknown;
+  reference?: string;
+  status: string;
+  created_by: string;
+  start_date?: string;
+  frequency?: string;
+  repeat_infinite?: boolean;
+  unit_id: string | null;
+  charge_type: string;
+  transaction_id?: string;
 }
 
 export async function POST(request: Request) {
@@ -30,18 +82,19 @@ export async function POST(request: Request) {
     const data = await request.json()
 
     const {
-      payee,
-      expense_type,
-      expense_date,
-      start_date,
-      end_date,
-      frequency,
-      repeat_forever,
-      payment_method,
-      pay_from_account,
+      people_id,
+      bill_date,
+      due_date,
       lines,
       memo,
-      reference
+      reference,
+      status,
+      charge_type,
+      payment_method,
+      pay_from_account,
+      start_date,
+      frequency,
+      repeat_infinite
     } = data
 
     // The middleware has already authenticated the user
@@ -64,8 +117,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to get company' }, { status: 403 })
     }
 
+    const company_id = companyMember.company_id
+
     // Get the property ID from the first line
-    const property_id = lines[0]?.property
+    const property_id = lines[0]?.property_id
     if (!property_id || property_id.trim() === '') {
       return NextResponse.json(
         { error: 'Please select a property for this expense' },
@@ -74,8 +129,8 @@ export async function POST(request: Request) {
     }
 
     // Calculate total amount from expense lines
-    const totalAmount = lines.reduce((sum: number, line: ExpenseLine) => {
-      return sum + (line.credit_amount || 0)
+    const totalAmount = lines.reduce((sum: number, line: ExpenseLineRequest) => {
+      return sum + (line.amount || 0)
     }, 0)
 
     // Transform expense lines into transaction lines with debit and credit
@@ -88,20 +143,22 @@ export async function POST(request: Request) {
       property: property_id,
       description: "Payment from account",
       debit_amount: 0,
-      credit_amount: totalAmount // Bank account gets credited
+      credit_amount: totalAmount, // Bank account gets credited
+      reference: nanoid()
     })
 
     // Add expense lines (debit entries - money being spent)
-    lines.forEach((line: ExpenseLine) => {
-      const lineAmount = line.credit_amount || 0
-      if (lineAmount > 0 && line.category !== pay_from_account) {
+    lines.forEach((line: ExpenseLineRequest) => {
+      const lineAmount = line.amount || 0
+      if (lineAmount > 0 && line.category_id !== pay_from_account) {
         transactionLines.push({
-          unit: line.unit || "",
-          category: line.category,
+          unit: line.unit_id || "",
+          category: line.category_id,
           property: property_id,
           description: line.description || "",
           debit_amount: lineAmount, // Expense gets debited
-          credit_amount: 0
+          credit_amount: 0,
+          reference: nanoid()
         })
       }
     })
@@ -112,15 +169,15 @@ export async function POST(request: Request) {
       .insert({
         transaction_type: "expense",
         property: property_id,
-        payee: payee,
-        start_date: expense_type === "one_time" ? expense_date : start_date,
-        due_date: end_date,
-        repeat_infinite: repeat_forever,
+        payee: people_id,
+        start_date: bill_date,
+        due_date: due_date || bill_date,
+        repeat_infinite: repeat_infinite,
         frequency: frequency,
-        frequency_type: expense_type,
-        memo: memo ? JSON.parse(memo) : null,
+        frequency_type: frequency ? "recurring" : "one_time",
+        memo: memo,
         created_by: user.id,
-        company: companyMember.company_id,
+        company: company_id,
         reference: reference,
         data: {
           payment_method,
@@ -255,7 +312,7 @@ export async function POST(request: Request) {
           }
         }
 
-        continue
+        continue // Skip main account update if sub-account was found and updated
       }
 
       // If not found in sub-accounts, update main account
@@ -265,17 +322,18 @@ export async function POST(request: Request) {
         .eq('id', category)
         .single()
 
-      if (mainAccountError || !mainAccount) {
-        console.error('Error finding account:', mainAccountError)
-        throw new Error('Account not found')
+      if (mainAccountError) {
+        console.error('Error finding main account:', mainAccountError)
+        throw new Error('Failed to find account')
       }
 
       // Update main account balance
       const currentBalance = parseFloat(mainAccount.account_balance) || 0
       const newBalance = currentBalance + amount
 
-      // Update property balance
+      // Update property balance in the property_balance JSONB array
       let propertyBalance = Array.isArray(mainAccount.property_balance) ? mainAccount.property_balance : []
+      
       const propertyIndex = propertyBalance.findIndex((pb: PropertyBalance) => pb.property_id === property_id)
       
       if (propertyIndex >= 0) {
@@ -318,7 +376,70 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json(transaction)
+    // Prepare charge data
+    // Transform expense lines for charge record
+    const transformedLines = lines.map((line: ExpenseLineRequest) => ({
+      line_id: nanoid(),
+      amount: line.amount,
+      category: line.category_id,
+      reference: nanoid(),
+      description: line.description || '',
+      property_id: property_id,
+      unit_id: line.unit_id || null
+    }));
+
+    // Create charge data
+    const chargeData: ChargeData = {
+      company_id,
+      people_id,
+      bill_date,
+      due_date: due_date || bill_date,
+      payee: people_id,
+      property_id,
+      unit_id: null, // Default to null
+      charge_amount: {
+        lines: transformedLines,
+        total_amount: totalAmount,
+        accounts_payable_id: pay_from_account
+      },
+      amount_remaining: {
+        lines: transformedLines,
+        total_amount: totalAmount,
+        accounts_payable_id: pay_from_account
+      },
+      memo,
+      reference,
+      status: status || "unpaid",
+      created_by: user.id,
+      charge_type: charge_type || 'expense',
+      transaction_id: transaction.id
+    };
+
+    // Add recurring fields if applicable
+    if (frequency) {
+      chargeData.start_date = start_date;
+      chargeData.frequency = frequency;
+      chargeData.repeat_infinite = repeat_infinite;
+    }
+
+    console.log("Creating charge with data:", chargeData);
+
+    // Create the charge record
+    const { data: charge, error: chargeError } = await supabase
+      .from("charges")
+      .insert(chargeData)
+      .select()
+      .single();
+
+    if (chargeError) {
+      console.error('Error creating charge:', chargeError);
+      throw new Error('Failed to create charge record');
+    }
+
+    return NextResponse.json({
+      transaction,
+      charge
+    })
   } catch (error) {
     console.error("Error creating expense:", error)
     return NextResponse.json(

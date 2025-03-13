@@ -142,7 +142,7 @@ export function TenantContent({ tenant, start_date }: TenantContentProps) {
                 ) : (
                   <>
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="bg-muted">
                         <TableRow className="hover:bg-transparent">
                           <TableHead>Name</TableHead>
                           <TableHead>Contact Info</TableHead>
@@ -346,7 +346,7 @@ export function TenantContent({ tenant, start_date }: TenantContentProps) {
             </Button>
           </div>
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-muted">
               <TableRow className="hover:bg-transparent">
                 <TableHead>Tenant</TableHead>
                 <TableHead>Contact Info</TableHead>

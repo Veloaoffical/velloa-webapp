@@ -64,6 +64,7 @@ export async function POST(request: Request) {
       lead_source: contact.leadSource || null,
       lead_medium: contact.leadMedium || null,
       assignee_id: contact.assigneeId || null,
+      expected_move_in_date: contact.expected_move_in_date || null,
 
       // Store employment as JSON
       employment: {

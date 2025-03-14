@@ -5,20 +5,16 @@ import { useRouter } from 'next/navigation';
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Calendar as CalendarIcon, ChevronDown, Phone, Mail, Search, X, Check, Plus } from 'lucide-react';
+import { ChevronDown, Phone, Mail, Lock, Search, X, Plus, Check, DollarSign, Cat, Ban, Car, Users, EyeIcon, EyeOffIcon, Home } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import * as RPNInput from "react-phone-number-input";
 import flags from "react-phone-number-input/flags";
-import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { DateField, DateInput, DateSegment } from "react-aria-components";
-import { CalendarDate } from "@internationalized/date";
 import Image from 'next/image';
 import {
   AlertDialog,
@@ -54,6 +50,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Card } from "@/components/ui/card";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Stepper,
+  StepperIndicator,
+  StepperItem,
+  StepperSeparator,
+  StepperTitle,
+  StepperTrigger,
+} from "@/components/ui/stepper";
+import CalendarInput from "@/components/calendarwithmonthsinput";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { toast } from "sonner";
 
 // Province data
 const provinces = [
@@ -77,7 +86,7 @@ const PhoneInput = forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
   ({ className, ...props }, ref) => {
     return (
       <Input
-        className={cn("h-[42px] -ms-px rounded-s-none shadow-none focus-visible:z-10", className)}
+        className={cn("h-[42px] -ms-px rounded-s-none shadow-none bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20 focus-visible:z-10", className)}
         ref={ref}
         {...props}
       />
@@ -100,7 +109,7 @@ const CountrySelect = ({ disabled, value, onChange, options }: CountrySelectProp
   };
 
   return (
-    <div className="relative inline-flex items-center self-stretch h-[42px] rounded-s-lg border border-input bg-background px-3 text-muted-foreground transition-shadow focus-within:z-10 focus-within:border-ring focus-within:outline-none focus-within:ring-[3px] focus-within:ring-ring/20 hover:bg-accent hover:text-foreground has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50">
+    <div className="relative inline-flex items-center self-stretch h-[42px] rounded-s-lg border border-input bg-background px-3 text-muted-foreground transition-shadow focus-within:z-10 focus-within:border-ring focus-within:outline-none focus-within:ring-[3px] focus-within:ring-ring/20 hover:bg-background">
       <div className="inline-flex items-center gap-1" aria-hidden="true">
         <FlagComponent country={value} countryName={value} aria-hidden="true" />
         <span className="text-muted-foreground/80">
@@ -156,6 +165,7 @@ interface ContactForm {
   leadSource: string;
   leadMedium: string;
   assigneeId: string;
+  expected_move_in_date: Date | undefined;
 }
 
 interface ResidenceForm {
@@ -171,7 +181,7 @@ interface ResidenceForm {
   landlordName: string;
   landlordPhone: string;
   landlordEmail: string;
-  noPastResidence: boolean;
+  noPastResidence: boolean | null;
 }
 
 interface PetForm {
@@ -276,9 +286,26 @@ interface UnitListing {
   units: Unit;
 }
 
+// Driver's License Format Patterns
+const driverLicenseFormats = {
+  AB: { pattern: "[0-9]{9}", format: "999999999", maxLength: 9 },
+  BC: { pattern: "[0-9]{7}", format: "9999999", maxLength: 7 },
+  MB: { pattern: "[A-Z][A-Z\\*]{5}[A-Z0-9]{2}[0-9]", format: "AKKKKAKXX9XX9", maxLength: 12 },
+  NB: { pattern: "[0-9]{7}", format: "9999999", maxLength: 7 },
+  NL: { pattern: "[A-Z][0-9]{9}", format: "A999999999", maxLength: 10 },
+  NS: { pattern: "[A-Z]{5}[0-9]{9}", format: "AKKKK99999999", maxLength: 14 },
+  NT: { pattern: "[0-9]{9}", format: "999999999", maxLength: 9 },
+  NU: { pattern: "[0-9]{5}", format: "99999", maxLength: 5 },
+  ON: { pattern: "[A-Z][0-9]{14}", format: "A99999999999999", maxLength: 15 },
+  PE: { pattern: "[0-9]{5}", format: "99999", maxLength: 5 },
+  QC: { pattern: "[A-Z][0-9]{12}", format: "A999999999999", maxLength: 13 },
+  SK: { pattern: "[0-9]{8}", format: "99999999", maxLength: 8 },
+  YT: { pattern: "[0-9]{6}", format: "999999", maxLength: 6 }
+};
+
 export default function AddProspectPage() {
   const router = useRouter();
-  const [step, setStep] = useState<'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'pets' | 'vehicles' | 'dependents' | 'employment' | 'income' | 'summary'>('intro');
+  const [step, setStep] = useState<'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'income' | 'pets' | 'vehicles' | 'dependents' | 'summary'>('intro');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [listings, setListings] = useState<UnitListing[]>([]);
   const [isLoadingListings, setIsLoadingListings] = useState(true);
@@ -300,6 +327,7 @@ export default function AddProspectPage() {
     leadSource: '',
     leadMedium: '',
     assigneeId: '',
+    expected_move_in_date: undefined,
   });
   const [emails, setEmails] = useState<string[]>(['']);
   const [phones, setPhones] = useState<string[]>(['']);
@@ -316,7 +344,7 @@ export default function AddProspectPage() {
     landlordName: '',
     landlordPhone: '',
     landlordEmail: '',
-    noPastResidence: false
+    noPastResidence: null
   });
   const [pets, setPets] = useState<PetForm[]>([{
     name: '',
@@ -328,6 +356,7 @@ export default function AddProspectPage() {
     gender: '',
     spayedNeutered: false
   }]);
+  const [havePets, setHavePets] = useState(false);
   const [vehicles, setVehicles] = useState<VehicleForm[]>([{
     make: '',
     model: '',
@@ -369,7 +398,6 @@ export default function AddProspectPage() {
     otherIncomeSource: ''
   });
   const [emailError, setEmailError] = useState<string>('');
-  const [landlordEmailError, setLandlordEmailError] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSkipAlert, setShowSkipAlert] = useState(false);
   const [companyMembers, setCompanyMembers] = useState<Array<{ id: string; first_name: string; last_name: string }>>([]);
@@ -377,6 +405,30 @@ export default function AddProspectPage() {
   const [companySettings, setCompanySettings] = useState<{ leadsource?: string[] }>({});
   const [showNewSourceDialog, setShowNewSourceDialog] = useState(false);
   const [newSourceValue, setNewSourceValue] = useState('');
+  const [haveVehicles, setHaveVehicles] = useState(false);
+  const [haveDependents, setHaveDependents] = useState(false);
+  // Add step completion tracking
+  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set(['intro']));
+  const [showSSN, setShowSSN] = useState(false);
+  const [licenseError, setLicenseError] = useState<string>('');
+
+  // Helper function to check if a step is accessible
+  const isStepAccessible = (targetStep: string) => {
+    const stepOrder = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment', 'income', 'pets', 'vehicles', 'dependents', 'summary'];
+    const currentStepIndex = stepOrder.indexOf(step);
+    const targetStepIndex = stepOrder.indexOf(targetStep);
+    
+    // Can always go back
+    if (targetStepIndex < currentStepIndex) return true;
+    
+    // Can only go forward if previous step is completed
+    return completedSteps.has(stepOrder[targetStepIndex - 1]);
+  };
+
+  // Helper function to mark step as completed
+  const markStepCompleted = (completedStep: string) => {
+    setCompletedSteps(prev => new Set([...prev, completedStep]));
+  };
 
   const handleBack = () => {
     if (step === 'intro') {
@@ -389,54 +441,97 @@ export default function AddProspectPage() {
       setStep('lead_status');
     } else if (step === 'residence') {
       setStep('personal');
-    } else if (step === 'pets') {
+    } else if (step === 'employment') {
       setStep('residence');
+    } else if (step === 'income') {
+      setStep('employment');
+    } else if (step === 'pets') {
+      setStep('income');
     } else if (step === 'vehicles') {
       setStep('pets');
     } else if (step === 'dependents') {
       setStep('vehicles');
-    } else if (step === 'employment') {
-      setStep('dependents');
-    } else if (step === 'income') {
-      setStep('employment');
     } else if (step === 'summary') {
-      setStep('income');
+      setStep('dependents');
     }
+  };
+
+  const handleSkipProperties = () => {
+    markStepCompleted('properties');
+    setShowSkipAlert(false);
+    setStep('lead_status');
   };
 
   const handleNext = () => {
     if (step === 'intro') {
+      markStepCompleted('intro');
       setStep('properties');
     } else if (step === 'properties') {
       if (!selectedUnitId) {
         setShowSkipAlert(true);
       } else {
+        markStepCompleted('properties');
         setStep('lead_status');
       }
     } else if (step === 'lead_status') {
+      markStepCompleted('lead_status');
       setStep('personal');
     } else if (step === 'personal') {
       if (!contact.firstName || !contact.lastName || !contact.email || emailError) {
+        toast.error('Missing Information', {
+          description: 'Please fill out all required fields (First Name, Last Name, and Email)'
+        });
         return;
       }
+      
+      if (!contact.ssn || contact.ssn.length !== 9) {
+        toast.error('Invalid SSN', {
+          description: 'SSN must be exactly 9 digits'
+        });
+        return;
+      }
+
+      if (!contact.expected_move_in_date) {
+        toast.error('Missing Information', {
+          description: 'Please select an expected move-in date'
+        });
+        return;
+      }
+
+      markStepCompleted('personal');
       setStep('residence');
     } else if (step === 'residence') {
-      // Skip validation if no past residence is checked
-      if (residence.noPastResidence) {
-        setStep('pets');
+      if (residence.noPastResidence === null) {
+        toast.error('Missing Information', {
+          description: 'Please select whether you have rental history or not.'
+        });
         return;
       }
-      setStep('pets');
-    } else if (step === 'pets') {
-      setStep('vehicles');
-    } else if (step === 'vehicles') {
-      setStep('dependents');
-    } else if (step === 'dependents') {
+      if (!residence.noPastResidence && (!residence.address.street || !residence.address.city || !residence.address.province || !residence.address.postalCode)) {
+        toast.error('Missing Information', {
+          description: 'Please fill out all address fields.'
+        });
+        return;
+      }
+      markStepCompleted('residence');
       setStep('employment');
     } else if (step === 'employment') {
+      markStepCompleted('employment');
       setStep('income');
     } else if (step === 'income') {
+      markStepCompleted('income');
+      setStep('pets');
+    } else if (step === 'pets') {
+      markStepCompleted('pets');
+      setStep('vehicles');
+    } else if (step === 'vehicles') {
+      markStepCompleted('vehicles');
+      setStep('dependents');
+    } else if (step === 'dependents') {
+      markStepCompleted('dependents');
       setStep('summary');
+    } else if (step === 'summary') {
+      handleSubmit();
     }
   };
 
@@ -471,11 +566,6 @@ export default function AddProspectPage() {
     } catch (error) {
       console.error('Error creating prospect:', error);
     }
-  };
-
-  const handleSkipProperties = () => {
-    setShowSkipAlert(false);
-    setStep('lead_status');
   };
 
   // Add useEffect for fetching listings
@@ -599,16 +689,16 @@ export default function AddProspectPage() {
       <div
         key={listing.listingid}
         className={`rounded-lg border overflow-hidden ${
-          selectedUnitId === listing.units.unit_id // Direct comparison with unit_id
-            ? 'border-green-500 bg-green-50'
-            : 'border-gray-200 hover:border-green-500 hover:bg-green-50'
+          selectedUnitId === listing.units.unit_id
+            ? 'border-primary bg-primary/5'
+            : 'border-border hover:border-primary hover:bg-primary/5'
         } cursor-pointer transition-all h-full flex flex-col`}
         onClick={() => {
           setSelectedUnitId(prev => {
             if (prev === listing.units.unit_id) {
               return '';
             } else {
-              return listing.units.unit_id; // Direct assignment of unit_id
+              return listing.units.unit_id;
             }
           });
         }}
@@ -625,23 +715,22 @@ export default function AddProspectPage() {
             />
           </div>
         ) : (
-          <div className="relative w-full h-36 bg-gray-100 flex items-center justify-center">
-            <div className="text-gray-400">No image available</div>
+          <div className="relative w-full h-36 bg-muted flex items-center justify-center">
+            <div className="text-muted-foreground">No image available</div>
           </div>
         )}
         <div className="p-4">
-          {/* Rest of the listing content */}
           <div className="flex justify-between items-start">
             <div className="space-y-2 text-left flex-grow">
               <div className="flex items-start gap-2 justify-between">
                 <h3 className="text-lg font-semibold line-clamp-2">{listing.title}</h3>
-                <div className="flex items-center justify-center w-5 h-5 border-2 rounded-full border-green-500 flex-shrink-0">
+                <div className="flex items-center justify-center w-5 h-5 border-2 rounded-full border-primary flex-shrink-0">
                   {selectedUnitId === listing.units.unit_id && (
-                    <div className="w-3 h-3 bg-green-500 rounded-full" />
+                    <div className="w-3 h-3 bg-primary rounded-full" />
                   )}
                 </div>
               </div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-muted-foreground">
                 <p>{listing.units.properties.address_line_1}</p>
                 <p>
                   {listing.units.properties.city}, {listing.units.properties.state}{' '}
@@ -650,7 +739,7 @@ export default function AddProspectPage() {
               </div>
             </div>
           </div>
-          <div className="mt-3 flex justify-between items-center text-xs text-gray-500 pt-2 border-t">
+          <div className="mt-3 flex justify-between items-center text-xs text-muted-foreground pt-2 border-t">
             <p>{listing.units.properties.name} - Unit {listing.units.unit_name}</p>
             <p>Available {new Date(listing.available_from || '').toLocaleDateString()}</p>
           </div>
@@ -670,7 +759,7 @@ export default function AddProspectPage() {
               placeholder="Enter first name" 
               value={contact.firstName}
               onChange={(e) => setContact({...contact, firstName: e.target.value})}
-              className="h-[42px]"
+              className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
               required
             />
           </div>
@@ -681,7 +770,7 @@ export default function AddProspectPage() {
               placeholder="Enter middle name"
               value={contact.middleName}
               onChange={(e) => setContact({...contact, middleName: e.target.value})}
-              className="h-[42px]"
+              className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
             />
           </div>
           <div className="grid gap-2">
@@ -691,7 +780,7 @@ export default function AddProspectPage() {
               placeholder="Enter last name"
               value={contact.lastName}
               onChange={(e) => setContact({...contact, lastName: e.target.value})}
-              className="h-[42px]"
+              className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
               required
             />
           </div>
@@ -705,7 +794,7 @@ export default function AddProspectPage() {
                 id="email" 
                 type="email"
                 className={cn(
-                  "h-[42px] peer ps-9",
+                  "h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20",
                   { "border-red-500 focus-visible:ring-red-500": emailError.length > 0 }
                 )}
                 placeholder="Enter email address"
@@ -738,7 +827,7 @@ export default function AddProspectPage() {
           <div className="grid gap-2">
             <Label htmlFor="phone">Phone Number</Label>
             <RPNInput.default
-              className="flex rounded-lg shadow-sm shadow-black/5"
+              className="flex rounded-lg shadow-sm shadow-black/5 bg-background hover:bg-background focus-within:border-ring focus-within:outline-[3px] focus-within:outline-ring/20"
               international
               flagComponent={FlagComponent}
               countrySelectComponent={CountrySelect}
@@ -761,41 +850,77 @@ export default function AddProspectPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="ssn">SSN <span className="text-red-500">*</span></Label>
-              <Input 
-                id="ssn"
-                type="password"
-                placeholder="Enter SSN"
-                value={contact.ssn}
-                onChange={(e) => setContact({...contact, ssn: e.target.value})}
-                className="h-[42px]"
-                required
-              />
+              <div className="relative">
+                <Input 
+                  id="ssn"
+                  type={showSSN ? "text" : "password"}
+                  placeholder="Enter SSN"
+                  value={contact.ssn}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '');
+                    if (value.length <= 9) {
+                      setContact({...contact, ssn: value});
+                    }
+                  }}
+                  pattern="[0-9]{9}"
+                  maxLength={9}
+                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20 pr-10"
+                  required
+                  title="SSN must be exactly 9 digits"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSSN(!showSSN)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
+                >
+                  {showSSN ? (
+                    <EyeOffIcon className="h-4 w-4" />
+                  ) : (
+                    <EyeIcon className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="driversLicenseState">Driver License Province</Label>
-              <select 
-                id="driversLicenseState"
-                className="h-[42px] w-full rounded-md border border-input bg-background px-3 text-sm text-muted-foreground"
+              <Select
                 value={contact.driversLicenseState}
-                onChange={(e) => setContact({...contact, driversLicenseState: e.target.value})}
+                onValueChange={(value) => {
+                  setContact({...contact, driversLicenseState: value, driversLicenseNumber: ''});
+                  setLicenseError('');
+                }}
               >
-                <option value="">Select Province</option>
-                {provinces.map((province) => (
-                  <option key={province.value} value={province.value}>
-                    {province.label}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                  <SelectValue placeholder="Select Province" />
+                </SelectTrigger>
+                <SelectContent>
+                  {provinces.map((province) => (
+                    <SelectItem key={province.value} value={province.value}>
+                      {province.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="driversLicenseNumber">Driver&apos;s License Number</Label>
-              <Input 
-                id="driversLicenseNumber"
-                placeholder="Enter license number"
-                value={contact.driversLicenseNumber}
-                onChange={(e) => setContact({...contact, driversLicenseNumber: e.target.value})}
-                className="h-[42px]"
-              />
+              <div className="relative">
+                <Input 
+                  id="driversLicenseNumber"
+                  placeholder={contact.driversLicenseState ? `Format: ${driverLicenseFormats[contact.driversLicenseState as keyof typeof driverLicenseFormats]?.format}` : "Select province first"}
+                  value={contact.driversLicenseNumber}
+                  onChange={(e) => {
+                    const formattedValue = formatLicenseNumber(e.target.value, contact.driversLicenseState);
+                    setContact({...contact, driversLicenseNumber: formattedValue});
+                    validateLicenseNumber(formattedValue, contact.driversLicenseState);
+                  }}
+                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                  disabled={!contact.driversLicenseState}
+                />
+              </div>
+              {licenseError && (
+                <p className="text-sm text-red-500">{licenseError}</p>
+              )}
             </div>
           </div>
         </div>
@@ -803,398 +928,502 @@ export default function AddProspectPage() {
     );
   };
 
+  // Helper function to format license number based on province pattern
+  const formatLicenseNumber = (value: string, province: string) => {
+    if (!province || !driverLicenseFormats[province as keyof typeof driverLicenseFormats]) {
+      return value;
+    }
+
+    const format = driverLicenseFormats[province as keyof typeof driverLicenseFormats];
+    let formattedValue = value.toUpperCase();
+
+    // Remove any characters that don't match the pattern
+    if (province === 'MB') {
+      formattedValue = formattedValue.replace(/[^A-Z0-9*]/g, '');
+    } else if (format.format.includes('A')) {
+      formattedValue = formattedValue.replace(/[^A-Z0-9]/g, '');
+    } else {
+      formattedValue = formattedValue.replace(/[^0-9]/g, '');
+    }
+
+    return formattedValue.slice(0, format.maxLength);
+  };
+
+  const validateLicenseNumber = (license: string, province: string) => {
+    if (!province) {
+      setLicenseError('Please select a province first');
+      return false;
+    }
+
+    if (!license) {
+      setLicenseError('');
+      return true;
+    }
+
+    const format = driverLicenseFormats[province as keyof typeof driverLicenseFormats];
+    if (!format) {
+      setLicenseError('Invalid province selected');
+      return false;
+    }
+
+    const regex = new RegExp(`^${format.pattern}$`);
+    if (!regex.test(license)) {
+      setLicenseError(`License must match format: ${format.format}`);
+      return false;
+    }
+
+    setLicenseError('');
+    return true;
+  };
+
   return (
     <div className="mx-auto p-6">
-      <div className="bg-card rounded-xl p-16 min-h-[calc(100vh-3rem)] flex flex-col shadow-sm border">
-        <div className="space-y-12">
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h1 className="text-3xl font-semibold">Add a prospect</h1>
-              <div className="text-sm text-gray-600">
-                {step === 'intro' ? 'Introduction' : 
-                 step === 'properties' ? 'Select a Property' :
-                 step === 'lead_status' ? 'Lead Status' :
-                 step === 'personal' ? 'Personal Information' : 
-                 step === 'residence' ? 'Residence' :
-                 step === 'pets' ? 'Pets' :
-                 step === 'vehicles' ? 'Vehicles' :
-                 step === 'dependents' ? 'Dependents' :
-                 step === 'employment' ? 'Employment' :
-                 step === 'income' ? 'Income' : 'Summary'}
+      <Card className="bg-card rounded-xl p-6 h-[calc(100vh-3rem)] flex flex-col shadow-sm border relative">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-semibold">Add a Prospect</h1>
+        </div>
+
+        <div className="flex gap-6 flex-1 min-h-0">
+          {/* Left Column - Steps */}
+          <div className="w-72 shrink-0 border-r pr-6 overflow-y-auto">
+            <div className="space-y-2">
+              {(() => {
+                const stepOrder = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment', 'income', 'pets', 'vehicles', 'dependents', 'summary'];
+                return (
+                  <Stepper value={stepOrder.indexOf(step) + 1} orientation="vertical">
+                    {[
+                      { step: 'intro', title: 'Intro' },
+                      { step: 'properties', title: 'Properties' },
+                      { step: 'lead_status', title: 'Lead Status' },
+                      { step: 'personal', title: 'Personal Info' },
+                      { step: 'residence', title: 'Residence' },
+                      { step: 'employment', title: 'Employment' },
+                      { step: 'income', title: 'Income' },
+                      { step: 'pets', title: 'Pets' },
+                      { step: 'vehicles', title: 'Vehicles' },
+                      { step: 'dependents', title: 'Dependents' },
+                      { step: 'summary', title: 'Summary' }
+                    ].map(({ step: stepName, title }, index) => {
+                      const isAccessible = isStepAccessible(stepName);
+                      const isActive = step === stepName;
+                      const thisStepIndex = index;
+                      const isCompleted = completedSteps.has(stepName);
+
+                      return (
+                        <StepperItem
+                          key={stepName}
+                          step={index + 1}
+                          className={cn(
+                            "relative items-start [&:not(:last-child)]:flex-1",
+                            !isAccessible ? "opacity-50" : ""
+                          )}
+                        >
+                          <StepperTrigger 
+                            className="items-start pb-12 last:pb-0 w-full"
+                            onClick={() => {
+                              if (isAccessible) {
+                                setStep(stepName as 'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'income' | 'summary');
+                              }
+                            }}
+                            disabled={!isAccessible}
+                          >
+                            <StepperIndicator className={cn(
+                              isActive ? "border-primary text-primary" : "",
+                              isCompleted ? "border-primary bg-primary text-background" : "",
+                              !isAccessible ? "border-muted-foreground/30 text-muted-foreground/30" : ""
+                            )}>
+                              {isCompleted ? <Lock className="h-3 w-3" /> : !isAccessible ? <Lock className="h-3 w-3" /> : thisStepIndex + 1}
+                            </StepperIndicator>
+                            <div className="mt-0.5 px-2 text-left">
+                              <StepperTitle className={cn(
+                                isActive ? "text-primary" : "",
+                                !isAccessible ? "text-muted-foreground/50" : "",
+                                isCompleted ? "text-primary" : ""
+                              )}>{title}</StepperTitle>
+                            </div>
+                          </StepperTrigger>
+                          {stepName !== 'summary' && (
+                            <StepperSeparator className={cn(
+                              "absolute inset-y-0 left-3 top-[calc(1.5rem+0.125rem)] -order-1 m-0 -translate-x-1/2 group-data-[orientation=vertical]/stepper:h-[calc(100%-1.5rem-0.25rem)]",
+                              isCompleted ? "bg-primary" : ""
+                            )} />
+                          )}
+                        </StepperItem>
+                      );
+                    })}
+                  </Stepper>
+                );
+              })()}
               </div>
             </div>
             
-            {/* Progress bar */}
-            <div className="w-full h-2 bg-gray-100 rounded-full mb-6">
-              <div className={`h-full bg-green-600 rounded-full transition-all duration-300 ${
-                step === 'intro' ? 'w-[10%]' :
-                step === 'properties' ? 'w-[20%]' :
-                step === 'lead_status' ? 'w-[30%]' :
-                step === 'personal' ? 'w-[40%]' : 
-                step === 'residence' ? 'w-[50%]' :
-                step === 'pets' ? 'w-[60%]' :
-                step === 'vehicles' ? 'w-[70%]' :
-                step === 'dependents' ? 'w-[80%]' :
-                step === 'employment' ? 'w-[90%]' : 'w-full'
-              }`}></div>
+          {/* Right Column - Content */}
+          <div className="flex-1 overflow-y-auto pr-6">
+            <AnimatePresence mode="wait">
+              <motion.div 
+                key={step}
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -20, opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="space-y-6 pb-24"
+              >
+                {step === 'intro' ? (
+                  <div className="flex flex-col">
+                    <div className="space-y-4">
+                      <h2 className="text-2xl font-semibold">Getting Started</h2>
+                      <p className="text-gray-600">
+                        Let&apos;s set up a new prospect in your system.
+                      </p>
             </div>
 
-            {step === 'lead_status' ? (
-              <div className="space-y-8 max-w-4xl mx-auto">
-                <div className="space-y-6">
-                  <div className="text-center space-y-2">
-                    <p className="text-xl font-semibold">Lead Status</p>
-                    <p className="text-sm text-gray-600">Set the lead status and assign the prospect</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label>Lead Status</Label>
-                      <Select
-                        value={contact.leadStatus}
-                        onValueChange={(value) => setContact({ ...contact, leadStatus: value })}
-                      >
-                        <SelectTrigger className="h-[42px]">
-                          <SelectValue placeholder="Select Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="new">New</SelectItem>
-                          <SelectItem value="contacted">Contacted</SelectItem>
-                          <SelectItem value="qualified">Qualified</SelectItem>
-                          <SelectItem value="unqualified">Unqualified</SelectItem>
-                          <SelectItem value="converted">Converted</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Lead Source</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            className="w-full h-[42px] justify-between bg-background px-3 font-normal outline-offset-0 hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                          >
-                            <span className={cn("truncate", !contact.leadSource && "text-muted-foreground")}>
-                              {contact.leadSource || "Select Source"}
-                            </span>
-                            <ChevronDown
-                              size={16}
-                              strokeWidth={2}
-                              className="shrink-0 text-muted-foreground/80"
-                              aria-hidden="true"
-                            />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          className="w-full min-w-[var(--radix-popper-anchor-width)] border-input p-0"
-                          align="start"
-                        >
-                          <Command>
-                            <CommandInput placeholder="Search source..." />
-                            <CommandList>
-                              <CommandEmpty>No source found.</CommandEmpty>
-                              <CommandGroup>
-                                {companySettings.leadsource?.map((source) => (
-                                  <CommandItem
-                                    key={source}
-                                    value={source}
-                                    onSelect={(currentValue) => {
-                                      setContact({ ...contact, leadSource: currentValue === contact.leadSource ? "" : currentValue });
-                                    }}
-                                  >
-                                    {source}
-                                    {contact.leadSource === source && (
-                                      <Check size={16} strokeWidth={2} className="ml-auto" />
-                                    )}
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                              <CommandSeparator />
-                              <CommandGroup>
-                                <Button 
-                                  variant="ghost" 
-                                  className="w-full justify-start font-normal"
-                                  onClick={() => setShowNewSourceDialog(true)}
-                                >
-                                  <Plus
-                                    size={16}
-                                    strokeWidth={2}
-                                    className="-ms-2 me-2 opacity-60"
-                                    aria-hidden="true"
-                                  />
-                                  Add new source
-                                </Button>
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Lead Medium</Label>
-                      <Select
-                        value={contact.leadMedium}
-                        onValueChange={(value) => setContact({ ...contact, leadMedium: value })}
-                      >
-                        <SelectTrigger className="h-[42px]">
-                          <SelectValue placeholder="Select Medium" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="email">Email</SelectItem>
-                          <SelectItem value="phone">Phone</SelectItem>
-                          <SelectItem value="walk_in">Walk-in</SelectItem>
-                          <SelectItem value="online_form">Online Form</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Assignee</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            className="w-full h-[42px] justify-between bg-background px-3 font-normal outline-offset-0 hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                          >
-                            <span className={cn("truncate", !contact.assigneeId && "text-muted-foreground")}>
-                              {contact.assigneeId
-                                ? companyMembers.find((member) => member.id === contact.assigneeId)
-                                  ? `${companyMembers.find((member) => member.id === contact.assigneeId)?.first_name} ${companyMembers.find((member) => member.id === contact.assigneeId)?.last_name}`
-                                  : "Select assignee"
-                                : "Select assignee"}
-                            </span>
-                            <ChevronDown
-                              size={16}
-                              strokeWidth={2}
-                              className="shrink-0 text-muted-foreground/80"
-                              aria-hidden="true"
-                            />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          className="w-full min-w-[var(--radix-popper-anchor-width)] border-input p-0"
-                          align="start"
-                        >
-                          <Command>
-                            <CommandInput placeholder="Search assignee..." />
-                            <CommandList>
-                              <CommandEmpty>No assignee found.</CommandEmpty>
-                              <CommandGroup>
-                                {companyMembers.map((member) => (
-                                  <CommandItem
-                                    key={member.id}
-                                    value={`${member.first_name} ${member.last_name}`}
-                                    onSelect={() => {
-                                      const newAssigneeId = contact.assigneeId === member.id ? "" : member.id;
-                                      setContact({ ...contact, assigneeId: newAssigneeId });
-                                    }}
-                                  >
-                                    {member.first_name} {member.last_name}
-                                    {contact.assigneeId === member.id && (
-                                      <Check size={16} strokeWidth={2} className="ml-auto" />
-                                    )}
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : step === 'intro' ? (
-              <div className="flex flex-col items-center justify-center max-w-3xl mx-auto text-center space-y-8 py-12">
-                <div className="space-y-4">
-                  <h2 className="text-3xl font-bold">Add a Prospect</h2>
-                  <p className="text-lg text-gray-600">
-                    Enter the prospect&apos;s basic information. They will be able to complete the remaining sections through their profile.
-                  </p>
-                </div>
-
-                <div className="bg-[hsl(var(--success-light))] text-[hsl(var(--success-light-foreground))] border-[hsl(var(--success-light-border))] p-6 rounded-lg border text-left">
-                  <h3 className="text-lg font-semibold mb-3">Required Information</h3>
-                  <p className="mb-4">
-                    Only three fields are mandatory to create a prospect:
-                  </p>
-                  <ul className="list-disc list-inside space-y-2">
-                    <li>First Name</li>
-                    <li>Last Name</li>
-                    <li>Email Address</li>
-                  </ul>
-                  <p className="mt-4">
-                    Once created, the prospect will receive an email to complete their profile with additional information.
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Optional Sections for Prospects</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="font-medium">Pets</p>
-                    </div>
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="font-medium">Vehicles</p>
-                    </div>
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="font-medium">Dependents</p>
-                    </div>
-                  </div>
-                  <p className="text-gray-600">
-                    The prospect can provide details about their pets, vehicles, and dependents when they complete their profile.
-                  </p>
-                </div>
-              </div>
-            ) : step === 'properties' ? (
-              <div className="flex flex-col items-center justify-center max-w-7xl mx-auto text-center space-y-8 py-12">
-                <div className="space-y-4 w-full">
-                  <h2 className="text-3xl font-bold">Select Properties</h2>
-                  <p className="text-lg text-gray-600">
-                    Choose one or more properties that the prospect is interested in, or skip this step.
-                  </p>
-                </div>
-
-                <div className="w-full space-y-4">
-                  {isLoadingListings ? (
-                    <>
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="relative w-64">
-                          <div className="h-[42px] w-full bg-gray-100 rounded-lg animate-pulse" />
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="h-4 bg-gray-100 rounded w-32 animate-pulse" />
-                          <div className="h-4 bg-gray-100 rounded w-16 animate-pulse" />
+                    <div className="flex-1 flex items-center justify-center">
+                      <div className="max-w-2xl w-full mx-auto">
+                        <div className="bg-[hsl(var(--success-light))] text-[hsl(var(--success-light-foreground))] border-[hsl(var(--success-light-border))] p-6 rounded-lg border">
+                          <h3 className="text-lg font-semibold mb-3">Required Information</h3>
+                          <p className="mb-4">
+                            Only three fields are mandatory to create a prospect:
+                          </p>
+                          <ul className="list-disc list-inside space-y-2">
+                            <li>First Name</li>
+                            <li>Last Name</li>
+                            <li>Email Address</li>
+                          </ul>
+                          <p className="mt-4">
+                            Once created, the prospect will receive an email to complete their profile with additional information.
+                          </p>
                         </div>
                       </div>
-                      <div className="h-px bg-gray-100 my-4" />
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {[1, 2, 3, 4].map((index) => (
-                          <div key={index} className="rounded-lg border overflow-hidden flex flex-col">
-                            <div className="relative w-full h-36 bg-gray-100 animate-pulse" />
-                            <div className="p-4 space-y-3">
-                              <div className="flex items-start gap-2 justify-between">
-                                <div className="h-6 bg-gray-100 rounded w-3/4 animate-pulse" />
-                                <div className="w-5 h-5 rounded-full bg-gray-100 animate-pulse" />
+                    </div>
+                  </div>
+                ) : step === 'properties' ? (
+                  <div className="flex flex-col">
+                    <div className="space-y-4">
+                      <h2 className="text-2xl font-semibold">Select Properties</h2>
+                      <p className="text-gray-600">
+                        Choose one or more properties that the prospect is interested in, or skip this step.
+                      </p>
+                  </div>
+
+                    <div className="flex-1 overflow-y-auto">
+                      <div className="w-full space-y-4 mt-6">
+                        {isLoadingListings ? (
+                          <>
+                            <div className="flex justify-between items-center mb-4">
+                              <div className="relative w-64">
+                                <div className="h-[42px] w-full bg-muted rounded-lg animate-pulse" />
                               </div>
-                              <div className="space-y-2">
-                                <div className="h-4 bg-gray-100 rounded w-2/3 animate-pulse" />
-                                <div className="h-4 bg-gray-100 rounded w-1/2 animate-pulse" />
-                              </div>
-                              <div className="pt-2 border-t flex justify-between">
-                                <div className="h-4 bg-gray-100 rounded w-1/3 animate-pulse" />
-                                <div className="h-4 bg-gray-100 rounded w-1/4 animate-pulse" />
+                              <div className="flex items-center gap-4">
+                                <div className="h-4 bg-muted rounded w-32 animate-pulse" />
+                                <div className="h-4 bg-muted rounded w-16 animate-pulse" />
                               </div>
                             </div>
+                            <div className="h-px bg-border my-4" />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {[1, 2, 3, 4].map((index) => (
+                                <div key={index} className="rounded-lg border border-border overflow-hidden flex flex-col">
+                                  <div className="relative w-full h-36 bg-muted animate-pulse" />
+                                  <div className="p-4 space-y-3">
+                                    <div className="flex items-start gap-2 justify-between">
+                                      <div className="h-6 bg-muted rounded w-3/4 animate-pulse" />
+                                      <div className="w-5 h-5 rounded-full bg-muted animate-pulse" />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <div className="h-4 bg-muted rounded w-2/3 animate-pulse" />
+                                      <div className="h-4 bg-muted rounded w-1/2 animate-pulse" />
+                                    </div>
+                                    <div className="pt-2 border-t border-border flex justify-between">
+                                      <div className="h-4 bg-muted rounded w-1/3 animate-pulse" />
+                                      <div className="h-4 bg-muted rounded w-1/4 animate-pulse" />
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        ) : listingsError ? (
+                          <div className="text-center p-8 border border-red-200 rounded-lg bg-red-50">
+                            <p className="text-red-600">{listingsError}</p>
+                            <button
+                              onClick={() => {
+                                setIsLoadingListings(true);
+                                setListingsError(null);
+                                fetch('/api/unit-listings/published')
+                                  .then(async response => {
+                                    const data = await response.json();
+                                    console.log('API Response:', {
+                                      status: response.status,
+                                      statusText: response.statusText,
+                                      data: data
+                                    });
+                                    
+                                    if (!response.ok) {
+                                      throw new Error(
+                                        data.error || 
+                                        `HTTP error! status: ${response.status}, message: ${data.details || 'Unknown error'}`
+                                      );
+                                    }
+                                    return data;
+                                  })
+                                  .then(data => {
+                                    console.log('Listings data:', JSON.stringify(data, null, 2));
+                                    console.log('First listing unit images:', data[0]?.units?.unit_images);
+                                    if (data[0]?.units?.unit_images) {
+                                      console.log('First image URL:', data[0].units.unit_images[0]?.image_url);
+                                    }
+                                    setListings(data);
+                                    setListingsError(null);
+                                  })
+                                  .catch(error => {
+                                    console.error('Detailed error:', {
+                                      message: error.message,
+                                      stack: error.stack,
+                                      name: error.name
+                                    });
+                                    setListingsError(error.message);
+                                  })
+                                  .finally(() => {
+                                    setIsLoadingListings(false);
+                                  });
+                              }}
+                              className="mt-4 text-sm text-red-600 hover:text-red-800 underline"
+                            >
+                              Try again
+                            </button>
                           </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : listingsError ? (
-                    <div className="text-center p-8 border border-red-200 rounded-lg bg-red-50">
-                      <p className="text-red-600">{listingsError}</p>
-                      <button
-                        onClick={() => {
-                          setIsLoadingListings(true);
-                          setListingsError(null);
-                          fetch('/api/unit-listings/published')
-                            .then(async response => {
-                              const data = await response.json();
-                              console.log('API Response:', {
-                                status: response.status,
-                                statusText: response.statusText,
-                                data: data
-                              });
-                              
-                              if (!response.ok) {
-                                throw new Error(
-                                  data.error || 
-                                  `HTTP error! status: ${response.status}, message: ${data.details || 'Unknown error'}`
-                                );
-                              }
-                              return data;
-                            })
-                            .then(data => {
-                              console.log('Listings data:', JSON.stringify(data, null, 2));
-                              console.log('First listing unit images:', data[0]?.units?.unit_images);
-                              if (data[0]?.units?.unit_images) {
-                                console.log('First image URL:', data[0].units.unit_images[0]?.image_url);
-                              }
-                              setListings(data);
-                              setListingsError(null);
-                            })
-                            .catch(error => {
-                              console.error('Detailed error:', {
-                                message: error.message,
-                                stack: error.stack,
-                                name: error.name
-                              });
-                              setListingsError(error.message);
-                            })
-                            .finally(() => {
-                              setIsLoadingListings(false);
-                            });
-                        }}
-                        className="mt-4 text-sm text-red-600 hover:text-red-800 underline"
-                      >
-                        Try again
-                      </button>
-                    </div>
-                  ) : listings.length === 0 ? (
-                    <div className="text-center p-8 border border-dashed rounded-lg">
-                      <p className="text-gray-500">No properties available at this time.</p>
-                      <p className="text-sm text-gray-400 mt-2">You can proceed without selecting a property.</p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="relative w-64">
-                          <Input
-                            type="search"
-                            placeholder="Search properties..."
-                            className="peer pe-9 ps-9 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                          />
-                          <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
-                            <Search size={16} strokeWidth={2} aria-hidden="true" />
+                        ) : listings.length === 0 ? (
+                          <div className="text-center p-8 border border-dashed rounded-lg">
+                            <p className="text-gray-500">No properties available at this time.</p>
+                            <p className="text-sm text-gray-400 mt-2">You can proceed without selecting a property.</p>
                           </div>
-                          <button
-                            onClick={() => setSearchQuery('')}
-                            className={`absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center rounded-e-lg text-muted-foreground/80 outline-offset-2 transition-colors hover:text-foreground focus:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70 ${!searchQuery && 'hidden'}`}
-                            aria-label="Clear search"
-                            type="button"
-                          >
-                            <X size={16} strokeWidth={2} aria-hidden="true" />
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <p className="text-sm text-gray-500">
-                            {!selectedUnitId
-                              ? "You haven't selected any property yet" 
-                              : "Selected 1 property"}
-                          </p>
-                          <button
-                            className="text-sm text-gray-600 hover:text-gray-800 underline"
-                            onClick={() => setSelectedUnitId('')}
-                          >
-                            Clear selection
-                          </button>
+                        ) : (
+                          <>
+                            <div className="flex justify-between items-center mb-4 px-1">
+                              <div className="relative w-72">
+                                <Input
+                                  type="search"
+                                  placeholder="Search properties..."
+                                  className="peer ps-9 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
+                                  value={searchQuery}
+                                  onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+                                  <Search size={16} strokeWidth={2} aria-hidden="true" />
+                                </div>
+                                <button
+                                  onClick={() => setSearchQuery('')}
+                                  className={`absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center text-muted-foreground/80 outline-offset-2 transition-colors hover:text-foreground focus:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70 ${!searchQuery && 'hidden'}`}
+                                  aria-label="Clear search"
+                                  type="button"
+                                >
+                                  <X size={16} strokeWidth={2} aria-hidden="true" />
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <p className="text-sm text-gray-500">
+                                  {!selectedUnitId
+                                    ? "You haven't selected any property yet" 
+                                    : "Selected 1 property"}
+                                </p>
+                                <button
+                                  className="text-sm text-gray-600 hover:text-gray-800 underline"
+                                  onClick={() => setSelectedUnitId('')}
+                                >
+                                  Clear selection
+                                </button>
+                              </div>
+                            </div>
+                            <Separator className="my-4" />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {listings.map((listing: UnitListing) => renderListing(listing))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : step === 'lead_status' ? (
+                  <div className="flex flex-col">
+                    <div className="space-y-4">
+                      <h2 className="text-2xl font-semibold">Lead Status</h2>
+                      <p className="text-gray-600">
+                        Set the lead status and assign the prospect to a team member.
+                      </p>
+                    </div>
+
+                    <div className="max-w-xl mx-auto w-full mt-8">
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 gap-6">
+                          <div className="space-y-2">
+                            <Label>Lead Status</Label>
+                            <Select
+                              value={contact.leadStatus}
+                              onValueChange={(value) => setContact({ ...contact, leadStatus: value })}
+                            >
+                              <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                <SelectValue placeholder="Select Status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="new">New</SelectItem>
+                                <SelectItem value="contacted">Contacted</SelectItem>
+                                <SelectItem value="qualified">Qualified</SelectItem>
+                                <SelectItem value="unqualified">Unqualified</SelectItem>
+                                <SelectItem value="converted">Converted</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Lead Source</Label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className="w-full h-[42px] justify-between bg-background px-3 font-normal outline-offset-0 hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                >
+                                  <span className={cn("truncate", !contact.leadSource && "text-muted-foreground")}>
+                                    {contact.leadSource || "Select Source"}
+                                  </span>
+                                  <ChevronDown
+                                    size={16}
+                                    strokeWidth={2}
+                                    className="shrink-0 text-muted-foreground/80"
+                                    aria-hidden="true"
+                                  />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                className="w-full min-w-[var(--radix-popper-anchor-width)] border-input p-0"
+                                align="start"
+                              >
+                                <Command>
+                                  <CommandInput placeholder="Search source..." />
+                                  <CommandList>
+                                    <CommandEmpty>No source found.</CommandEmpty>
+                                    <CommandGroup>
+                                      {companySettings.leadsource?.map((source) => (
+                                        <CommandItem
+                                          key={source}
+                                          value={source}
+                                          onSelect={(currentValue) => {
+                                            setContact({ ...contact, leadSource: currentValue === contact.leadSource ? "" : currentValue });
+                                          }}
+                                        >
+                                          {source}
+                                          {contact.leadSource === source && (
+                                            <Check size={16} strokeWidth={2} className="ml-auto" />
+                                          )}
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                    <CommandSeparator />
+                                    <CommandGroup>
+                                      <Button 
+                                        variant="ghost" 
+                                        className="w-full justify-start font-normal"
+                                        onClick={() => setShowNewSourceDialog(true)}
+                                      >
+                                        <Plus
+                                          size={16}
+                                          strokeWidth={2}
+                                          className="-ms-2 me-2 opacity-60"
+                                          aria-hidden="true"
+                                        />
+                                        Add new source
+                                      </Button>
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Lead Medium</Label>
+                            <Select
+                              value={contact.leadMedium}
+                              onValueChange={(value) => setContact({ ...contact, leadMedium: value })}
+                            >
+                              <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                <SelectValue placeholder="Select Medium" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="email">Email</SelectItem>
+                                <SelectItem value="phone">Phone</SelectItem>
+                                <SelectItem value="walk_in">Walk-in</SelectItem>
+                                <SelectItem value="online_form">Online Form</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Assignee</Label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className="w-full h-[42px] justify-between bg-background px-3 font-normal outline-offset-0 hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                >
+                                  <span className={cn("truncate", !contact.assigneeId && "text-muted-foreground")}>
+                                    {contact.assigneeId
+                                      ? companyMembers.find((member) => member.id === contact.assigneeId)
+                                        ? `${companyMembers.find((member) => member.id === contact.assigneeId)?.first_name} ${companyMembers.find((member) => member.id === contact.assigneeId)?.last_name}`
+                                        : "Select assignee"
+                                      : "Select assignee"}
+                                  </span>
+                                  <ChevronDown
+                                    size={16}
+                                    strokeWidth={2}
+                                    className="shrink-0 text-muted-foreground/80"
+                                    aria-hidden="true"
+                                  />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                className="w-full min-w-[var(--radix-popper-anchor-width)] border-input p-0"
+                                align="start"
+                              >
+                                <Command>
+                                  <CommandInput placeholder="Search assignee..." />
+                                  <CommandList>
+                                    <CommandEmpty>No assignee found.</CommandEmpty>
+                                    <CommandGroup>
+                                      {companyMembers.map((member) => (
+                                        <CommandItem
+                                          key={member.id}
+                                          value={`${member.first_name} ${member.last_name}`}
+                                          onSelect={() => {
+                                            const newAssigneeId = contact.assigneeId === member.id ? "" : member.id;
+                                            setContact({ ...contact, assigneeId: newAssigneeId });
+                                          }}
+                                        >
+                                          {member.first_name} {member.last_name}
+                                          {contact.assigneeId === member.id && (
+                                            <Check size={16} strokeWidth={2} className="ml-auto" />
+                                          )}
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
                         </div>
                       </div>
-                      <Separator className="my-4" />
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {listings.map((listing: UnitListing) => renderListing(listing))}
-                      </div>
-                    </>
-                  )}
+                    </div>
+                  </div>
+                ) : step === 'personal' ? (
+                  <div className="flex flex-col">
+                <div className="space-y-4">
+                      <h2 className="text-2xl font-semibold">Personal Information</h2>
+                  <p className="text-gray-600">
+                        Enter the prospect&apos;s basic contact and personal information.
+                  </p>
                 </div>
-              </div>
-            ) : step === 'personal' ? (
-              <div className="flex flex-col h-full">
-                <div className="flex-grow space-y-6">
+
+                    <div className="max-w-4xl mx-auto w-full mt-6">
+                      <div className="space-y-6">
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Contact Information</h3>
                     <div className="grid gap-4">
@@ -1209,61 +1438,60 @@ export default function AddProspectPage() {
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="grid gap-2">
+                          <Label htmlFor="expected_move_in_date">Expected Move-in Date <span className="text-red-500">*</span></Label>
+                          <CalendarInput
+                            value={contact.expected_move_in_date}
+                            onChange={(date) => setContact({...contact, expected_move_in_date: date})}
+                            placeholder="Select move-in date"
+                            minDate={new Date()}
+                          />
+                        </div>
+                        <div className="grid gap-2">
                           <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                          <DateField 
-                            value={contact.dateOfBirth ? new CalendarDate(
-                              contact.dateOfBirth.getFullYear(),
-                              contact.dateOfBirth.getMonth() + 1,
-                              contact.dateOfBirth.getDate()
-                            ) : null}
-                            onChange={(date) => setContact({...contact, dateOfBirth: date ? 
-                              new Date(date.year, date.month - 1, date.day) : undefined})}
-                            className="space-y-2"
-                          >
-                            <DateInput className="relative inline-flex h-[42px] w-full items-center overflow-hidden whitespace-nowrap rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm shadow-black/5 transition-shadow data-[focus-within]:border-ring data-[disabled]:opacity-50 data-[focus-within]:outline-none data-[focus-within]:ring-[3px] data-[focus-within]:ring-ring/20">
-                              {(segment) => (
-                                <DateSegment
-                                  segment={segment}
-                                  className="inline rounded p-0.5 text-foreground caret-transparent outline outline-0 data-[disabled]:cursor-not-allowed data-[focused]:bg-accent data-[invalid]:data-[focused]:bg-destructive data-[type=literal]:px-0 data-[focused]:data-[placeholder]:text-foreground data-[focused]:text-foreground data-[invalid]:data-[focused]:data-[placeholder]:text-destructive-foreground data-[invalid]:data-[focused]:text-destructive-foreground data-[invalid]:data-[placeholder]:text-destructive data-[invalid]:text-destructive data-[placeholder]:text-muted-foreground/70 data-[type=literal]:text-muted-foreground/70 data-[disabled]:opacity-50"
-                                />
-                              )}
-                            </DateInput>
-                          </DateField>
+                          <CalendarInput
+                            value={contact.dateOfBirth}
+                            onChange={(date) => setContact({...contact, dateOfBirth: date})}
+                            placeholder="Select date of birth"
+                          />
                         </div>
                         <div className="grid gap-2">
                           <Label htmlFor="gender">Gender</Label>
-                          <select 
-                            id="gender"
-                            className="h-[42px] w-full rounded-md border border-input bg-background px-3 text-sm text-muted-foreground"
+                          <Select
                             value={contact.gender}
-                            onChange={(e) => setContact({...contact, gender: e.target.value})}
+                            onValueChange={(value) => setContact({...contact, gender: value})}
                           >
-                            <option value="">Select Gender</option>
-                            <option value="male">Male</option>
-                            <option value="female">Female</option>
-                            <option value="other">Other</option>
-                            <option value="prefer-not-to-say">Prefer not to say</option>
-                          </select>
+                            <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                              <SelectValue placeholder="Select Gender" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="male">Male</SelectItem>
+                              <SelectItem value="female">Female</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                              <SelectItem value="prefer-not-to-say">Prefer not to say</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="grid gap-2">
                           <Label htmlFor="maritalStatus">Marital Status</Label>
-                          <select 
-                            id="maritalStatus"
-                            className="h-[42px] w-full rounded-md border border-input bg-background px-3 text-sm text-muted-foreground"
+                          <Select
                             value={contact.maritalStatus}
-                            onChange={(e) => setContact({...contact, maritalStatus: e.target.value})}
+                            onValueChange={(value) => setContact({...contact, maritalStatus: value})}
                           >
-                            <option value="">Select Status</option>
-                            <option value="single">Single</option>
-                            <option value="married">Married</option>
-                            <option value="divorced">Divorced</option>
-                            <option value="widowed">Widowed</option>
-                          </select>
+                            <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                              <SelectValue placeholder="Select Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="single">Single</SelectItem>
+                              <SelectItem value="married">Married</SelectItem>
+                              <SelectItem value="divorced">Divorced</SelectItem>
+                              <SelectItem value="widowed">Widowed</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                       
                       <div className="grid gap-2">
-                        <Label htmlFor="aboutYou">Tell us why you&apos;re awesome!</Label>
+                        <Label htmlFor="aboutYou">Tell us why you&apos;re Great!</Label>
                         <textarea
                           id="aboutYou"
                           className="flex min-h-[150px] w-full rounded-md border border-input bg-background px-3 py-2"
@@ -1279,1363 +1507,431 @@ export default function AddProspectPage() {
                     </div>
                   </div>
                 </div>
-
-                
+                    </div>
               </div>
             ) : step === 'residence' ? (
-              <div className="space-y-8 max-w-4xl mx-auto">
-                <div className="space-y-6">
-                  <div className="text-center space-y-2">
-                    <p className="text-xl font-semibold">Residence</p>
-                    <p className="text-sm text-gray-600">What is the prospect&apos;s current residence?</p>
-                  </div>
+                  <div className="flex flex-col">
+                    <div className="space-y-4">
+                      <h2 className="text-2xl font-semibold">Current Residence</h2>
+                      <p className="text-gray-600">
+                        Do you have any rental history?
+                      </p>
+                    </div>
 
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="noPastResidence"
-                      className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-600"
-                      checked={residence.noPastResidence}
-                      onChange={(e) => {
-                        setResidence({ 
-                          ...residence, 
-                          noPastResidence: e.target.checked,
-                          // Clear all fields if no past residence
-                          ...(e.target.checked ? {
-                            address: {
-                              street: '',
-                              city: '',
-                              province: '',
-                              postalCode: ''
-                            },
-                            moveInDate: '',
-                            monthlyRent: '',
-                            reasonForLeaving: '',
-                            landlordName: '',
-                            landlordPhone: '',
-                            landlordEmail: ''
-                          } : {})
-                        });
-                        // Clear validation errors if no past residence
-                        if (e.target.checked) {
-                          setLandlordEmailError('');
-                        }
-                      }}
-                    />
-                    <Label 
-                      htmlFor="noPastResidence"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    >
-                      No past residence
-                    </Label>
-                  </div>
+                    <div className="max-w-4xl mx-auto w-full mt-6">
+                      <div className="space-y-6">
+                        <RadioGroup 
+                          className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl mx-auto"
+                          value={residence.noPastResidence === true ? "no" : (residence.noPastResidence === false ? "yes" : undefined)}
+                          onValueChange={(value: 'yes' | 'no') => {
+                            setResidence({
+                              ...residence,
+                              noPastResidence: value === 'no',
+                              address: value === 'no' ? {
+                                street: '',
+                                city: '',
+                                province: '',
+                                postalCode: ''
+                              } : residence.address,
+                              moveInDate: value === 'no' ? '' : residence.moveInDate,
+                              monthlyRent: value === 'no' ? '' : residence.monthlyRent,
+                              reasonForLeaving: value === 'no' ? '' : residence.reasonForLeaving,
+                              landlordName: value === 'no' ? '' : residence.landlordName,
+                              landlordPhone: value === 'no' ? '' : residence.landlordPhone,
+                              landlordEmail: value === 'no' ? '' : residence.landlordEmail
+                            });
+                          }}
+                        >
+                          <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                            <RadioGroupItem 
+                              value="yes" 
+                              id="residence-yes" 
+                              className="sr-only after:absolute after:inset-0" 
+                            />
+                            <Home className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium leading-none">Yes, I have rental history</p>
+                              <p className="text-xs text-muted-foreground">Select this if you have rented before</p>
+                            </div>
+                          </label>
 
-                  {!residence.noPastResidence && (
-                    <div className="grid grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <Label htmlFor="street">
-                          Address <span className="text-destructive">*</span>
-                        </Label>
+                          <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                            <RadioGroupItem 
+                              value="no" 
+                              id="residence-no" 
+                              className="sr-only after:absolute after:inset-0" 
+                            />
+                            <Ban className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium leading-none">No, this is my first residence</p>
+                              <p className="text-xs text-muted-foreground">Select this if you have never rented before</p>
+                            </div>
+                          </label>
+                        </RadioGroup>
+
+                        {residence.noPastResidence === false && (
+                          <>
+                            <div>
+                              <h3 className="text-lg font-semibold mb-4">Address Information</h3>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid gap-2">
+                                  <Label htmlFor="street">Street Address</Label>
                         <Input 
                           id="street"
-                          type="text"
+                                    placeholder="Enter street address"
                           value={residence.address.street}
-                          onChange={(e) => setResidence({ ...residence, address: { ...residence.address, street: e.target.value }})}
-                          placeholder="Street"
-                          className="h-[42px]"
-                          required
+                                    onChange={(e) => setResidence({
+                                      ...residence, 
+                                      address: {...residence.address, street: e.target.value}
+                                    })}
+                          className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="city">
-                          City <span className="text-destructive">*</span>
-                        </Label>
+                                <div className="grid gap-2">
+                                  <Label htmlFor="city">City</Label>
                         <Input 
                           id="city"
-                          type="text"
+                                    placeholder="Enter city"
                           value={residence.address.city}
-                          onChange={(e) => setResidence({ ...residence, address: { ...residence.address, city: e.target.value }})}
-                          placeholder="City"
-                          className="h-[42px]"
-                          required
+                                    onChange={(e) => setResidence({
+                                      ...residence, 
+                                      address: {...residence.address, city: e.target.value}
+                                    })}
+                          className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="province">
-                          Province <span className="text-destructive">*</span>
-                        </Label>
-                        <Input 
-                          id="province"
-                          type="text"
-                          value={residence.address.province}
-                          onChange={(e) => setResidence({ ...residence, address: { ...residence.address, province: e.target.value }})}
-                          placeholder="Province"
-                          className="h-[42px]"
-                          required
-                        />
+                                <div className="grid gap-2">
+                                  <Label htmlFor="province">Province</Label>
+                                  <Select
+                                    value={residence.address.province}
+                                    onValueChange={(value) => setResidence({
+                                      ...residence,
+                                      address: {...residence.address, province: value}
+                                    })}
+                                  >
+                                    <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                      <SelectValue placeholder="Select Province" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {provinces.map((province) => (
+                                        <SelectItem key={province.value} value={province.value}>
+                                          {province.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="postalCode">
-                          Postal Code <span className="text-destructive">*</span>
-                        </Label>
+                                <div className="grid gap-2">
+                                  <Label htmlFor="postalCode">Postal Code</Label>
                         <Input 
                           id="postalCode"
-                          type="text"
+                                    placeholder="Enter postal code"
                           value={residence.address.postalCode}
-                          onChange={(e) => setResidence({ ...residence, address: { ...residence.address, postalCode: e.target.value }})}
-                          placeholder="Postal Code"
-                          className="h-[42px]"
-                          required
+                                    onChange={(e) => setResidence({
+                                      ...residence, 
+                                      address: {...residence.address, postalCode: e.target.value}
+                                    })}
+                          className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="moveInDate">
-                          Move-in Date <span className="text-destructive">*</span>
-                        </Label>
-                        <DateField 
-                          value={residence.moveInDate ? new CalendarDate(
-                            new Date(residence.moveInDate).getFullYear(),
-                            new Date(residence.moveInDate).getMonth() + 1,
-                            new Date(residence.moveInDate).getDate()
-                          ) : null}
-                          onChange={(date) => setResidence({ ...residence, moveInDate: date ? 
-                            new Date(date.year, date.month - 1, date.day).toISOString() : "" })}
-                          className="space-y-2"
-                        >
-                          <DateInput className="relative inline-flex h-[42px] w-full items-center overflow-hidden whitespace-nowrap rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm shadow-black/5 transition-shadow data-[focus-within]:border-ring data-[disabled]:opacity-50 data-[focus-within]:outline-none data-[focus-within]:ring-[3px] data-[focus-within]:ring-ring/20">
-                            {(segment) => (
-                              <DateSegment
-                                segment={segment}
-                                className="inline rounded p-0.5 text-foreground caret-transparent outline outline-0 data-[disabled]:cursor-not-allowed data-[focused]:bg-accent data-[invalid]:data-[focused]:bg-destructive data-[type=literal]:px-0 data-[focused]:data-[placeholder]:text-foreground data-[focused]:text-foreground data-[invalid]:data-[focused]:data-[placeholder]:text-destructive-foreground data-[invalid]:data-[focused]:text-destructive-foreground data-[invalid]:data-[placeholder]:text-destructive data-[invalid]:text-destructive data-[placeholder]:text-muted-foreground/70 data-[type=literal]:text-muted-foreground/70 data-[disabled]:opacity-50"
-                              />
-                            )}
-                          </DateInput>
-                        </DateField>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="monthlyRent">
-                          Monthly Rent/ Mortgage <span className="text-destructive">*</span>
-                        </Label>
-                        <div className="relative">
-                          <Input 
-                            id="monthlyRent"
-                            type="number"
-                            value={residence.monthlyRent}
-                            onChange={(e) => setResidence({ ...residence, monthlyRent: e.target.value })}
-                            placeholder="0.00"
-                            className="h-[42px] peer ps-6"
-                            min="0"
-                            required
-                          />
-                          <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground peer-disabled:opacity-50">
-                            $
-                          </span>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="reasonForLeaving">
-                          Reason for Leaving <span className="text-destructive">*</span>
-                        </Label>
+                              </div>
+                            </div>
+
+                            <Separator />
+
+                            <div>
+                              <h3 className="text-lg font-semibold mb-4">Residence Details</h3>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid gap-2">
+                                  <Label htmlFor="moveInDate">Move-in Date</Label>
+                                  <CalendarInput
+                                    value={residence.moveInDate ? new Date(residence.moveInDate) : undefined}
+                                    onChange={(date) => setResidence({...residence, moveInDate: date ? date.toISOString().split('T')[0] : ''})}
+                                    className="w-full"
+                                    placeholder="Select move-in date"
+                                  />
+                                </div>
+                                <div className="grid gap-2">
+                                  <Label htmlFor="monthlyRent">Monthly Rent</Label>
+                                  <div className="relative">
+                                    <Input 
+                                      type="number"
+                                      placeholder="Enter amount"
+                                      value={residence.monthlyRent}
+                                      onChange={(e) => setResidence({...residence, monthlyRent: e.target.value})}
+                                      className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                    />
+                                    <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+                                      <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="grid gap-2 md:col-span-2">
+                                  <Label htmlFor="reasonForLeaving">Reason for Leaving</Label>
                         <Input 
                           id="reasonForLeaving"
-                          type="text"
+                                    placeholder="Enter reason"
                           value={residence.reasonForLeaving}
-                          onChange={(e) => setResidence({ ...residence, reasonForLeaving: e.target.value })}
-                          placeholder="Reason for leaving"
-                          className="h-[42px]"
-                          required
+                                    onChange={(e) => setResidence({...residence, reasonForLeaving: e.target.value})}
+                          className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="landlordName">
-                          Landlord Name <span className="text-destructive">*</span>
-                        </Label>
+                              </div>
+                            </div>
+
+                            <Separator />
+
+                            <div>
+                              <h3 className="text-lg font-semibold mb-4">Landlord Information</h3>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid gap-2">
+                                  <Label htmlFor="landlordName">Landlord Name</Label>
                         <Input 
                           id="landlordName"
-                          type="text"
+                                    placeholder="Enter landlord name"
                           value={residence.landlordName}
-                          onChange={(e) => setResidence({ ...residence, landlordName: e.target.value })}
-                          placeholder="Landlord name"
-                          className="h-[42px]"
-                          required
+                                    onChange={(e) => setResidence({...residence, landlordName: e.target.value})}
+                          className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="landlordPhone">
-                          Landlord Phone <span className="text-destructive">*</span>
-                        </Label>
-                        <RPNInput.default
-                          className="flex rounded-lg shadow-sm shadow-black/5"
-                          international
-                          flagComponent={FlagComponent}
-                          countrySelectComponent={CountrySelect}
-                          inputComponent={PhoneInput}
-                          id="landlordPhone"
-                          placeholder="Enter landlord phone number"
-                          value={residence.landlordPhone}
-                          onChange={(newValue) => setResidence({ ...residence, landlordPhone: newValue ?? "" })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="landlordEmail">
-                          Landlord Email <span className="text-destructive">*</span>
-                        </Label>
-                        <div className="relative">
+                                <div className="grid gap-2">
+                                  <Label htmlFor="landlordPhone">Landlord Phone</Label>
+                                  <RPNInput.default
+                                    className="flex rounded-lg shadow-sm shadow-black/5 bg-background hover:bg-background focus-within:border-ring focus-within:outline-[3px] focus-within:outline-ring/20"
+                                    international
+                                    flagComponent={FlagComponent}
+                                    countrySelectComponent={CountrySelect}
+                                    inputComponent={PhoneInput}
+                                    id="landlordPhone"
+                                    placeholder="Enter landlord phone"
+                                    value={residence.landlordPhone}
+                                    onChange={(newValue) => setResidence({...residence, landlordPhone: newValue ?? ""})}
+                                  />
+                                </div>
+                                <div className="grid gap-2">
+                                  <Label htmlFor="landlordEmail">Landlord Email</Label>
                           <Input 
                             id="landlordEmail"
                             type="email"
-                            className={cn(
-                              "h-[42px] peer ps-9",
-                              { "border-red-500 focus-visible:ring-red-500": landlordEmailError.length > 0 }
-                            )}
+                                    placeholder="Enter landlord email"
                             value={residence.landlordEmail}
-                            onChange={(e) => {
-                              const email = e.target.value;
-                              setResidence({ ...residence, landlordEmail: email });
-                              
-                              // Email validation
-                              const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                              if (!email) {
-                                setLandlordEmailError('Email is required');
-                              } else if (!emailRegex.test(email)) {
-                                setLandlordEmailError('Please enter a valid email address');
-                              } else {
-                                setLandlordEmailError('');
-                              }
-                            }}
-                            placeholder="Landlord email"
-                            required
-                          />
-                          <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
-                            <Mail size={16} strokeWidth={2} aria-hidden="true" />
+                                    onChange={(e) => setResidence({...residence, landlordEmail: e.target.value})}
+                                    className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                  />
                           </div>
-                        </div>
-                        {landlordEmailError && (
-                          <p className="text-sm text-red-500 mt-1">{landlordEmailError}</p>
-                        )}
-                      </div>
-                    </div>
+                                </div>
+                              </div>
+                          </>
                   )}
-                </div>
-              </div>
-            ) : step === 'pets' ? (
-              <div className="space-y-8 max-w-4xl mx-auto">
-                <div className="space-y-6">
-                  <div className="text-center space-y-2">
-                    <p className="text-xl font-semibold">Pets</p>
-                    <p className="text-sm text-gray-600">What pets does the prospect have?</p>
-                  </div>
-
-                  {pets.map((pet, index) => (
-                    <div key={index} className="space-y-6">
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-semibold">Pet {index + 1}</h3>
-                        {pets.length > 1 && (
-                          <Button
-                            variant="outline"
-                            className="text-red-500 hover:text-red-700"
-                            onClick={() => setPets(pets.filter((_, i) => i !== index))}
-                          >
-                            Remove Pet
-                          </Button>
-                        )}
                       </div>
-
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <Label htmlFor={`petName-${index}`}>Name</Label>
-                          <Input 
-                            id={`petName-${index}`}
-                            type="text"
-                            value={pet.name}
-                            onChange={(e) => {
-                              const newPets = [...pets];
-                              newPets[index] = { ...pet, name: e.target.value };
-                              setPets(newPets);
-                            }}
-                            placeholder="Name"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`petType-${index}`}>Type</Label>
-                          <Input 
-                            id={`petType-${index}`}
-                            type="text"
-                            value={pet.type}
-                            onChange={(e) => {
-                              const newPets = [...pets];
-                              newPets[index] = { ...pet, type: e.target.value };
-                              setPets(newPets);
-                            }}
-                            placeholder="Type"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`petBreed-${index}`}>Breed</Label>
-                          <Input 
-                            id={`petBreed-${index}`}
-                            type="text"
-                            value={pet.breed}
-                            onChange={(e) => {
-                              const newPets = [...pets];
-                              newPets[index] = { ...pet, breed: e.target.value };
-                              setPets(newPets);
-                            }}
-                            placeholder="Breed"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`petColor-${index}`}>Color</Label>
-                          <Input 
-                            id={`petColor-${index}`}
-                            type="text"
-                            value={pet.color}
-                            onChange={(e) => {
-                              const newPets = [...pets];
-                              newPets[index] = { ...pet, color: e.target.value };
-                              setPets(newPets);
-                            }}
-                            placeholder="Color"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`petWeight-${index}`}>Weight</Label>
-                          <Input 
-                            id={`petWeight-${index}`}
-                            type="text"
-                            value={pet.weight}
-                            onChange={(e) => {
-                              const newPets = [...pets];
-                              newPets[index] = { ...pet, weight: e.target.value };
-                              setPets(newPets);
-                            }}
-                            placeholder="Weight"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`petAge-${index}`}>Age</Label>
-                          <Input 
-                            id={`petAge-${index}`}
-                            type="text"
-                            value={pet.age}
-                            onChange={(e) => {
-                              const newPets = [...pets];
-                              newPets[index] = { ...pet, age: e.target.value };
-                              setPets(newPets);
-                            }}
-                            placeholder="Age"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`petGender-${index}`}>Gender</Label>
-                          <Input 
-                            id={`petGender-${index}`}
-                            type="text"
-                            value={pet.gender}
-                            onChange={(e) => {
-                              const newPets = [...pets];
-                              newPets[index] = { ...pet, gender: e.target.value };
-                              setPets(newPets);
-                            }}
-                            placeholder="Gender"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`spayedNeutered-${index}`}>Spayed/Neutered</Label>
-                          <select 
-                            id={`spayedNeutered-${index}`}
-                            className="h-[42px] w-full rounded-md border border-input bg-background px-3 text-sm text-muted-foreground"
-                            value={pet.spayedNeutered ? "yes" : "no"}
-                            onChange={(e) => {
-                              const newPets = [...pets];
-                              newPets[index] = { ...pet, spayedNeutered: e.target.value === "yes" };
-                              setPets(newPets);
-                            }}
-                          >
-                            <option value="yes">Yes</option>
-                            <option value="no">No</option>
-                          </select>
-                        </div>
-                      </div>
-                      {index < pets.length - 1 && <Separator className="my-6" />}
-                    </div>
-                  ))}
-
-                  <div className="flex justify-center mt-6">
-                    <Button
-                      type="button"
-                      onClick={() => setPets([...pets, {
-                        name: '',
-                        type: '',
-                        breed: '',
-                        color: '',
-                        weight: '',
-                        age: '',
-                        gender: '',
-                        spayedNeutered: false
-                      }])}
-                      className="bg-green-600 hover:bg-green-700 text-white"
-                    >
-                      Add Another Pet
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : step === 'vehicles' ? (
-              <div className="space-y-8 max-w-4xl mx-auto">
-                <div className="space-y-6">
-                  <div className="text-center space-y-2">
-                    <p className="text-xl font-semibold">Vehicles</p>
-                    <p className="text-sm text-gray-600">What vehicles does the prospect own?</p>
-                  </div>
-
-                  {vehicles.map((vehicle, index) => (
-                    <div key={index} className="space-y-6">
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-semibold">Vehicle {index + 1}</h3>
-                        {vehicles.length > 1 && (
-                          <Button
-                            variant="outline"
-                            className="text-red-500 hover:text-red-700"
-                            onClick={() => setVehicles(vehicles.filter((_, i) => i !== index))}
-                          >
-                            Remove Vehicle
-                          </Button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <Label htmlFor={`vehicleMake-${index}`}>Make</Label>
-                          <Input 
-                            id={`vehicleMake-${index}`}
-                            type="text"
-                            value={vehicle.make}
-                            onChange={(e) => {
-                              const newVehicles = [...vehicles];
-                              newVehicles[index] = { ...vehicle, make: e.target.value };
-                              setVehicles(newVehicles);
-                            }}
-                            placeholder="Make"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`vehicleModel-${index}`}>Model</Label>
-                          <Input 
-                            id={`vehicleModel-${index}`}
-                            type="text"
-                            value={vehicle.model}
-                            onChange={(e) => {
-                              const newVehicles = [...vehicles];
-                              newVehicles[index] = { ...vehicle, model: e.target.value };
-                              setVehicles(newVehicles);
-                            }}
-                            placeholder="Model"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`vehicleYear-${index}`}>Year</Label>
-                          <Input 
-                            id={`vehicleYear-${index}`}
-                            type="text"
-                            value={vehicle.year}
-                            onChange={(e) => {
-                              const newVehicles = [...vehicles];
-                              newVehicles[index] = { ...vehicle, year: e.target.value };
-                              setVehicles(newVehicles);
-                            }}
-                            placeholder="Year"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`vehicleColor-${index}`}>Color</Label>
-                          <Input 
-                            id={`vehicleColor-${index}`}
-                            type="text"
-                            value={vehicle.color}
-                            onChange={(e) => {
-                              const newVehicles = [...vehicles];
-                              newVehicles[index] = { ...vehicle, color: e.target.value };
-                              setVehicles(newVehicles);
-                            }}
-                            placeholder="Color"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`vehicleLicensePlate-${index}`}>License Plate</Label>
-                          <Input 
-                            id={`vehicleLicensePlate-${index}`}
-                            type="text"
-                            value={vehicle.licensePlate}
-                            onChange={(e) => {
-                              const newVehicles = [...vehicles];
-                              newVehicles[index] = { ...vehicle, licensePlate: e.target.value };
-                              setVehicles(newVehicles);
-                            }}
-                            placeholder="License Plate"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`vehicleState-${index}`}>Province/State</Label>
-                          <Input 
-                            id={`vehicleState-${index}`}
-                            type="text"
-                            value={vehicle.state}
-                            onChange={(e) => {
-                              const newVehicles = [...vehicles];
-                              newVehicles[index] = { ...vehicle, state: e.target.value };
-                              setVehicles(newVehicles);
-                            }}
-                            placeholder="Province/State"
-                            className="h-[42px]"
-                          />
-                        </div>
-                      </div>
-                      {index < vehicles.length - 1 && <Separator className="my-6" />}
-                    </div>
-                  ))}
-
-                  <div className="flex justify-center mt-6">
-                    <Button
-                      type="button"
-                      onClick={() => setVehicles([...vehicles, {
-                        make: '',
-                        model: '',
-                        year: '',
-                        color: '',
-                        licensePlate: '',
-                        state: ''
-                      }])}
-                      className="bg-green-600 hover:bg-green-700 text-white"
-                    >
-                      Add Another Vehicle
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : step === 'dependents' ? (
-              <div className="space-y-8 max-w-4xl mx-auto">
-                <div className="space-y-6">
-                  <div className="text-center space-y-2">
-                    <p className="text-xl font-semibold">Dependents</p>
-                    <p className="text-sm text-gray-600">Who are the prospect&apos;s dependents?</p>
-                  </div>
-
-                  {dependents.map((dependent, index) => (
-                    <div key={index} className="space-y-6">
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-semibold">Dependent {index + 1}</h3>
-                        {dependents.length > 1 && (
-                          <Button
-                            variant="outline"
-                            className="text-red-500 hover:text-red-700"
-                            onClick={() => setDependents(dependents.filter((_, i) => i !== index))}
-                          >
-                            Remove Dependent
-                          </Button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <Label htmlFor={`firstName-${index}`}>First Name</Label>
-                          <Input 
-                            id={`firstName-${index}`}
-                            type="text"
-                            value={dependent.firstName}
-                            onChange={(e) => {
-                              const newDependents = [...dependents];
-                              newDependents[index] = { ...dependent, firstName: e.target.value };
-                              setDependents(newDependents);
-                            }}
-                            placeholder="First Name"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`middleName-${index}`}>Middle Name</Label>
-                          <Input 
-                            id={`middleName-${index}`}
-                            type="text"
-                            value={dependent.middleName}
-                            onChange={(e) => {
-                              const newDependents = [...dependents];
-                              newDependents[index] = { ...dependent, middleName: e.target.value };
-                              setDependents(newDependents);
-                            }}
-                            placeholder="Middle Name"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`lastName-${index}`}>Last Name</Label>
-                          <Input 
-                            id={`lastName-${index}`}
-                            type="text"
-                            value={dependent.lastName}
-                            onChange={(e) => {
-                              const newDependents = [...dependents];
-                              newDependents[index] = { ...dependent, lastName: e.target.value };
-                              setDependents(newDependents);
-                            }}
-                            placeholder="Last Name"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`relationship-${index}`}>Relationship</Label>
-                          <Input 
-                            id={`relationship-${index}`}
-                            type="text"
-                            value={dependent.relationship}
-                            onChange={(e) => {
-                              const newDependents = [...dependents];
-                              newDependents[index] = { ...dependent, relationship: e.target.value };
-                              setDependents(newDependents);
-                            }}
-                            placeholder="Relationship"
-                            className="h-[42px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`age-${index}`}>Age</Label>
-                          <Input 
-                            id={`age-${index}`}
-                            type="text"
-                            value={dependent.age}
-                            onChange={(e) => {
-                              const newDependents = [...dependents];
-                              newDependents[index] = { ...dependent, age: e.target.value };
-                              setDependents(newDependents);
-                            }}
-                            placeholder="Age"
-                            className="h-[42px]"
-                          />
-                        </div>
-                      </div>
-                      {index < dependents.length - 1 && <Separator className="my-6" />}
-                    </div>
-                  ))}
-
-                  <div className="flex justify-center mt-6">
-                    <Button
-                      type="button"
-                      onClick={() => setDependents([...dependents, {
-                        firstName: '',
-                        middleName: '',
-                        lastName: '',
-                        relationship: '',
-                        age: ''
-                      }])}
-                      className="bg-green-600 hover:bg-green-700 text-white"
-                    >
-                      Add Another Dependent
-                    </Button>
-                  </div>
                 </div>
               </div>
             ) : step === 'employment' ? (
-              <div className="space-y-8 max-w-4xl mx-auto">
-                <div className="space-y-6">
-                  <div className="text-center space-y-2">
-                    <p className="text-xl font-semibold">Employment</p>
-                    <p className="text-sm text-gray-600">What is the prospect&apos;s current employment?</p>
+                  <div className="flex flex-col">
+                    <div className="space-y-4">
+                      <h2 className="text-2xl font-semibold">Employment</h2>
+                      <p className="text-gray-600">
+                        Enter information about the prospect&apos;s employment.
+                      </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-2">
+                    <div className="max-w-4xl mx-auto w-full mt-6">
+                      <div className="space-y-6">
+                        <div>
+                          <h3 className="text-lg font-semibold mb-4">Employer Information</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid gap-2">
                       <Label htmlFor="employerName">Employer Name</Label>
                       <Input 
                         id="employerName"
-                        type="text"
+                                placeholder="Enter employer name"
                         value={employment.employerName}
-                        onChange={(e) => setEmployment({ ...employment, employerName: e.target.value })}
-                        placeholder="Employer Name"
-                        className="h-[42px]"
+                                onChange={(e) => setEmployment({...employment, employerName: e.target.value})}
+                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                       />
                     </div>
-                    <div className="space-y-2">
+                            <div className="grid gap-2">
                       <Label htmlFor="jobTitle">Job Title</Label>
                       <Input 
                         id="jobTitle"
-                        type="text"
+                                placeholder="Enter job title"
                         value={employment.jobTitle}
-                        onChange={(e) => setEmployment({ ...employment, jobTitle: e.target.value })}
-                        placeholder="Job Title"
-                        className="h-[42px]"
+                                onChange={(e) => setEmployment({...employment, jobTitle: e.target.value})}
+                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                       />
                     </div>
-                    <div className="space-y-2">
+                            <div className="grid gap-2">
                       <Label htmlFor="monthlyIncome">Monthly Income</Label>
-                      <div className="relative">
                         <Input 
                           id="monthlyIncome"
                           type="number"
+                                placeholder="Enter monthly income"
                           value={employment.monthlyIncome}
-                          onChange={(e) => setEmployment({ ...employment, monthlyIncome: e.target.value })}
-                          placeholder="0.00"
-                          className="h-[42px] peer ps-6"
-                          min="0"
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                          $
-                        </span>
+                                onChange={(e) => setEmployment({...employment, monthlyIncome: e.target.value})}
+                                className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                              />
                       </div>
+                            <div className="grid gap-2">
+                              <Label htmlFor="employmentType">Employment Type</Label>
+                              <Select
+                                value={employment.employmentType}
+                                onValueChange={(value) => setEmployment({...employment, employmentType: value})}
+                              >
+                                <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                  <SelectValue placeholder="Select Type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="full-time">Full-time</SelectItem>
+                                  <SelectItem value="part-time">Part-time</SelectItem>
+                                  <SelectItem value="contract">Contract</SelectItem>
+                                  <SelectItem value="self-employed">Self-employed</SelectItem>
+                                  <SelectItem value="unemployed">Unemployed</SelectItem>
+                                  <SelectItem value="retired">Retired</SelectItem>
+                                </SelectContent>
+                              </Select>
                     </div>
-                    <div className="space-y-2">
+                            <div className="grid gap-2">
                       <Label htmlFor="startDate">Start Date</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "h-[42px] w-full justify-start text-left font-normal",
-                              !employment.startDate && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {employment.startDate ? (
-                              format(new Date(employment.startDate), "PPP")
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={employment.startDate ? new Date(employment.startDate) : undefined}
-                            onSelect={(date) => setEmployment({ ...employment, startDate: date ? date.toISOString() : "" })}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                              <CalendarInput
+                                value={employment.startDate ? new Date(employment.startDate) : undefined}
+                                onChange={(date) => setEmployment({...employment, startDate: date ? date.toISOString().split('T')[0] : ''})}
+                                className="w-full"
+                                placeholder="Select start date"
+                              />
                     </div>
-                    <div className="space-y-2">
+                          </div>
+                        </div>
+
+                        <Separator />
+
+                        <div>
+                          <h3 className="text-lg font-semibold mb-4">Supervisor Information</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid gap-2">
                       <Label htmlFor="supervisorName">Supervisor Name</Label>
                       <Input 
                         id="supervisorName"
-                        type="text"
+                                placeholder="Enter supervisor name"
                         value={employment.supervisorName}
-                        onChange={(e) => setEmployment({ ...employment, supervisorName: e.target.value })}
-                        placeholder="Supervisor Name"
-                        className="h-[42px]"
+                                onChange={(e) => setEmployment({...employment, supervisorName: e.target.value})}
+                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                       />
                     </div>
-                    <div className="space-y-2">
+                            <div className="grid gap-2">
                       <Label htmlFor="supervisorPhone">Supervisor Phone</Label>
-                      <RPNInput.default
-                        className="flex rounded-lg shadow-sm shadow-black/5"
-                        international
-                        flagComponent={FlagComponent}
-                        countrySelectComponent={CountrySelect}
-                        inputComponent={PhoneInput}
-                        id="supervisorPhone"
-                        placeholder="Enter supervisor phone number"
-                        value={employment.supervisorPhone}
-                        onChange={(newValue) => setEmployment({ ...employment, supervisorPhone: newValue ?? "" })}
-                      />
+                              <RPNInput.default
+                                className="flex rounded-lg shadow-sm shadow-black/5 bg-background hover:bg-background focus-within:border-ring focus-within:outline-[3px] focus-within:outline-ring/20"
+                                international
+                                flagComponent={FlagComponent}
+                                countrySelectComponent={CountrySelect}
+                                inputComponent={PhoneInput}
+                                id="supervisorPhone"
+                                placeholder="Enter supervisor phone"
+                                value={employment.supervisorPhone}
+                                onChange={(newValue) => setEmployment({...employment, supervisorPhone: newValue ?? ""})}
+                              />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="employmentStreet">Address</Label>
+                          </div>
+                        </div>
+
+                        <Separator />
+
+                        <div>
+                          <h3 className="text-lg font-semibold mb-4">Employer Address</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                              <Label htmlFor="empStreet">Street Address</Label>
                       <Input 
-                        id="employmentStreet"
-                        type="text"
+                                id="empStreet"
+                                placeholder="Enter street address"
                         value={employment.address.street}
-                        onChange={(e) => setEmployment({ ...employment, address: { ...employment.address, street: e.target.value }})}
-                        placeholder="Street"
-                        className="h-[42px]"
+                                onChange={(e) => setEmployment({
+                                  ...employment, 
+                                  address: {...employment.address, street: e.target.value}
+                                })}
+                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="employmentCity">City</Label>
+                            <div className="grid gap-2">
+                              <Label htmlFor="empCity">City</Label>
                       <Input 
-                        id="employmentCity"
-                        type="text"
+                                id="empCity"
+                                placeholder="Enter city"
                         value={employment.address.city}
-                        onChange={(e) => setEmployment({ ...employment, address: { ...employment.address, city: e.target.value }})}
-                        placeholder="City"
-                        className="h-[42px]"
+                                onChange={(e) => setEmployment({
+                                  ...employment, 
+                                  address: {...employment.address, city: e.target.value}
+                                })}
+                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="employmentProvince">Province</Label>
-                      <Input 
-                        id="employmentProvince"
-                        type="text"
-                        value={employment.address.province}
-                        onChange={(e) => setEmployment({ ...employment, address: { ...employment.address, province: e.target.value }})}
-                        placeholder="Province"
-                        className="h-[42px]"
-                      />
+                            <div className="grid gap-2">
+                              <Label htmlFor="empProvince">Province</Label>
+                              <Select
+                                value={employment.address.province}
+                                onValueChange={(value) => setEmployment({
+                                  ...employment, 
+                                  address: {...employment.address, province: value}
+                                })}
+                              >
+                                <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                  <SelectValue placeholder="Select Province" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {provinces.map((province) => (
+                                    <SelectItem key={province.value} value={province.value}>
+                                      {province.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="employmentPostalCode">Postal Code</Label>
+                            <div className="grid gap-2">
+                              <Label htmlFor="empPostalCode">Postal Code</Label>
                       <Input 
-                        id="employmentPostalCode"
-                        type="text"
+                                id="empPostalCode"
+                                placeholder="Enter postal code"
                         value={employment.address.postalCode}
-                        onChange={(e) => setEmployment({ ...employment, address: { ...employment.address, postalCode: e.target.value }})}
-                        placeholder="Postal Code"
-                        className="h-[42px]"
+                                onChange={(e) => setEmployment({
+                                  ...employment, 
+                                  address: {...employment.address, postalCode: e.target.value}
+                                })}
+                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                       />
+                            </div>
+                          </div>
                     </div>
                   </div>
                 </div>
               </div>
             ) : step === 'income' ? (
-              <div className="space-y-8 max-w-4xl mx-auto">
-                <div className="space-y-6">
-                  <div className="text-center space-y-2">
-                    <p className="text-xl font-semibold">Income</p>
-                    <p className="text-sm text-gray-600">What is the prospect&apos;s current income?</p>
+                  <div className="flex flex-col">
+                    <div className="space-y-4">
+                      <h2 className="text-2xl font-semibold">Income</h2>
+                      <p className="text-gray-600">
+                        Enter information about the prospect&apos;s income sources.
+                      </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="employmentIncome">
-                        Employment Income <span className="text-destructive">*</span>
-                      </Label>
-                      <div className="relative">
-                        <Input 
-                          id="employmentIncome"
-                          type="number"
-                          value={income.employmentIncome}
-                          onChange={(e) => setIncome({ ...income, employmentIncome: e.target.value })}
-                          placeholder="0.00"
-                          className="h-[42px] peer ps-6"
-                          min="0"
-                          required
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                          $
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="governmentAssistance">Government Assistance</Label>
-                      <div className="relative">
-                        <Input 
-                          id="governmentAssistance"
-                          type="number"
-                          value={income.governmentAssistance}
-                          onChange={(e) => setIncome({ ...income, governmentAssistance: e.target.value })}
-                          placeholder="0.00"
-                          className="h-[42px] peer ps-6"
-                          min="0"
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                          $
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="investments">Investment Income</Label>
-                      <div className="relative">
-                        <Input 
-                          id="investments"
-                          type="number"
-                          value={income.investments}
-                          onChange={(e) => setIncome({ ...income, investments: e.target.value })}
-                          placeholder="0.00"
-                          className="h-[42px] peer ps-6"
-                          min="0"
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                          $
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="retirement">Retirement Income</Label>
-                      <div className="relative">
-                        <Input 
-                          id="retirement"
-                          type="number"
-                          value={income.retirement}
-                          onChange={(e) => setIncome({ ...income, retirement: e.target.value })}
-                          placeholder="0.00"
-                          className="h-[42px] peer ps-6"
-                          min="0"
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                          $
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="childSupport">Child Support</Label>
-                      <div className="relative">
-                        <Input 
-                          id="childSupport"
-                          type="number"
-                          value={income.childSupport}
-                          onChange={(e) => setIncome({ ...income, childSupport: e.target.value })}
-                          placeholder="0.00"
-                          className="h-[42px] peer ps-6"
-                          min="0"
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                          $
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="alimony">Alimony</Label>
-                      <div className="relative">
-                        <Input 
-                          id="alimony"
-                          type="number"
-                          value={income.alimony}
-                          onChange={(e) => setIncome({ ...income, alimony: e.target.value })}
-                          placeholder="0.00"
-                          className="h-[42px] peer ps-6"
-                          min="0"
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                          $
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="otherIncome">Other Income</Label>
-                      <div className="relative">
-                        <Input 
-                          id="otherIncome"
-                          type="number"
-                          value={income.otherIncome}
-                          onChange={(e) => setIncome({ ...income, otherIncome: e.target.value })}
-                          placeholder="0.00"
-                          className="h-[42px] peer ps-6"
-                          min="0"
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                          $
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="otherIncomeSource">Other Income Source</Label>
-                      <Input 
-                        id="otherIncomeSource"
-                        type="text"
-                        value={income.otherIncomeSource}
-                        onChange={(e) => setIncome({ ...income, otherIncomeSource: e.target.value })}
-                        placeholder="Other Income Source"
-                        className="h-[42px]"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : step === 'summary' ? (
-              <div className="flex flex-col h-full">
-                <div className="flex-grow space-y-6">
-                  <div>
-                    <h3 className="text-2xl font-semibold mb-4 text-center">Review Your Application</h3>
-                    <Separator className="mb-6" />
-                    <div className="space-y-6">
-                      {/* About you */}
-                      <div>
-                        <h3 className="text-lg font-semibold mb-4">About you</h3>
-                        <div className="grid gap-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="firstName">First Name</Label>
-                              <Input 
-                                id="firstName" 
-                                value={contact.firstName}
-                                disabled
-                                className="opacity-50"
-                              />
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="lastName">Last Name</Label>
-                              <Input 
-                                id="lastName" 
-                                value={contact.lastName}
-                                disabled
-                                className="opacity-50"
-                              />
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="email">Email</Label>
-                              <div className="relative">
-                                <Input 
-                                  id="email" 
-                                  type="email"
-                                  className="peer ps-9 opacity-50"
-                                  value={emails[0]}
-                                  disabled
-                                />
-                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80">
-                                  <Mail size={16} strokeWidth={2} aria-hidden="true" />
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="phone">Phone Number</Label>
-                              <RPNInput.default
-                                className="flex rounded-lg shadow-sm shadow-black/5 opacity-50"
-                                international
-                                flagComponent={FlagComponent}
-                                countrySelectComponent={CountrySelect}
-                                inputComponent={PhoneInput}
-                                id="phone"
-                                value={phones[0]}
-                                disabled
-                                onChange={() => {}}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <Separator />
-
-                      {/* Additional Information */}
-                      <div>
-                        <h3 className="text-lg font-semibold mb-4">Additional Information</h3>
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                              <Button
-                                variant={"outline"}
-                                className="w-full justify-start text-left font-normal opacity-50"
-                                disabled
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {contact.dateOfBirth ? format(contact.dateOfBirth, "PPP") : "Not specified"}
-                              </Button>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="gender">Gender</Label>
-                              <Input 
-                                id="gender"
-                                value={contact.gender ? contact.gender.charAt(0).toUpperCase() + contact.gender.slice(1) : "Not specified"}
-                                disabled
-                                className="opacity-50"
-                              />
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="maritalStatus">Marital Status</Label>
-                              <Input 
-                                id="maritalStatus"
-                                value={contact.maritalStatus ? contact.maritalStatus.charAt(0).toUpperCase() + contact.maritalStatus.slice(1) : "Not specified"}
-                                disabled
-                                className="opacity-50"
-                              />
-                            </div>
-                          </div>
-                          
-                          <div className="grid gap-2">
-                            <Label htmlFor="aboutYou">About You</Label>
-                            <textarea
-                              id="aboutYou"
-                              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 opacity-50"
-                              value={contact.aboutYou || "Not provided"}
-                              disabled
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <Separator />
-
-                      {/* Current Residential History */}
-                      <div>
-                        <h3 className="text-lg font-semibold mb-4">Current Residential History</h3>
-                        <div className="space-y-6">
-                          <div>
-                            <h4 className="text-sm font-medium mb-4">Current Address</h4>
-                            <div className="grid gap-4">
-                              <div className="grid gap-2">
-                                <Label htmlFor="street">Street Address</Label>
-                                <Input 
-                                  id="street"
-                                  value={residence.address.street}
-                                  disabled
-                                  className="opacity-50"
-                                />
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="grid gap-2">
-                                  <Label htmlFor="city">City</Label>
-                                  <Input 
-                                    id="city"
-                                    value={residence.address.city}
-                                    disabled
-                                    className="opacity-50"
-                                  />
-                                </div>
-                                <div className="grid gap-2">
-                                  <Label htmlFor="province">Province</Label>
-                                  <Input 
-                                    id="province"
-                                    value={provinces.find(p => p.value === residence.address.province)?.label || "Not specified"}
-                                    disabled
-                                    className="opacity-50"
-                                  />
-                                </div>
-                                <div className="grid gap-2">
-                                  <Label htmlFor="postalCode">Postal Code</Label>
-                                  <Input 
-                                    id="postalCode"
-                                    value={residence.address.postalCode}
-                                    disabled
-                                    className="opacity-50"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="moveInDate">Move-in Date</Label>
-                              <Button
-                                variant={"outline"}
-                                className="w-full justify-start text-left font-normal opacity-50"
-                                disabled
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {residence.moveInDate ? format(new Date(residence.moveInDate), "PPP") : "Not specified"}
-                              </Button>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="monthlyRent">Monthly Rent</Label>
-                              <div className="relative">
-                                <Input 
-                                  id="monthlyRent"
-                                  className="peer pe-12 ps-6 opacity-50"
-                                  value={residence.monthlyRent ? `$${residence.monthlyRent}` : "Not specified"}
-                                  disabled
-                                />
-                                <span className="pointer-events-none absolute inset-y-0 end-0 flex items-center justify-center pe-3 text-sm text-muted-foreground">
-                                  CAD
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="grid gap-2">
-                            <Label htmlFor="reasonForLeaving">Reason for Leaving</Label>
-                            <Input 
-                              id="reasonForLeaving"
-                              value={residence.reasonForLeaving || "Not specified"}
-                              disabled
-                              className="opacity-50"
-                            />
-                          </div>
-
-                          <div>
-                            <h4 className="text-sm font-medium mb-4">Current Landlord Information</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="grid gap-2">
-                                <Label htmlFor="landlordName">Landlord Name</Label>
-                                <Input 
-                                  id="landlordName"
-                                  value={residence.landlordName || "Not specified"}
-                                  disabled
-                                  className="opacity-50"
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label htmlFor="landlordPhone">Landlord Phone</Label>
-                                <Input 
-                                  id="landlordPhone"
-                                  value={residence.landlordPhone || "Not specified"}
-                                  disabled
-                                  className="opacity-50"
-                                />
-                              </div>
-                            </div>
-                            <div className="grid gap-2 mt-4">
-                              <Label htmlFor="landlordEmail">Landlord Email</Label>
-                              <Input 
-                                id="landlordEmail"
-                                value={residence.landlordEmail || "Not specified"}
-                                disabled
-                                className="opacity-50"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <Separator />
-
-                      {/* Current Employment */}
-                      <div>
-                        <h3 className="text-lg font-semibold mb-4">Current Employment</h3>
-                        <div className="space-y-6">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="employerName">Employer Name</Label>
-                              <Input 
-                                id="employerName"
-                                value={employment.employerName || "Not specified"}
-                                disabled
-                                className="opacity-50 h-[42px]"
-                              />
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="jobTitle">Job Title</Label>
-                              <Input 
-                                id="jobTitle"
-                                value={employment.jobTitle || "Not specified"}
-                                disabled
-                                className="opacity-50 h-[42px]"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="monthlyIncome">Monthly Income</Label>
-                              <div className="relative">
-                                <Input 
-                                  id="monthlyIncome"
-                                  className="peer pe-12 ps-6 opacity-50"
-                                  value={employment.monthlyIncome ? `$${employment.monthlyIncome}` : "Not specified"}
-                                  disabled
-                                />
-                                <span className="pointer-events-none absolute inset-y-0 end-0 flex items-center justify-center pe-3 text-sm text-muted-foreground">
-                                  CAD
-                                </span>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="employmentType">Employment Type</Label>
-                              <Input 
-                                id="employmentType"
-                                value={employment.employmentType ? 
-                                  employment.employmentType.split('-').map(word => 
-                                    word.charAt(0).toUpperCase() + word.slice(1)
-                                  ).join(' ') : 
-                                  "Not specified"}
-                                disabled
-                                className="opacity-50"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="startDate">Start Date</Label>
-                              <Button
-                                variant={"outline"}
-                                className="w-full justify-start text-left font-normal opacity-50"
-                                disabled
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {employment.startDate ? format(new Date(employment.startDate), "PPP") : "Not specified"}
-                              </Button>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="supervisorName">Supervisor Name</Label>
-                              <Input 
-                                id="supervisorName"
-                                value={employment.supervisorName || "Not specified"}
-                                disabled
-                                className="opacity-50 h-[42px]"
-                              />
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="supervisorPhone">Supervisor Phone</Label>
-                              <Input 
-                                id="supervisorPhone"
-                                value={employment.supervisorPhone || "Not specified"}
-                                disabled
-                                className="opacity-50 h-[42px]"
-                              />
-                            </div>
-                          </div>
-
-                          <div>
-                            <h4 className="text-sm font-medium mb-4">Employer Address</h4>
-                            <div className="grid gap-4">
-                              <div className="grid gap-2">
-                                <Label htmlFor="employmentStreet">Street Address</Label>
-                                <Input 
-                                  id="employmentStreet"
-                                  value={employment.address.street || "Not specified"}
-                                  disabled
-                                  className="opacity-50 h-[42px]"
-                                />
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="grid gap-2">
-                                  <Label htmlFor="employmentCity">City</Label>
-                                  <Input 
-                                    id="employmentCity"
-                                    value={employment.address.city || "Not specified"}
-                                    disabled
-                                    className="opacity-50 h-[42px]"
-                                  />
-                                </div>
-                                <div className="grid gap-2">
-                                  <Label htmlFor="employmentProvince">Province</Label>
-                                  <Input 
-                                    id="employmentProvince"
-                                    value={provinces.find(p => p.value === employment.address.province)?.label || "Not specified"}
-                                    disabled
-                                    className="opacity-50 h-[42px]"
-                                  />
-                                </div>
-                                <div className="grid gap-2">
-                                  <Label htmlFor="employmentPostalCode">Postal Code</Label>
-                                  <Input 
-                                    id="employmentPostalCode"
-                                    value={employment.address.postalCode || "Not specified"}
-                                    disabled
-                                    className="opacity-50 h-[42px]"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <Separator />
-
-                      {/* Income Information */}
-                      <div>
-                        <h3 className="text-lg font-semibold mb-4">Income Information</h3>
-                        <div className="space-y-6">
+                    <div className="max-w-4xl mx-auto w-full mt-6">
+                      <div className="space-y-6">
+                        <div>
+                          <h3 className="text-lg font-semibold mb-4">Income Sources</h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="grid gap-2">
                               <Label htmlFor="employmentIncome">Employment Income</Label>
                               <div className="relative">
                                 <Input 
                                   id="employmentIncome"
-                                  className="peer ps-6 opacity-50 h-[42px]"
-                                  value={income.employmentIncome ? `$${income.employmentIncome}` : "Not specified"}
-                                  disabled
+                                  type="number"
+                                  placeholder="Enter amount"
+                                  value={income.employmentIncome}
+                                  onChange={(e) => setIncome({...income, employmentIncome: e.target.value})}
+                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                                 />
-                                <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                                  $
-                                </span>
+                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
+                                </div>
                               </div>
                             </div>
                             <div className="grid gap-2">
@@ -2643,61 +1939,63 @@ export default function AddProspectPage() {
                               <div className="relative">
                                 <Input 
                                   id="governmentAssistance"
-                                  className="peer ps-6 opacity-50 h-[42px]"
-                                  value={income.governmentAssistance ? `$${income.governmentAssistance}` : "Not specified"}
-                                  disabled
+                                  type="number"
+                                  placeholder="Enter amount"
+                                  value={income.governmentAssistance}
+                                  onChange={(e) => setIncome({...income, governmentAssistance: e.target.value})}
+                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                                 />
-                                <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                                  $
-                                </span>
+                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
+                                </div>
                               </div>
                             </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                              <Label htmlFor="investments">Investment Income</Label>
+                              <Label htmlFor="investments">Investments</Label>
                               <div className="relative">
                                 <Input 
                                   id="investments"
-                                  className="peer ps-6 opacity-50 h-[42px]"
-                                  value={income.investments ? `$${income.investments}` : "Not specified"}
-                                  disabled
+                                  type="number"
+                                  placeholder="Enter amount"
+                                  value={income.investments}
+                                  onChange={(e) => setIncome({...income, investments: e.target.value})}
+                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                                 />
-                                <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                                  $
-                                </span>
+                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
+                                </div>
                               </div>
                             </div>
                             <div className="grid gap-2">
-                              <Label htmlFor="retirement">Retirement Income</Label>
+                              <Label htmlFor="retirement">Retirement</Label>
                               <div className="relative">
                                 <Input 
                                   id="retirement"
-                                  className="peer ps-6 opacity-50 h-[42px]"
-                                  value={income.retirement ? `$${income.retirement}` : "Not specified"}
-                                  disabled
+                                  type="number"
+                                  placeholder="Enter amount"
+                                  value={income.retirement}
+                                  onChange={(e) => setIncome({...income, retirement: e.target.value})}
+                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                                 />
-                                <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                                  $
-                                </span>
+                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
+                                </div>
                               </div>
                             </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="grid gap-2">
                               <Label htmlFor="childSupport">Child Support</Label>
                               <div className="relative">
                                 <Input 
                                   id="childSupport"
-                                  className="peer ps-6 opacity-50 h-[42px]"
-                                  value={income.childSupport ? `$${income.childSupport}` : "Not specified"}
-                                  disabled
+                                  type="number"
+                                  placeholder="Enter amount"
+                                  value={income.childSupport}
+                                  onChange={(e) => setIncome({...income, childSupport: e.target.value})}
+                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                                 />
-                                <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                                  $
-                                </span>
+                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
+                                </div>
                               </div>
                             </div>
                             <div className="grid gap-2">
@@ -2705,170 +2003,962 @@ export default function AddProspectPage() {
                               <div className="relative">
                                 <Input 
                                   id="alimony"
-                                  className="peer ps-6 opacity-50 h-[42px]"
-                                  value={income.alimony ? `$${income.alimony}` : "Not specified"}
-                                  disabled
+                                  type="number"
+                                  placeholder="Enter amount"
+                                  value={income.alimony}
+                                  onChange={(e) => setIncome({...income, alimony: e.target.value})}
+                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                                 />
-                                <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                                  $
-                                </span>
+                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
+                                </div>
                               </div>
                             </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="grid gap-2">
                               <Label htmlFor="otherIncome">Other Income</Label>
                               <div className="relative">
                                 <Input 
                                   id="otherIncome"
-                                  className="peer ps-6 opacity-50 h-[42px]"
-                                  value={income.otherIncome ? `$${income.otherIncome}` : "Not specified"}
-                                  disabled
+                                  type="number"
+                                  placeholder="Enter amount"
+                                  value={income.otherIncome}
+                                  onChange={(e) => setIncome({...income, otherIncome: e.target.value})}
+                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                                 />
-                                <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-sm text-muted-foreground">
-                                  $
-                                </span>
+                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
+                                </div>
                               </div>
                             </div>
                             <div className="grid gap-2">
                               <Label htmlFor="otherIncomeSource">Other Income Source</Label>
                               <Input 
                                 id="otherIncomeSource"
-                                value={income.otherIncomeSource || "Not specified"}
-                                disabled
-                                className="opacity-50 h-[42px]"
+                                placeholder="Enter source"
+                                value={income.otherIncomeSource}
+                                onChange={(e) => setIncome({...income, otherIncomeSource: e.target.value})}
+                                className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                               />
+                            </div>
+                  </div>
+                </div>
+              </div>
+                            </div>
+                            </div>
+                ) : step === 'pets' ? (
+              <div className="flex flex-col">
+                <div className="space-y-4">
+                  <h2 className="text-2xl font-semibold">Pets</h2>
+                  <p className="text-gray-600">
+                    Do you have any pets that will be living with you?
+                  </p>
+                </div>
+
+                <div className="max-w-4xl mx-auto w-full mt-6">
+                  <div className="space-y-6">
+                    <RadioGroup 
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl mx-auto"
+                      value={havePets ? "yes" : "no"}
+                      onValueChange={(value: 'yes' | 'no') => {
+                        setHavePets(value === 'yes');
+                        if (value === 'no') {
+                          setPets([{
+                            name: '',
+                            type: '',
+                            breed: '',
+                            color: '',
+                            weight: '',
+                            age: '',
+                            gender: '',
+                            spayedNeutered: false
+                          }]);
+                        }
+                      }}
+                    >
+                      {/* Yes, I have pets Radio Card */}
+                      <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                        <RadioGroupItem 
+                          value="yes" 
+                          id="pets-yes" 
+                          className="sr-only after:absolute after:inset-0" 
+                        />
+                        <Cat className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium leading-none">Yes, I have pets</p>
+                          <p className="text-xs text-muted-foreground">Select this if you have any pets that will be living with you</p>
+                        </div>
+                      </label>
+
+                      {/* No pets Radio Card */}
+                      <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                        <RadioGroupItem 
+                          value="no" 
+                          id="pets-no" 
+                          className="sr-only after:absolute after:inset-0" 
+                        />
+                        <Ban className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium leading-none">No pets</p>
+                          <p className="text-xs text-muted-foreground">Select this if you don&apos;t have any pets</p>
+                        </div>
+                      </label>
+                    </RadioGroup>
+
+                    {havePets && (
+                      <>
+                        {pets.map((pet, index) => (
+                          <div key={index} className="border rounded-lg p-4 relative">
+                            {pets.length > 1 && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-2 right-2 h-8 w-8 p-0 text-gray-500 hover:text-red-500"
+                                onClick={() => {
+                                  const newPets = [...pets];
+                                  newPets.splice(index, 1);
+                                  setPets(newPets);
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                                <span className="sr-only">Remove pet</span>
+                              </Button>
+                            )}
+                            <h3 className="text-lg font-semibold mb-4">Pet {index + 1}</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="grid gap-2">
+                                <Label htmlFor={`name-${index}`}>Name</Label>
+                                <Input 
+                                  id={`name-${index}`}
+                                  placeholder="Enter pet name"
+                                  value={pet.name}
+                                  onChange={(e) => {
+                                    const newPets = [...pets];
+                                    newPets[index] = {...pet, name: e.target.value};
+                                    setPets(newPets);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`type-${index}`}>Type</Label>
+                                <Input 
+                                  id={`type-${index}`}
+                                  placeholder="Enter pet type"
+                                  value={pet.type}
+                                  onChange={(e) => {
+                                    const newPets = [...pets];
+                                    newPets[index] = {...pet, type: e.target.value};
+                                    setPets(newPets);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`breed-${index}`}>Breed</Label>
+                                <Input 
+                                  id={`breed-${index}`}
+                                  placeholder="Enter pet breed"
+                                  value={pet.breed}
+                                  onChange={(e) => {
+                                    const newPets = [...pets];
+                                    newPets[index] = {...pet, breed: e.target.value};
+                                    setPets(newPets);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`color-${index}`}>Color</Label>
+                                <Input 
+                                  id={`color-${index}`}
+                                  placeholder="Enter pet color"
+                                  value={pet.color}
+                                  onChange={(e) => {
+                                    const newPets = [...pets];
+                                    newPets[index] = {...pet, color: e.target.value};
+                                    setPets(newPets);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`weight-${index}`}>Weight</Label>
+                                <Input 
+                                  id={`weight-${index}`}
+                                  placeholder="Enter pet weight"
+                                  value={pet.weight}
+                                  onChange={(e) => {
+                                    const newPets = [...pets];
+                                    newPets[index] = {...pet, weight: e.target.value};
+                                    setPets(newPets);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`age-${index}`}>Age</Label>
+                                <Input 
+                                  id={`age-${index}`}
+                                  placeholder="Enter pet age"
+                                  value={pet.age}
+                                  onChange={(e) => {
+                                    const newPets = [...pets];
+                                    newPets[index] = {...pet, age: e.target.value};
+                                    setPets(newPets);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`gender-${index}`}>Gender</Label>
+                                <Select
+                                  value={pet.gender}
+                                  onValueChange={(value) => {
+                                    const newPets = [...pets];
+                                    newPets[index] = {...pet, gender: value};
+                                    setPets(newPets);
+                                  }}
+                                >
+                                  <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                    <SelectValue placeholder="Select Gender" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="male">Male</SelectItem>
+                                    <SelectItem value="female">Female</SelectItem>
+                                    <SelectItem value="other">Other</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`spayedNeutered-${index}`}>Spayed/Neutered</Label>
+                                <Select
+                                  value={pet.spayedNeutered ? "Yes" : "No"}
+                                  onValueChange={(value) => {
+                                    const newPets = [...pets];
+                                    newPets[index] = {...pet, spayedNeutered: value === "Yes"};
+                                    setPets(newPets);
+                                  }}
+                                >
+                                  <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                    <SelectValue placeholder="Select Spayed/Neutered" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="No">No</SelectItem>
+                                    <SelectItem value="Yes">Yes</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             </div>
                           </div>
+                        ))}
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setPets([...pets, {
+                              name: '',
+                              type: '',
+                              breed: '',
+                              color: '',
+                              weight: '',
+                              age: '',
+                              gender: '',
+                              spayedNeutered: false
+                            }]);
+                          }}
+                          className="flex items-center gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add Pet
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : step === 'vehicles' ? (
+              <div className="flex flex-col">
+                <div className="space-y-4">
+                  <h2 className="text-2xl font-semibold">Vehicles</h2>
+                  <p className="text-gray-600">
+                    Do you have any vehicles that will be parked at the property?
+                  </p>
+                </div>
+
+                <div className="max-w-4xl mx-auto w-full mt-6">
+                  <div className="space-y-6">
+                    <RadioGroup 
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl mx-auto"
+                      value={haveVehicles ? "yes" : "no"}
+                      onValueChange={(value: 'yes' | 'no') => {
+                        setHaveVehicles(value === 'yes');
+                        if (value === 'no') {
+                          setVehicles([{
+                            make: '',
+                            model: '',
+                            year: '',
+                            color: '',
+                            licensePlate: '',
+                            state: ''
+                          }]);
+                        }
+                      }}
+                    >
+                      {/* Yes, I have vehicles Radio Card */}
+                      <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                        <RadioGroupItem 
+                          value="yes" 
+                          id="vehicles-yes" 
+                          className="sr-only after:absolute after:inset-0" 
+                        />
+                        <Car className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium leading-none">Yes, I have vehicles</p>
+                          <p className="text-xs text-muted-foreground">Select this if you have any vehicles that will be parked at the property</p>
                         </div>
-                      </div>
+                      </label>
 
-                      <Separator />
+                      {/* No vehicles Radio Card */}
+                      <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                        <RadioGroupItem 
+                          value="no" 
+                          id="vehicles-no" 
+                          className="sr-only after:absolute after:inset-0" 
+                        />
+                        <Ban className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium leading-none">No vehicles</p>
+                          <p className="text-xs text-muted-foreground">Select this if you don&apos;t have any vehicles</p>
+                        </div>
+                      </label>
+                    </RadioGroup>
 
-                      {/* Lead Status Information */}
-                      <div>
-                        <h3 className="text-lg font-semibold mb-4">Lead Information</h3>
-                        <div className="space-y-6">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                              <Label>Lead Status</Label>
-                              <Input 
-                                value={contact.leadStatus ? contact.leadStatus.charAt(0).toUpperCase() + contact.leadStatus.slice(1) : "Not specified"}
-                                disabled
-                                className="opacity-50 h-[42px]"
-                              />
+                    {haveVehicles && (
+                      <>
+                        {vehicles.map((vehicle, index) => (
+                          <div key={index} className="border rounded-lg p-4 relative">
+                            {vehicles.length > 1 && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-2 right-2 h-8 w-8 p-0 text-gray-500 hover:text-red-500"
+                                onClick={() => {
+                                  const newVehicles = [...vehicles];
+                                  newVehicles.splice(index, 1);
+                                  setVehicles(newVehicles);
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                                <span className="sr-only">Remove vehicle</span>
+                              </Button>
+                            )}
+                            <h3 className="text-lg font-semibold mb-4">Vehicle {index + 1}</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="grid gap-2">
+                                <Label htmlFor={`make-${index}`}>Make</Label>
+                                <Input 
+                                  id={`make-${index}`}
+                                  placeholder="Enter vehicle make"
+                                  value={vehicle.make}
+                                  onChange={(e) => {
+                                    const newVehicles = [...vehicles];
+                                    newVehicles[index] = {...vehicle, make: e.target.value};
+                                    setVehicles(newVehicles);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`model-${index}`}>Model</Label>
+                                <Input 
+                                  id={`model-${index}`}
+                                  placeholder="Enter vehicle model"
+                                  value={vehicle.model}
+                                  onChange={(e) => {
+                                    const newVehicles = [...vehicles];
+                                    newVehicles[index] = {...vehicle, model: e.target.value};
+                                    setVehicles(newVehicles);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`year-${index}`}>Year</Label>
+                                <Input 
+                                  id={`year-${index}`}
+                                  placeholder="Enter vehicle year"
+                                  value={vehicle.year}
+                                  onChange={(e) => {
+                                    const newVehicles = [...vehicles];
+                                    newVehicles[index] = {...vehicle, year: e.target.value};
+                                    setVehicles(newVehicles);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`color-${index}`}>Color</Label>
+                                <Input 
+                                  id={`color-${index}`}
+                                  placeholder="Enter vehicle color"
+                                  value={vehicle.color}
+                                  onChange={(e) => {
+                                    const newVehicles = [...vehicles];
+                                    newVehicles[index] = {...vehicle, color: e.target.value};
+                                    setVehicles(newVehicles);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`licensePlate-${index}`}>License Plate</Label>
+                                <Input 
+                                  id={`licensePlate-${index}`}
+                                  placeholder="Enter license plate"
+                                  value={vehicle.licensePlate}
+                                  onChange={(e) => {
+                                    const newVehicles = [...vehicles];
+                                    newVehicles[index] = {...vehicle, licensePlate: e.target.value};
+                                    setVehicles(newVehicles);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`state-${index}`}>Province</Label>
+                                <Select
+                                  value={vehicle.state}
+                                  onValueChange={(value) => {
+                                    const newVehicles = [...vehicles];
+                                    newVehicles[index] = {...vehicle, state: value};
+                                    setVehicles(newVehicles);
+                                  }}
+                                >
+                                  <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                    <SelectValue placeholder="Select Province" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {provinces.map((province) => (
+                                      <SelectItem key={province.value} value={province.value}>
+                                        {province.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             </div>
-                            <div className="grid gap-2">
-                              <Label>Lead Source</Label>
-                              <Input 
-                                value={contact.leadSource || "Not specified"}
-                                disabled
-                                className="opacity-50 h-[42px]"
-                              />
+                          </div>
+                        ))}
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setVehicles([...vehicles, {
+                              make: '',
+                              model: '',
+                              year: '',
+                              color: '',
+                              licensePlate: '',
+                              state: ''
+                            }]);
+                          }}
+                          className="flex items-center gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add Vehicle
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : step === 'dependents' ? (
+              <div className="flex flex-col">
+                <div className="space-y-4">
+                  <h2 className="text-2xl font-semibold">Dependents</h2>
+                  <p className="text-gray-600">
+                    Do you have any dependents that will be living with you?
+                  </p>
+                </div>
+
+                <div className="max-w-4xl mx-auto w-full mt-6">
+                  <div className="space-y-6">
+                    <RadioGroup 
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl mx-auto"
+                      value={haveDependents ? "yes" : "no"}
+                      onValueChange={(value: 'yes' | 'no') => {
+                        setHaveDependents(value === 'yes');
+                        if (value === 'no') {
+                          setDependents([{
+                            firstName: '',
+                            middleName: '',
+                            lastName: '',
+                            relationship: '',
+                            age: ''
+                          }]);
+                        }
+                      }}
+                    >
+                      {/* Yes, I have dependents Radio Card */}
+                      <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                        <RadioGroupItem 
+                          value="yes" 
+                          id="dependents-yes" 
+                          className="sr-only after:absolute after:inset-0" 
+                        />
+                        <Users className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium leading-none">Yes, I have dependents</p>
+                          <p className="text-xs text-muted-foreground">Select this if you have any dependents that will be living with you</p>
+                        </div>
+                      </label>
+
+                      {/* No dependents Radio Card */}
+                      <label className="relative flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-input px-6 py-4 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
+                        <RadioGroupItem 
+                          value="no" 
+                          id="dependents-no" 
+                          className="sr-only after:absolute after:inset-0" 
+                        />
+                        <Ban className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium leading-none">No dependents</p>
+                          <p className="text-xs text-muted-foreground">Select this if you don&apos;t have any dependents</p>
+                        </div>
+                      </label>
+                    </RadioGroup>
+
+                    {haveDependents && (
+                      <>
+                        {dependents.map((dependent, index) => (
+                          <div key={index} className="border rounded-lg p-4 relative">
+                            {dependents.length > 1 && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-2 right-2 h-8 w-8 p-0 text-gray-500 hover:text-red-500"
+                                onClick={() => {
+                                  const newDependents = [...dependents];
+                                  newDependents.splice(index, 1);
+                                  setDependents(newDependents);
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                                <span className="sr-only">Remove dependent</span>
+                              </Button>
+                            )}
+                            <h3 className="text-lg font-semibold mb-4">Dependent {index + 1}</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="grid gap-2">
+                                <Label htmlFor={`firstName-${index}`}>First Name</Label>
+                                <Input 
+                                  id={`firstName-${index}`}
+                                  placeholder="Enter first name"
+                                  value={dependent.firstName}
+                                  onChange={(e) => {
+                                    const newDependents = [...dependents];
+                                    newDependents[index] = {...dependent, firstName: e.target.value};
+                                    setDependents(newDependents);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`middleName-${index}`}>Middle Name</Label>
+                                <Input 
+                                  id={`middleName-${index}`}
+                                  placeholder="Enter middle name"
+                                  value={dependent.middleName}
+                                  onChange={(e) => {
+                                    const newDependents = [...dependents];
+                                    newDependents[index] = {...dependent, middleName: e.target.value};
+                                    setDependents(newDependents);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`lastName-${index}`}>Last Name</Label>
+                                <Input 
+                                  id={`lastName-${index}`}
+                                  placeholder="Enter last name"
+                                  value={dependent.lastName}
+                                  onChange={(e) => {
+                                    const newDependents = [...dependents];
+                                    newDependents[index] = {...dependent, lastName: e.target.value};
+                                    setDependents(newDependents);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`relationship-${index}`}>Relationship</Label>
+                                <Input 
+                                  id={`relationship-${index}`}
+                                  placeholder="Enter relationship"
+                                  value={dependent.relationship}
+                                  onChange={(e) => {
+                                    const newDependents = [...dependents];
+                                    newDependents[index] = {...dependent, relationship: e.target.value};
+                                    setDependents(newDependents);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor={`age-${index}`}>Age</Label>
+                                <Input 
+                                  id={`age-${index}`}
+                                  placeholder="Enter age"
+                                  value={dependent.age}
+                                  onChange={(e) => {
+                                    const newDependents = [...dependents];
+                                    newDependents[index] = {...dependent, age: e.target.value};
+                                    setDependents(newDependents);
+                                  }}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
                             </div>
-                            <div className="grid gap-2">
-                              <Label>Lead Medium</Label>
-                              <Input 
-                                value={contact.leadMedium ? contact.leadMedium.replace('_', ' ').charAt(0).toUpperCase() + contact.leadMedium.slice(1) : "Not specified"}
-                                disabled
-                                className="opacity-50 h-[42px]"
-                              />
+                          </div>
+                        ))}
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setDependents([...dependents, {
+                              firstName: '',
+                              middleName: '',
+                              lastName: '',
+                              relationship: '',
+                              age: ''
+                            }]);
+                          }}
+                          className="flex items-center gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add Dependent
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : step === 'summary' ? (
+                  <div className="flex flex-col">
+                    <div className="space-y-2 mb-6">
+                      <h2 className="text-2xl font-semibold">Your Prospect Summary</h2>
+                      <p className="text-gray-600">Review all information before creating the prospect.</p>
+                          </div>
+                          
+                    <div className="flex items-start justify-center flex-grow">
+                      <div className="w-full max-w-[600px] overflow-y-auto">
+                        <div className="grid divide-y border rounded-lg bg-card">
+                          {/* Personal Information */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Name</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('personal')}
+                              >
+                                Edit
+                              </Button>
                             </div>
-                            <div className="grid gap-2">
-                              <Label>Assignee</Label>
-                              <Input 
-                                value={contact.assigneeId ? 
+                            <p className="mt-1">{contact.firstName} {contact.middleName ? contact.middleName + ' ' : ''}{contact.lastName}</p>
+                          </div>
+                          
+                          {/* Contact Information */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Contact Information</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('personal')}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                            <div className="mt-1 space-y-1">
+                              <p>Email: {contact.email}</p>
+                              <p>Phone: {contact.phone || 'Not provided'}</p>
+                            </div>
+                          </div>
+
+                          {/* Lead Status */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Lead Status</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('lead_status')}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                            <div className="mt-1 space-y-1">
+                              <p>Status: {contact.leadStatus ? contact.leadStatus.charAt(0).toUpperCase() + contact.leadStatus.slice(1) : 'Not specified'}</p>
+                              <p>Source: {contact.leadSource || 'Not specified'}</p>
+                              <p>Medium: {contact.leadMedium ? contact.leadMedium.replace('_', ' ').charAt(0).toUpperCase() + contact.leadMedium.slice(1) : 'Not specified'}</p>
+                              <p>Assignee: {contact.assigneeId ? 
                                   companyMembers.find(member => member.id === contact.assigneeId) 
                                     ? `${companyMembers.find(member => member.id === contact.assigneeId)?.first_name} ${companyMembers.find(member => member.id === contact.assigneeId)?.last_name}`
                                     : "Not specified"
-                                  : "Not specified"}
-                                disabled
-                                className="opacity-50 h-[42px]"
-                              />
-                            </div>
-                          </div>
+                                : "Not specified"}</p>
                         </div>
                       </div>
 
-                      <Separator />
-
-                      {/* Selected Properties */}
-                      <div>
-                        <h3 className="text-lg font-semibold mb-4">Selected Property</h3>
+                          {/* Selected Property */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Selected Property</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('properties')}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                            <div className="mt-1">
                         {selectedUnitId ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {listings
+                                listings
                               .filter(listing => listing.units.unit_id === selectedUnitId)
                               .map(listing => (
-                                <div key={listing.listingid} className="border rounded-lg p-4 space-y-2">
-                                  <div className="relative w-full h-36">
+                                    <div key={listing.listingid} className="flex items-center gap-3">
+                                      <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
                                     {listing.units && listing.units.unit_images && listing.units.unit_images.length > 0 ? (
                                       <Image
                                         src={listing.units.unit_images[0]?.fileUrl || listing.units.unit_images[0]?.image_url || '/placeholder-property.jpg'}
                                         alt={`Unit ${listing.units.unit_name}`}
                                         fill
-                                        className="object-cover rounded-md"
+                                            className="object-cover"
                                       />
                                     ) : (
-                                      <div className="w-full h-full bg-gray-100 flex items-center justify-center rounded-md">
-                                        <span className="text-gray-400">No image</span>
+                                          <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                                            <span className="text-gray-400 text-xs">No image</span>
                                       </div>
                                     )}
                                   </div>
                                   <div>
-                                    <h4 className="font-medium">{listing.title || `${listing.units.properties.name} - Unit ${listing.units.unit_name}`}</h4>
-                                    <p className="text-sm text-gray-500">{listing.units.properties.address_line_1}</p>
-                                    <p className="text-sm text-gray-500">
-                                      {listing.units.properties.city}, {listing.units.properties.state} {listing.units.properties.zip}
-                                    </p>
+                                        <p className="font-medium">{listing.title || `${listing.units.properties.name} - Unit ${listing.units.unit_name}`}</p>
+                                        <p className="text-sm text-gray-500">{listing.units.properties.address_line_1}, {listing.units.properties.city}</p>
                                   </div>
                                 </div>
-                              ))}
-                          </div>
+                                  ))
                         ) : (
-                          <div className="text-center p-6 border border-dashed rounded-lg">
                             <p className="text-gray-500">No property selected</p>
-                          </div>
                         )}
                       </div>
-
-                      <Separator />
-
                     </div>
+                              {/* Residence */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Residence</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('residence')}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                            <div className="mt-1">
+                              {residence.noPastResidence === true ? (
+                                <p className="text-gray-500">No</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Current Address</p>
+                                    <p>{residence.address.street}</p>
+                                    <p>{residence.address.city}, {residence.address.province} {residence.address.postalCode}</p>
+                                  </div>
+                                  {residence.moveInDate && (
+                                    <div>
+                                      <p className="text-sm text-muted-foreground">Move-in Date</p>
+                                      <p>{new Date(residence.moveInDate).toLocaleDateString()}</p>
+                                    </div>
+                                  )}
+                                  {residence.monthlyRent && (
+                                    <div>
+                                      <p className="text-sm text-muted-foreground">Monthly Rent</p>
+                                      <p>${residence.monthlyRent}</p>
+                                    </div>
+                                  )}
+                                  {residence.landlordName && (
+                                    <div>
+                                      <p className="text-sm text-muted-foreground">Landlord</p>
+                                      <p>{residence.landlordName}</p>
+                                      {residence.landlordPhone && <p>Phone: {residence.landlordPhone}</p>}
+                                      {residence.landlordEmail && <p>Email: {residence.landlordEmail}</p>}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                                {/* Employment */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Employment</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('employment')}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                            <div className="mt-1">
+                              {employment.employerName ? (
+                                <div className="space-y-2">
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Employer</p>
+                                    <p>{employment.employerName}</p>
+                                  </div>
+                                  {employment.startDate && (
+                                    <div>
+                                      <p className="text-sm text-muted-foreground">Start Date</p>
+                                      <p>{new Date(employment.startDate).toLocaleDateString()}</p>
+                                    </div>
+                                  )}
+                                  {employment.monthlyIncome && (
+                                    <div>
+                                      <p className="text-sm text-muted-foreground">Monthly Income</p>
+                                      <p>${employment.monthlyIncome}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-gray-500">No employer specified</p>
+                              )}
+                            </div>
+                          </div>
+                               {/* Income */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Income</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('income')}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                            <div className="mt-1">
+                              {(() => {
+                                const totalIncome = [
+                                  income.employmentIncome,
+                                  income.governmentAssistance,
+                                  income.investments,
+                                  income.retirement,
+                                  income.childSupport,
+                                  income.alimony,
+                                  income.otherIncome
+                                ]
+                                .filter(Boolean)
+                                .reduce((sum, val) => sum + Number(val), 0);
 
-                    <div className="mt-12"></div>
-
+                                return totalIncome > 0 ? (
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Total Monthly Income</p>
+                                    <p>${totalIncome.toLocaleString()}</p>
+                                  </div>
+                                ) : (
+                                  <p className="text-gray-500">No income specified</p>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                               {/* Pets */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Pets</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('pets')}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                            <div className="mt-1">
+                              {!havePets ? (
+                                <p className="text-gray-500">No</p>
+                              ) : (
+                                <p>{pets.length} {pets.length === 1 ? 'pet' : 'pets'}</p>
+                              )}
+                            </div>
+                          </div>
+                          {/* Vehicles */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Vehicles</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('vehicles')}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                            <div className="mt-1">
+                              {!haveVehicles ? (
+                                <p className="text-gray-500">No</p>
+                              ) : (
+                                <p>{vehicles.length} {vehicles.length === 1 ? 'vehicle' : 'vehicles'}</p>
+                              )}
+                            </div>
+                          </div>
+                          {/* Dependents */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Dependents</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('dependents')}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                            <div className="mt-1">
+                              {!haveDependents ? (
+                                <p className="text-gray-500">No</p>
+                              ) : (
+                                <p>{dependents.length} {dependents.length === 1 ? 'dependent' : 'dependents'}</p>
+                              )}
+                            </div>
+                          </div>
                   </div>
                 </div>
               </div>
-            ) : null}
+                  </div>
+                ) : (
+                  // Other steps will be added in subsequent edits
+                  <div></div>
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
 
-        {/* Bottom navigation */}
-        <div className="flex justify-end gap-4 mt-auto">
-          <button 
-            className="px-4 py-2 border border-gray-300 rounded-md text-center w-32"
+        {/* Fixed Footer */}
+        <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-border bg-card rounded-b-xl">
+          <div className="flex justify-end gap-4 pr-6">
+            <Button
+              variant="outline"
             onClick={handleBack}
           >
-            {step === 'intro' ? 'Exit' : 'Back'}
-          </button>
-          <button 
-            className={`px-4 py-2 rounded-md text-center text-white w-32 ${
-              ((step === 'personal' && contact.firstName && contact.lastName && contact.email) || 
-               step !== 'personal')
-                ? 'bg-green-600 hover:bg-green-700'
-                : 'bg-gray-400 cursor-not-allowed'
-            }`}
-            onClick={step === 'summary' ? handleSubmit : handleNext}
-            disabled={
-              step === 'personal' && Boolean(!contact.firstName || !contact.lastName || !contact.email || emailError)
-            }
-          >
-            {step === 'summary' ? 'Submit' : step === 'properties' && !selectedUnitId ? 'Skip' : 'Next'}
-          </button>
+              {step === 'intro' ? 'Cancel' : 'Previous'}
+            </Button>
+            <Button onClick={handleNext}>
+              {step === 'summary' ? 'Create Prospect' : 'Next'}
+            </Button>
         </div>
+        </div>
+      </Card>
 
         <AlertDialog open={showSkipAlert} onOpenChange={setShowSkipAlert}>
           <AlertDialogContent>
@@ -2885,7 +2975,6 @@ export default function AddProspectPage() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Replace the AlertDialog with Dialog */}
         <Dialog open={showNewSourceDialog} onOpenChange={setShowNewSourceDialog}>
           <DialogContent>
             <DialogHeader>
@@ -2942,7 +3031,7 @@ export default function AddProspectPage() {
                       setShowNewSourceDialog(false);
                     } catch (error) {
                       console.error('Error adding lead source:', error);
-                      alert('Failed to add lead source');
+                      toast.error('Failed to add lead source');
                     }
                   }
                 }}
@@ -2952,7 +3041,6 @@ export default function AddProspectPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
     </div>
   );
 }

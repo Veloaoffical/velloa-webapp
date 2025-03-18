@@ -19,6 +19,7 @@ interface Tenant {
   role: string;
   email: string;
   phone: string;
+  property_id: string;
   unit_id: string | null;
   units: Unit | null;
 }
@@ -56,6 +57,7 @@ export async function GET() {
         role,
         email,
         phone,
+        property_id,
         unit_id,
         units (
           unit_name,
@@ -81,6 +83,7 @@ export async function GET() {
       email: tenant.email,
       phone: tenant.phone,
       role: tenant.role,
+      property_id: tenant.property_id,
       unit: tenant.units ? {
         unit_number: tenant.units.unit_name,
         property_name: tenant.units.properties.name

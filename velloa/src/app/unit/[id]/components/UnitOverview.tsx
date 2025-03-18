@@ -3,9 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ClipboardList, Users, StickyNote, Home, Bed, Bath, CircleDollarSign } from "lucide-react";
-import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { Skeleton } from "@/components/ui/skeleton";
 
 interface UnitPhoto {
   id: string;
@@ -30,110 +28,10 @@ interface UnitDetails {
 
 interface UnitOverviewProps {
   unitDetails: UnitDetails;
-  unitId: string;
+  photos: UnitPhoto[];
 }
 
-export function UnitOverview({ unitDetails, unitId }: UnitOverviewProps) {
-  const [photos, setPhotos] = useState<UnitPhoto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const fetchPhotos = async () => {
-      try {
-        const response = await fetch(`/api/unit/${unitId}/photos`);
-        if (!response.ok) throw new Error('Failed to fetch photos');
-        const data = await response.json();
-        
-        if (mounted) {
-          setPhotos(data);
-          setError(null);
-        }
-      } catch (err) {
-        if (mounted) {
-          setError(err instanceof Error ? err.message : 'Failed to load photos');
-          console.error('Error fetching photos:', err);
-        }
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchPhotos();
-
-    return () => {
-      mounted = false;
-    };
-  }, [unitId]);
-
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        {/* Quick Actions Skeleton */}
-        <Card>
-          <CardContent className="p-6">
-            <Skeleton className="h-6 w-32 mb-2" />
-            <Skeleton className="h-4 w-48 mb-4" />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-10" />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Statistics Cards Skeleton */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i}>
-              <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-                <Skeleton className="h-6 w-6 mb-2" />
-                <Skeleton className="h-4 w-24 mb-1" />
-                <Skeleton className="h-5 w-16" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Photos and Unit Details Section Skeleton */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Photos Section Skeleton */}
-          <Card>
-            <CardContent className="p-6">
-              <Skeleton className="h-6 w-24 mb-4" />
-              <div className="grid grid-cols-1 md:grid-cols-[2fr,1fr] gap-2">
-                <Skeleton className="h-[300px] rounded-lg" />
-                <div className="hidden md:flex flex-col gap-2">
-                  <Skeleton className="h-[146px] rounded-lg" />
-                  <Skeleton className="h-[146px] rounded-lg" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Unit Details Skeleton */}
-          <Card>
-            <CardContent className="p-6">
-              <Skeleton className="h-6 w-24 mb-4" />
-              <div className="grid grid-cols-2 gap-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="space-y-2">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-5 w-16" />
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
+export function UnitOverview({ unitDetails, photos }: UnitOverviewProps) {
   return (
     <div className="space-y-6">
       {/* Quick Actions */}
@@ -202,9 +100,7 @@ export function UnitOverview({ unitDetails, unitId }: UnitOverviewProps) {
           <CardContent className="p-6">
             <h2 className="font-semibold mb-4">Photos</h2>
             <div className="grid grid-cols-1 md:grid-cols-[2fr,1fr] gap-2">
-              {error ? (
-                <div className="text-red-500">{error}</div>
-              ) : photos.length === 0 ? (
+              {photos.length === 0 ? (
                 <>
                   {/* Empty state main image */}
                   <div className="relative h-[300px] rounded-lg overflow-hidden bg-muted" />
@@ -221,7 +117,7 @@ export function UnitOverview({ unitDetails, unitId }: UnitOverviewProps) {
                   <div className="relative h-[300px] rounded-lg overflow-hidden group/photos">
                     {photos[0] ? (
                       <Image
-                        src={photos.find(photo => photo.favorite)?.fileUrl || photos[0].fileUrl}
+                        src={photos.find(photo => photo.favorite || photo.isFavorite)?.fileUrl || photos[0].fileUrl}
                         alt="Main unit view"
                         fill
                         className="object-cover"

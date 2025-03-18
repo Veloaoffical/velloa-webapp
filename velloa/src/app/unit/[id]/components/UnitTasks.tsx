@@ -29,6 +29,7 @@ interface Task {
   request_type: string | null;
   task_type: string | null;
   tenant: string | null;
+  tenant_id: string | null;
   property?: {
     name: string;
   } | null;
@@ -42,7 +43,14 @@ interface Task {
       last_name: string;
     };
   } | null;
-  role: string;
+  role: 'task' | 'tenant_request' | 'work_order' | 'owner_request';
+  vendor_id: string | null;
+  vendor?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    company: string;
+  } | null;
 }
 
 interface UnitTasksProps {
@@ -50,11 +58,12 @@ interface UnitTasksProps {
   propertyId: string;
 }
 
-async function getUnitTasks(unitId: string): Promise<Task[]> {
+async function getUnitTasks(unitId: string, propertyId: string): Promise<Task[]> {
   const supabase = await createClient();
   
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   if (userError || !user) {
+    console.error('Auth error:', userError);
     return [];
   }
 
@@ -82,53 +91,91 @@ async function getUnitTasks(unitId: string): Promise<Task[]> {
     return [];
   }
 
-  // Fetch all tasks for this unit with their related details
-  const { data: tasks, error: tasksError } = await supabase
-    .from('maintenance_requests')
-    .select(`
-      id,
-      subject,
-      description,
-      status,
-      priority,
-      due_date,
-      created_at,
-      assignees,
-      created_by,
-      property_id,
-      unit_id,
-      request_type,
-      task_type,
-      tenant,
-      role,
-      nano_id,
-      property:properties!property_id (
-        name
-      ),
-      unit:units!maintenance_requests_unit_id_fkey (
-        unit_name
-      ),
-      assignee:company_members!maintenance_requests_assignees_fkey (
-        id,
-        profile:profiles (
-          first_name,
-          last_name
-        )
-      )
-    `)
-    .eq('unit_id', unitId)
-    .returns<Task[]>();
+  try {
+    // First, let's verify if the property exists
+    const { data: property, error: propertyError } = await supabase
+      .from('properties')
+      .select('id')
+      .eq('id', propertyId)
+      .single();
 
-  if (tasksError) {
-    console.error('Error fetching tasks:', tasksError);
+    if (propertyError || !property) {
+      console.error('Error verifying property access:', propertyError);
+      return [];
+    }
+    
+    // Then verify if the unit exists and if the user has access to it
+    const { data: unit, error: unitError } = await supabase
+      .from('units')
+      .select('unit_id')
+      .eq('unit_id', unitId)
+      .single();
+
+    if (unitError || !unit) {
+      console.error('Error verifying unit access:', unitError);
+      return [];
+    }
+
+    // Now fetch the tasks with a simpler query first
+    const { data: tasks, error: tasksError } = await supabase
+      .from('maintenance_requests')
+      .select(`
+        id,
+        subject,
+        description,
+        status,
+        priority,
+        due_date,
+        created_at,
+        assignees,
+        created_by,
+        property_id,
+        unit_id,
+        request_type,
+        task_type,
+        tenant_id,
+        tenant:tenant_id,
+        role,
+        nano_id,
+        vendor_id,
+        property:properties!property_id (
+          name
+        ),
+        unit:units!maintenance_requests_unit_id_fkey (
+          unit_name
+        ),
+        assignee:company_members!maintenance_requests_assignees_fkey (
+          id,
+          profile:profiles (
+            first_name,
+            last_name
+          )
+        ),
+        vendor:people!maintenance_requests_vendor_id_fkey (
+          id,
+          first_name,
+          last_name,
+          company
+        )
+      `)
+      .eq('unit_id', unitId)
+      .eq('property_id', propertyId)
+      .returns<Task[]>();
+
+    if (tasksError) {
+      console.error('Error fetching tasks:', tasksError);
+      return [];
+    }
+
+    return tasks || [];
+  } catch (error) {
+    console.error('Unexpected error in getUnitTasks:', error);
     return [];
   }
-
-  return tasks || [];
 }
 
 export async function UnitTasks({ unitId, propertyId }: UnitTasksProps) {
-  const tasks = await getUnitTasks(unitId);
+  const tasks = await getUnitTasks(unitId, propertyId);
 
   return (
     <Card>
@@ -197,19 +244,19 @@ export async function UnitTasks({ unitId, propertyId }: UnitTasksProps) {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="all">
-            <TaskTable tasks={tasks} />
+            <TaskTable tasks={tasks} currentTab="all" />
           </TabsContent>
           <TabsContent value="task">
-            <TaskTable tasks={tasks.filter(task => task.role === 'task')} />
+            <TaskTable tasks={tasks.filter(task => task.role === 'task')} currentTab="task" />
           </TabsContent>
           <TabsContent value="tenant_request">
-            <TaskTable tasks={tasks.filter(task => task.role === 'tenant_request')} />
+            <TaskTable tasks={tasks.filter(task => task.role === 'tenant_request')} currentTab="tenant_request" />
           </TabsContent>
           <TabsContent value="work_order">
-            <TaskTable tasks={tasks.filter(task => task.role === 'work_order' || task.role === 'owner_request')} />
+            <TaskTable tasks={tasks.filter(task => task.role === 'work_order' || task.role === 'owner_request')} currentTab="work_order" />
           </TabsContent>
           <TabsContent value="owner_request">
-            <TaskTable tasks={tasks.filter(task => task.role === 'owner_request')} />
+            <TaskTable tasks={tasks.filter(task => task.role === 'owner_request')} currentTab="owner_request" />
           </TabsContent>
         </Tabs>
       </CardContent>

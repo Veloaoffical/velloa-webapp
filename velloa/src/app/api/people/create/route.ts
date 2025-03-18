@@ -40,7 +40,15 @@ export async function POST(request: Request) {
     }
 
     const data = await request.json();
-    const { contact, residence, pets, vehicles, dependents, employment, income, role, unit_id } = data;
+    const { contact, residence, pets, vehicles, dependents, employment, income, role, unit_id, property_id } = data;
+
+    // Debug logging
+    console.log('Received data for prospect creation:', { 
+      unit_id, 
+      property_id,
+      hasUnitId: Boolean(unit_id),
+      hasPropertyId: Boolean(property_id)
+    });
 
     // Prepare the base insert data
     const insertData = {
@@ -65,6 +73,12 @@ export async function POST(request: Request) {
       lead_medium: contact.leadMedium || null,
       assignee_id: contact.assigneeId || null,
       expected_move_in_date: contact.expected_move_in_date || null,
+
+      // Store property information as JSONB - ensure it's always saved
+      prospect_property: {
+        property_id: property_id || null,
+        unit_id: unit_id || null
+      },
 
       // Store employment as JSON
       employment: {
@@ -130,6 +144,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Debug logging
+    console.log('Created prospect with data:', { 
+      id: prospectData.id,
+      unit_id: prospectData.unit_id,
+      prospect_property: prospectData.prospect_property
+    });
+
     // Get company name
     const { data: companyData, error: companyNameError } = await supabase
       .from('companies')
@@ -144,7 +165,25 @@ export async function POST(request: Request) {
     // Generate a unique ID for the application
     const applicationId = crypto.randomUUID();
 
-    // Send welcome email
+    // Generate a sign-in link for the prospect using OTP instead of admin.generateLink
+    const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+      email: contact.email,
+      options: {
+        emailRedirectTo: `http://localhost:3001/update-prospect?id=${prospectData.id}`,
+        data: {
+          prospect_id: prospectData.id,
+          company_id: companyMember.company_id,
+          role: 'prospect'
+        }
+      }
+    });
+
+    if (magicLinkError) {
+      console.error('Error generating sign-in link:', magicLinkError);
+      // Continue with email sending even if link generation fails
+    }
+
+    // Send welcome email with magic link
     try {
       await resend.emails.send({
         from: 'Velloa <onboarding@velloa.ca>',
@@ -153,7 +192,8 @@ export async function POST(request: Request) {
         react: ApplicationSubmittedEmail({
           name: `${contact.firstName} ${contact.lastName}`,
           confirmationNumber: applicationId,
-          CompanyName: companyData?.name || 'Velloa'
+          CompanyName: companyData?.name || 'Velloa',
+          magicLink: `http://localhost:3001/update-prospect?id=${prospectData.id}` // Fallback URL if OTP link fails
         }) as React.ReactElement,
         headers: {
           'X-Entity-Ref-ID': applicationId,

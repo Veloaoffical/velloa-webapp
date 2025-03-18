@@ -1,11 +1,10 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
 
     // First get the unit details to ensure the unit exists
     const { data: unitDetails, error: unitError } = await supabase
@@ -87,7 +86,32 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
 export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
+    
+    // Verify user is authenticated and is a company member
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return new NextResponse(
+        JSON.stringify({ error: 'Authentication required' }),
+        { status: 401 }
+      )
+    }
+    
+    // Check if the user is a company member
+    const { data: companyMember, error: memberError } = await supabase
+      .from('company_members')
+      .select('id')
+      .eq('id', user.id)
+      .single()
+      
+    if (memberError || !companyMember) {
+      return new NextResponse(
+        JSON.stringify({ error: 'Only company members can update listing details' }),
+        { status: 403 }
+      )
+    }
+    
     const body = await request.json()
 
     // Log the request body for debugging
@@ -119,12 +143,12 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
     if (unitError) {
       console.error('Error fetching unit details:', unitError)
       return new NextResponse(
-        JSON.stringify({ error: 'Error fetching unit details' }),
+        JSON.stringify({ error: 'Error fetching unit details', details: unitError }),
         { status: 500 }
       )
     }
 
-    // Prepare amenities object
+    // Prepare amenities object including favorite_photo
     const amenities = {
       included_in_rent: body.included_in_rent || {},
       interior_appliances: body.interior_appliances || {},
@@ -132,7 +156,8 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
       cooling: body.cooling || {},
       laundry: body.laundry || {},
       parking: body.parking || {},
-      exterior: body.exterior || {}
+      exterior: body.exterior || {},
+      favorite_photo: body.favorite_photo || null
     }
 
     let result;

@@ -1,7 +1,7 @@
-'use client';
+"use client"
 
 import { useState } from 'react';
-import { User, ChevronRight, Users, ChevronDown, Home, Building2, Wrench, UserPlus, Mail, Phone, MoreHorizontal, Check, Copy, Share2, CalendarIcon, Send, BookOpenText, CircleCheck } from "lucide-react";
+import { User, ChevronRight, Users, ChevronDown, Home, Building2, Wrench, UserPlus, Mail, Phone, MoreHorizontal, Check, Copy, Share2, CalendarIcon, Send, BookOpenText, CircleCheck, Plus, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,12 +23,9 @@ import {
 } from "@/components/ui/table";
 import {
   Card,
-  CardContent,
-  CardHeader,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  ColumnDef,
   ColumnFiltersState,
   SortingState,
   flexRender,
@@ -47,6 +44,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { format } from 'date-fns';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+} from "@/components/ui/pagination";
 
 interface Person {
   id: string;
@@ -65,7 +68,7 @@ interface Person {
   } | null;
   status: string | null;
   move_in_date: string | null;
-  assignee_name?: string;
+  assignee_id: string | null;
   insurance?: {
     coverage: string;
     provider: string;
@@ -76,7 +79,7 @@ interface Person {
   open_balance?: number;
 }
 
-interface PeopleTableProps {
+interface PeopleClientProps {
   initialPeople: {
     tenants: Person[];
     owners: Person[];
@@ -100,6 +103,8 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const router = useRouter();
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   const isWithinLast14Days = (dateString: string) => {
     const date = new Date(dateString);
@@ -108,11 +113,11 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
     return differenceInDays <= 14;
   };
 
-  const columns: ColumnDef<Person>[] = [
+  const columns = [
     {
       accessorKey: "name",
       header: "Name",
-      cell: ({ row }) => {
+      cell: ({ row }: { row: Row<Person> }) => {
         const isNew = isWithinLast14Days(row.original.created_at);
         return (
           <div className="flex items-center gap-2">
@@ -174,7 +179,7 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
     {
       accessorKey: "contact",
       header: "Contact Info",
-      cell: ({ row }) => (
+      cell: ({ row }: { row: Row<Person> }) => (
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2 text-sm">
             <Mail className="h-4 w-4 text-muted-foreground" />
@@ -254,7 +259,7 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                {row.original.assignee_name || "Unassigned"}
+                {row.original.assignee_id || "Unassigned"}
               </span>
             </div>
           );
@@ -375,18 +380,24 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
     state: {
       sorting,
       columnFilters,
+      pagination: {
+        pageIndex: currentPage - 1,
+        pageSize,
+      },
     },
   });
 
+  const totalPages = Math.ceil(data.length / pageSize);
+
   return (
     <>
-      <div className="rounded-md border">
+      <div className="rounded-md">
         <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
+          <TableHeader className="bg-muted">
+            <TableRow className="hover:bg-transparent border-0">
+              {table.getHeaderGroups().map((headerGroup) => (
+                headerGroup.headers.map((header) => (
+                  <TableHead key={header.id} className="font-semibold text-foreground">
                     {header.isPlaceholder
                       ? null
                       : flexRender(
@@ -394,9 +405,9 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
                           header.getContext()
                         )}
                   </TableHead>
-                ))}
-              </TableRow>
-            ))}
+                ))
+              ))}
+            </TableRow>
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (
@@ -427,39 +438,71 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-end space-x-2 py-4">
-        <div className="space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </Button>
-        </div>
+      <div className="flex justify-end mt-4">
+        <Pagination className="justify-end">
+          <PaginationContent className="gap-3">
+            <PaginationItem>
+              <PaginationLink
+                className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                aria-label="Go to previous page"
+                aria-disabled={currentPage === 1}
+              >
+                <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+              </PaginationLink>
+            </PaginationItem>
+            <PaginationItem>
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                Page <span className="text-foreground">{currentPage}</span> of{" "}
+                <span className="text-foreground">{totalPages || 1}</span>
+              </p>
+            </PaginationItem>
+            <PaginationItem>
+              <PaginationLink
+                className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                aria-label="Go to next page"
+                aria-disabled={currentPage === totalPages}
+              >
+                <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+              </PaginationLink>
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
       </div>
     </>
   );
 }
 
-export function PeopleTable({ initialPeople }: PeopleTableProps) {
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+export function PeopleClient({ initialPeople }: PeopleClientProps) {
   const [copied, setCopied] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const allPeople = [
-    ...initialPeople.tenants,
-    ...initialPeople.owners,
-    ...initialPeople.vendors,
-    ...initialPeople.prospects
+  // Filter people based on search query
+  const filteredPeople = {
+    tenants: initialPeople.tenants.filter(person => 
+      `${person.first_name} ${person.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (person.email && person.email.toLowerCase().includes(searchQuery.toLowerCase()))
+    ),
+    owners: initialPeople.owners.filter(person => 
+      `${person.first_name} ${person.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (person.email && person.email.toLowerCase().includes(searchQuery.toLowerCase()))
+    ),
+    vendors: initialPeople.vendors.filter(person => 
+      `${person.first_name} ${person.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (person.email && person.email.toLowerCase().includes(searchQuery.toLowerCase()))
+    ),
+    prospects: initialPeople.prospects.filter(person => 
+      `${person.first_name} ${person.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (person.email && person.email.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
+  };
+
+  const filteredAllPeople = [
+    ...filteredPeople.tenants,
+    ...filteredPeople.owners,
+    ...filteredPeople.vendors,
+    ...filteredPeople.prospects
   ];
 
   const handleCopy = () => {
@@ -489,110 +532,130 @@ export function PeopleTable({ initialPeople }: PeopleTableProps) {
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        <Input
-          placeholder="Search people..."
-          value={(columnFilters[0]?.value as string) ?? ""}
-          onChange={(event) =>
-            setColumnFilters([{
-              id: "name",
-              value: event.target.value,
-            }])
-          }
-          className="max-w-sm"
-        />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button>
-              Add Person
-              <ChevronDown
-                className="-me-1 ms-2 opacity-60"
-                size={16}
-                strokeWidth={2}
-                aria-hidden="true"
+    <div className="p-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-4xl font-semibold tracking-tight mb-6">People</h1>
+      </div>
+
+      <Card>
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="relative w-[300px]">
+              <Input
+                placeholder="Search people..."
+                className="w-full"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <div className="flex items-center justify-between pr-2 relative">
-              <Link href="/people/add-prospect" className="flex items-center hover:bg-accent hover:text-accent-foreground px-2 py-1.5 text-sm flex-1">
-                <UserPlus size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
-                New Prospect
-              </Link>
-              <div className="flex items-center h-[26px]">
-                <div className="h-4 w-[1px] bg-border mx-2" />
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-accent">
-                      <Share2 size={16} strokeWidth={2} className="opacity-60" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={handleCopy}>
-                      <Copy size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
-                      Copy Link
-                      {copied && <Check size={16} className="ml-2 text-green-500" />}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleEmailShare}>
-                      <Mail size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
-                      Share via Email
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleSystemShare}>
-                      <MoreHorizontal size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
-                      Share
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
             </div>
-            <DropdownMenuItem asChild>
-              <Link href="/people/add-owner" className="flex items-center">
-                <Building2 size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
-                New Owner
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/people/add-lease" className="flex items-center">
-                <Home size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
-                New Tenant
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/people/add-vendor" className="flex items-center">
-                <Wrench size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
-                New Vendor
-              </Link>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </CardHeader>
-      <CardContent>
-        <Tabs defaultValue="all" className="w-full">
-          <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="tenants">Tenants</TabsTrigger>
-            <TabsTrigger value="owners">Owners</TabsTrigger>
-            <TabsTrigger value="vendors">Vendors</TabsTrigger>
-            <TabsTrigger value="prospects">Prospects</TabsTrigger>
-          </TabsList>
-          <TabsContent value="all">
-            <DataTable data={allPeople} currentTab="all" />
-          </TabsContent>
-          <TabsContent value="tenants">
-            <DataTable data={initialPeople.tenants} currentTab="tenants" />
-          </TabsContent>
-          <TabsContent value="owners">
-            <DataTable data={initialPeople.owners} currentTab="owners" />
-          </TabsContent>
-          <TabsContent value="vendors">
-            <DataTable data={initialPeople.vendors} currentTab="vendors" />
-          </TabsContent>
-          <TabsContent value="prospects">
-            <DataTable data={initialPeople.prospects} currentTab="prospects" />
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="bg-primary hover:bg-primary/90">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Person
+                  <ChevronDown
+                    className="-me-1 ms-2 opacity-60"
+                    size={16}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <div className="flex items-center justify-between pr-2 relative">
+                  <Link href="/people/add-prospect" className="flex items-center hover:bg-accent hover:text-accent-foreground px-2 py-1.5 text-sm flex-1">
+                    <UserPlus size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
+                    New Prospect
+                  </Link>
+                  <div className="flex items-center h-[26px]">
+                    <div className="h-4 w-[1px] bg-border mx-2" />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-accent">
+                          <Share2 size={16} strokeWidth={2} className="opacity-60" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={handleCopy}>
+                          <Copy size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
+                          Copy Link
+                          {copied && <Check size={16} className="ml-2 text-green-500" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleEmailShare}>
+                          <Mail size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
+                          Share via Email
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleSystemShare}>
+                          <MoreHorizontal size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
+                          Share
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+                <DropdownMenuItem asChild>
+                  <Link href="/people/add-owner" className="flex items-center">
+                    <Building2 size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
+                    New Owner
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/people/add-lease" className="flex items-center">
+                    <Home size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
+                    New Tenant
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/people/add-vendor" className="flex items-center">
+                    <Wrench size={16} strokeWidth={2} className="opacity-60 mr-2" aria-hidden="true" />
+                    New Vendor
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <Tabs defaultValue="all" className="w-full">
+            <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
+              <TabsTrigger value="all" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                All
+              </TabsTrigger>
+              <TabsTrigger value="tenants" className="flex items-center gap-2">
+                <Home className="h-4 w-4" />
+                Tenants
+              </TabsTrigger>
+              <TabsTrigger value="owners" className="flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Owners
+              </TabsTrigger>
+              <TabsTrigger value="vendors" className="flex items-center gap-2">
+                <Wrench className="h-4 w-4" />
+                Vendors
+              </TabsTrigger>
+              <TabsTrigger value="prospects" className="flex items-center gap-2">
+                <UserPlus className="h-4 w-4" />
+                Prospects
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="all">
+              <DataTable data={filteredAllPeople} currentTab="all" />
+            </TabsContent>
+            <TabsContent value="tenants">
+              <DataTable data={filteredPeople.tenants} currentTab="tenants" />
+            </TabsContent>
+            <TabsContent value="owners">
+              <DataTable data={filteredPeople.owners} currentTab="owners" />
+            </TabsContent>
+            <TabsContent value="vendors">
+              <DataTable data={filteredPeople.vendors} currentTab="vendors" />
+            </TabsContent>
+            <TabsContent value="prospects">
+              <DataTable data={filteredPeople.prospects} currentTab="prospects" />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </Card>
+    </div>
   );
 } 

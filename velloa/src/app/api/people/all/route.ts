@@ -18,6 +18,7 @@ interface Person {
   last_name: string;
   company: string | null;
   role: string;
+  property_id: string;
   unit_id: string | null;
   units: Unit | null;
 }
@@ -54,6 +55,7 @@ export async function GET() {
         last_name,
         role,
         company,
+        property_id,
         unit_id,
         units (
           unit_name,
@@ -78,6 +80,7 @@ export async function GET() {
       last_name: person.last_name,
       company: person.company,
       role: person.role,
+      property_id: person.property_id,
       unit: person.units ? {
         unit_number: person.units.unit_name,
         property_name: person.units.properties.name

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { MoreHorizontal, Search, StickyNote, Plus, Upload, X } from "lucide-react"
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback } from "react"
 import { useDropzone } from "react-dropzone"
 
 interface Note {
@@ -22,36 +22,18 @@ interface Note {
 
 interface UnitNotesProps {
   unitId: string
+  notes: Note[]
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function UnitNotes({ unitId }: UnitNotesProps) {
+export function UnitNotes({ unitId, notes: initialNotes }: UnitNotesProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [files, setFiles] = useState<File[]>([])
   const [noteTitle, setNoteTitle] = useState("")
   const [noteContent, setNoteContent] = useState("")
   const [tags, setTags] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [notes, setNotes] = useState<Note[]>([])
-
-  const fetchNotes = async () => {
-    try {
-      const response = await fetch(`/api/unit/${unitId}/notes`, {
-        credentials: 'include',
-      })
-      if (!response.ok) {
-        throw new Error('Failed to fetch notes')
-      }
-      const data = await response.json()
-      setNotes(data)
-    } catch (error) {
-      console.error('Error fetching notes:', error)
-    }
-  }
-
-  useEffect(() => {
-    fetchNotes()
-  }, [unitId])
+  const [notes, setNotes] = useState<Note[]>(initialNotes)
+  const [searchQuery, setSearchQuery] = useState("")
 
   const handleSave = async () => {
     try {
@@ -74,15 +56,22 @@ export function UnitNotes({ unitId }: UnitNotesProps) {
         throw new Error(errorData.error || 'Failed to save note')
       }
 
+      // Fetch updated notes
+      const notesResponse = await fetch(`/api/unit/${unitId}/notes`, {
+        credentials: 'include',
+      })
+      if (!notesResponse.ok) {
+        throw new Error('Failed to fetch notes')
+      }
+      const notesData = await notesResponse.json()
+      setNotes(notesData)
+
       // Reset form
       setNoteTitle("")
       setNoteContent("")
       setTags([])
       setFiles([])
       setIsDialogOpen(false)
-      
-      // Refresh notes
-      fetchNotes()
     } catch (error) {
       console.error('Error saving note:', error)
     } finally {
@@ -104,13 +93,24 @@ export function UnitNotes({ unitId }: UnitNotesProps) {
     }
   })
 
+  // Filter notes based on search query
+  const filteredNotes = notes.filter(note => 
+    note.note_title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    note.note.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   return (
     <>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search notes..." className="pl-8" />
+            <Input 
+              placeholder="Search notes..." 
+              className="pl-8" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
           <Button className="gap-2" onClick={() => setIsDialogOpen(true)}>
             <Plus className="h-4 w-4" />
@@ -129,7 +129,7 @@ export function UnitNotes({ unitId }: UnitNotesProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {notes.map((note) => (
+              {filteredNotes.map((note) => (
                 <TableRow key={note.id}>
                   <TableCell>
                     <div className="flex items-center gap-2">

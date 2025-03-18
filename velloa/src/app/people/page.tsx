@@ -1,84 +1,45 @@
-'use server';
-
-import { redirect } from 'next/navigation';
-import { PeopleTable } from './people-table';
 import { createClient } from '@/utils/supabase/server';
+import { Suspense } from 'react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
+import { PeopleClient } from './people-client';
 
-interface Unit {
-  unit_name: string;
-  properties: {
-    name: string;
-  } | null;
+function ErrorAlert({ error }: { error: Error }) {
+  return (
+    <Alert variant="destructive">
+      <AlertCircle className="h-4 w-4" />
+      <AlertTitle>Error</AlertTitle>
+      <AlertDescription>
+        {error.message}
+      </AlertDescription>
+    </Alert>
+  )
 }
 
-interface PersonFromDB {
-  id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone: string;
-  created_at: string;
-  company_id: string;
-  property_id: string;
-  unit_id: string | null;
-  role: string;
-  status: string | null;
-  units: Unit | null;
-  move_in_date: string | null;
-  insurance: {
-    coverage: string;
-    provider: string;
-    policy_number: string;
-    effective_date: string;
-    expiration_date: string;
-  } | null;
-}
+async function fetchPeople() {
+  const supabase = await createClient();
 
-async function getPeople() {
   try {
-    const supabase = await createClient();
-    
+    // Get the authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (!user || userError) {
-      redirect('/login');
-    }
-
-    // Get the user's profile
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      console.error('Error fetching profile:', profileError);
-      return {
-        tenants: [],
-        owners: [],
-        vendors: [],
-        prospects: []
-      };
+    if (userError || !user) {
+      console.error('Auth error:', userError);
+      throw new Error('Unauthorized');
     }
 
     // Get the company membership
     const { data: companyMember, error: companyError } = await supabase
       .from('company_members')
       .select('company_id')
-      .eq('id', profile.id)
+      .eq('id', user.id)
       .single();
 
     if (companyError || !companyMember) {
-      console.error('Error fetching company member:', companyError);
-      return {
-        tenants: [],
-        owners: [],
-        vendors: [],
-        prospects: []
-      };
+      console.error('Company error:', companyError);
+      throw new Error('Failed to get company');
     }
 
-    // Fetch all people with their roles and unit details
+    // Fetch people with role-based filtering
     const { data: people, error: peopleError } = await supabase
       .from('people')
       .select(`
@@ -89,70 +50,131 @@ async function getPeople() {
         phone,
         created_at,
         company_id,
-        move_in_date,
         property_id,
-        assignee_id,
-        insurance,
         unit_id,
         role,
         status,
-        units (
-          unit_name,
-          properties (
-            name
-          )
-        )
+        move_in_date,
+        assignee_id
       `)
-      .eq('company_id', companyMember.company_id)
-      .returns<PersonFromDB[]>();
+      .eq('company_id', companyMember.company_id);
 
     if (peopleError) {
       console.error('Error fetching people:', peopleError);
-      return {
-        tenants: [],
-        owners: [],
-        vendors: [],
-        prospects: []
-      };
+      throw new Error(`Failed to fetch people: ${peopleError.message}`);
     }
 
-    // Transform the data to include unit details
-    const transformedPeople = people.map(person => ({
-      ...person,
-      unit: person.units ? {
-        unit_number: person.units.unit_name,
-        property_name: person.units.properties?.name
-      } : null
-    }));
+    // Fetch units for people with unit_id
+    const unitIds = people
+      ?.filter(person => person.unit_id)
+      .map(person => person.unit_id);
 
-    // Categorize people by their roles
-    const categorizedPeople = {
-      tenants: transformedPeople.filter(person => person.role === 'tenant'),
-      owners: transformedPeople.filter(person => person.role === 'owner'),
-      vendors: transformedPeople.filter(person => person.role === 'vendor'),
-      prospects: transformedPeople.filter(person => person.role === 'prospect')
-    };
+    interface Unit {
+      unit_id: string;
+      unit_name: string;
+      property_id: string;
+    }
+    
+    let units: Unit[] = [];
+    let unitsError = null;
+    
+    if (unitIds && unitIds.length > 0) {
+      const unitsResponse = await supabase
+        .from('units')
+        .select('unit_id, unit_name, property_id')
+        .in('unit_id', unitIds as string[]);
+      
+      units = unitsResponse.data || [];
+      unitsError = unitsResponse.error;
+    }
 
-    return categorizedPeople;
+    if (unitsError) {
+      console.error('Error fetching units:', unitsError);
+    }
 
-  } catch (error) {
-    console.error('Error in getPeople:', error);
+    // Fetch properties for units
+    const propertyIds = units
+      ?.map(unit => unit.property_id)
+      .filter(Boolean);
+
+    interface Property {
+      id: string;
+      name: string;
+    }
+    
+    let properties: Property[] = [];
+    let propertiesError = null;
+    
+    if (propertyIds && propertyIds.length > 0) {
+      const propertiesResponse = await supabase
+        .from('properties')
+        .select('id, name')
+        .in('id', propertyIds as string[]);
+      
+      properties = propertiesResponse.data || [];
+      propertiesError = propertiesResponse.error;
+    }
+
+    if (propertiesError) {
+      console.error('Error fetching properties:', propertiesError);
+    }
+
+    // Fetch vendor insurance information
+    // Skipping vendor insurance and balances as those tables don't exist
+    
+    // Create lookup maps
+    const unitsMap = new Map(units?.map(unit => [unit.unit_id, unit]));
+    const propertiesMap = new Map(properties?.map(property => [property.id, property]));
+
+    // Combine the data
+    const enhancedPeople = people?.map(person => {
+      const unit = person.unit_id ? unitsMap.get(person.unit_id) : null;
+      const property = unit?.property_id ? propertiesMap.get(unit.property_id) : null;
+
+      return {
+        ...person,
+        unit: unit ? {
+          unit_number: unit.unit_name,
+          property_name: property?.name
+        } : null,
+        insurance: null,
+        open_balance: 0,
+        assignee_name: person.assignee_id || null
+      };
+    }) || [];
+
+    // Categorize people by role
+    const tenants = enhancedPeople.filter(person => person.role === 'tenant');
+    const owners = enhancedPeople.filter(person => person.role === 'owner');
+    const vendors = enhancedPeople.filter(person => person.role === 'vendor');
+    const prospects = enhancedPeople.filter(person => person.role === 'prospect');
+
     return {
-      tenants: [],
-      owners: [],
-      vendors: [],
-      prospects: []
+      tenants,
+      owners,
+      vendors,
+      prospects
     };
+  } catch (error) {
+    console.error('Unexpected error in fetchPeople:', error);
+    throw error;
   }
 }
 
 export default async function PeoplePage() {
-  const people = await getPeople();
-
-  return (
-    <div className="p-6">
-      <h1 className="text-4xl font-semibold mb-6">People</h1>
-      <PeopleTable initialPeople={people} />
-    </div>
-  );
+  try {
+    const people = await fetchPeople();
+    
+    return (
+      <Suspense fallback={<div className="p-6">Loading people...</div>}>
+        <PeopleClient initialPeople={people} />
+      </Suspense>
+    );
+  } catch (error) {
+    return (
+      <div className="p-6">
+        <ErrorAlert error={error instanceof Error ? error : new Error('An unknown error occurred')} />
+      </div>
+    );
+  }
 }

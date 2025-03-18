@@ -18,12 +18,14 @@ import {
     address?: string;
     confirmationNumber?: string;
     CompanyName?: string;
+    magicLink?: string;
   }
   
   export const ApplicationSubmittedEmail = ({
     name = "No Name",
     CompanyName = "Velloa",
     confirmationNumber = "#123456",
+    magicLink = "https://www.velloa.ca",
   }: ApplicationSubmittedEmailProps) => {
     return (
       <Html>
@@ -51,8 +53,8 @@ import {
                 We&apos;re excited about your interest in our properties. Your next step is to complete the application process, which will help us get to know you better as a potential resident.
               </Text>
   
-              <Button style={button} href="https://www.velloa.ca">
-                Start Application
+              <Button style={button} href={magicLink}>
+                Access Application
               </Button>
   
               <Text style={text}>
@@ -65,6 +67,10 @@ import {
                 <li style={listItem}>Background check</li>
                 <li style={listItem}>Previous rental history</li>
               </ul>
+  
+              <Text style={text}>
+                This secure link will expire in 24 hours. If you didn&apos;t request this link, please ignore this email.
+              </Text>
   
               <Text style={confirmationText}>
                 Application ID: {confirmationNumber}

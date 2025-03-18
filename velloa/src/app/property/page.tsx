@@ -1,171 +1,227 @@
-'use server';
-
-import { redirect } from 'next/navigation';
-import { PropertyTable } from './property-table';
 import { createClient } from '@/utils/supabase/server';
+import { Suspense } from 'react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
+import { PropertyClient } from './property-client';
 
-interface Property {
-  id: string;
-  propertyName: string;
-  propertyType: string;
-  propertyKind: string;
-  address: string;
-  numberOfUnits: number;
+function ErrorAlert({ error }: { error: Error }) {
+  return (
+    <Alert variant="destructive">
+      <AlertCircle className="h-4 w-4" />
+      <AlertTitle>Error</AlertTitle>
+      <AlertDescription>
+        {error.message}
+      </AlertDescription>
+    </Alert>
+  )
 }
 
 interface PropertyTypeData {
   propertyType: string;
   propertyKind: string;
+  [key: string]: string | number | boolean | null | undefined; // Allow for additional properties with specific types
 }
 
-interface PropertySetting {
+// Interface for the raw data returned from Supabase
+interface PropertySupabaseRecord {
   id: string;
-  type: string;
-  property_type: PropertyTypeData;
-  amenities: string[];
-  pet_policy: Record<string, unknown>;
-  owners: Record<string, unknown>;
-  bank_accounts: Record<string, unknown>;
-}
-
-interface PropertyRecord {
-  id: number;
   name: string;
   address_line_1: string;
   address_line_2: string | null;
   city: string;
   state: string;
   zip: string;
-  property_settings: PropertySetting | null;
+  property_settings: {
+    id: string;
+    property_description: string;
+    property_type: PropertyTypeData | string | Record<string, unknown>;
+    status?: boolean;
+  }[] | null;
   units: { unit_id: string }[] | null;
 }
 
-async function getProperties(): Promise<Property[]> {
-  try {
-    console.log('Starting getProperties function');
-    const supabase = await createClient();
-    console.log('Supabase client created');
+async function getProperties() {
+  const supabase = await createClient();
+
+  // Helper function to find a property in an object regardless of case
+  function findPropertyCaseInsensitive(obj: Record<string, unknown>, propertyName: string): string | undefined {
+    // First try exact match
+    if (obj[propertyName] !== undefined) {
+      return obj[propertyName] as string;
+    }
     
-    // Get the authenticated user using the secure method
+    // Try case-insensitive match
+    const lowerPropertyName = propertyName.toLowerCase();
+    for (const key in obj) {
+      if (key.toLowerCase() === lowerPropertyName) {
+        return obj[key] as string;
+      }
+    }
+    
+    return undefined;
+  }
+
+  try {
+    // Get the authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    console.log('Auth user:', { id: user?.id, error: userError?.message });
-
-    if (!user || userError) {
-      console.log('No authenticated user found, redirecting to login');
-      redirect('/login');
+    if (userError || !user) {
+      console.error('Auth error:', userError);
+      throw new Error('Unauthorized');
     }
 
-    // First get the user's profile
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', user.id)
-      .single();
-    console.log('Profile query result:', { profile: profile?.id, error: profileError?.message });
-
-    if (profileError || !profile) {
-      console.error('Error fetching profile:', profileError);
-      return [];
-    }
-
-    // Then get the company membership using the profile ID
+    // Get the company membership
     const { data: companyMember, error: companyError } = await supabase
       .from('company_members')
       .select('company_id')
-      .eq('id', profile.id)
+      .eq('id', user.id)
       .single();
-    console.log('Company member query result:', { companyId: companyMember?.company_id, error: companyError?.message });
 
     if (companyError || !companyMember) {
-      console.error('Error fetching company member:', companyError);
-      return [];
+      console.error('Company error:', companyError);
+      throw new Error('Failed to get company');
     }
 
-    // Fetch properties with their settings and units
-    console.log('Fetching properties for company:', companyMember.company_id);
+    // Fetch properties with joined property_settings
     const { data: properties, error: propertiesError } = await supabase
       .from('properties')
       .select(`
         id,
         name,
-        property_settings (
-          id,
-          type,
-          property_type
-        ),
         address_line_1,
         address_line_2,
         city,
         state,
         zip,
-        units (
-          unit_id
-        )
+        property_settings(
+          id,
+          property_description,
+          property_type,
+          status
+        ),
+        units(unit_id)
       `)
-      .eq('company_id', companyMember.company_id)
-      .order('id')
-      .returns<PropertyRecord[]>();
-    console.log('Properties query result:', { count: properties?.length, error: propertiesError?.message });
+      .eq('company_id', companyMember.company_id);
 
     if (propertiesError) {
       console.error('Error fetching properties:', propertiesError);
-      return [];
+      throw new Error(`Failed to fetch properties: ${propertiesError.message}`);
     }
 
-    console.log('Raw properties data:', properties);
-    return (properties || []).map(property => {
-      console.log('Processing property:', property.id);
-      // Get property settings
-      const settings = property.property_settings;
-      console.log('Property settings:', settings);
-      
-      // Get property type and kind from settings
+    // Debug: Log the raw properties data
+    console.log('Raw properties data:', JSON.stringify(properties, null, 2));
+
+    // Try a direct query to property_settings to see what's there
+    const { data: allSettings, error: settingsError } = await supabase
+      .from('property_settings')
+      .select('*')
+      .limit(5);
+    
+    if (settingsError) {
+      console.error('Error fetching property_settings:', settingsError);
+    } else {
+      console.log('Sample property_settings:', JSON.stringify(allSettings, null, 2));
+    }
+
+    // Transform the data to match the frontend interface
+    return properties.map((property: PropertySupabaseRecord) => {
+      // Extract property type data from the JSONB field
       let propertyType = 'Unknown';
       let propertyKind = 'Unknown';
-      if (settings?.property_type) {
+      
+      // Get the first property_settings object if it exists
+      const propertySetting = property.property_settings && property.property_settings.length > 0 
+        ? property.property_settings[0] 
+        : null;
+      
+      // Debug: Log the property settings
+      console.log(`Property ${property.id} settings:`, propertySetting);
+      
+      if (propertySetting && propertySetting.property_type) {
         try {
-          const propertyTypeData = settings.property_type;
-          propertyType = propertyTypeData.propertyType || 'Unknown';
-          propertyKind = propertyTypeData.propertyKind || 'Unknown';
-          console.log('Extracted values:', { propertyType, propertyKind });
-        } catch (e) {
-          console.error(`Error parsing property_type for property ${property.id}:`, e);
+          const propertyTypeData = propertySetting.property_type;
+          
+          // Debug: Log the property type data and its type
+          console.log(`Property ${property.id} propertyTypeData:`, propertyTypeData);
+          console.log(`Property ${property.id} propertyTypeData type:`, typeof propertyTypeData);
+          
+          // For object, extract values
+          if (typeof propertyTypeData === 'object' && propertyTypeData !== null) {
+            // Extract values with correct case sensitivity
+            const typedData = propertyTypeData as Record<string, unknown>;
+            
+            // Try to find properties regardless of case
+            const foundPropertyType = findPropertyCaseInsensitive(typedData, 'propertyType');
+            if (foundPropertyType !== undefined) {
+              propertyType = foundPropertyType;
+            }
+            
+            const foundPropertyKind = findPropertyCaseInsensitive(typedData, 'propertyKind');
+            if (foundPropertyKind !== undefined) {
+              propertyKind = foundPropertyKind;
+            }
+          } 
+          // If it's a string (JSON), parse it
+          else if (typeof propertyTypeData === 'string') {
+            try {
+              const typeData = JSON.parse(propertyTypeData);
+              
+              // Try to find properties regardless of case
+              const foundPropertyType = findPropertyCaseInsensitive(typeData, 'propertyType');
+              if (foundPropertyType !== undefined) {
+                propertyType = foundPropertyType;
+              }
+              
+              const foundPropertyKind = findPropertyCaseInsensitive(typeData, 'propertyKind');
+              if (foundPropertyKind !== undefined) {
+                propertyKind = foundPropertyKind;
+              }
+            } catch (e) {
+              console.error(`Error parsing property_type string for property ${property.id}:`, e);
+            }
+          }
+        } catch (error) {
+          console.error(`Error processing property_type for property ${property.id}:`, error);
         }
       } else {
-        console.log('No property_type found in settings');
+        console.log(`Property ${property.id} has no property_type data`);
       }
       
-      const result = {
-        id: property.id.toString(),
-        propertyName: property.name || `Property ${property.id}`,
-        propertyType: propertyType.charAt(0).toUpperCase() + propertyType.slice(1),
-        propertyKind: propertyKind.charAt(0).toUpperCase() + propertyKind.slice(1),
+      return {
+        id: property.id,
+        propertyName: property.name,
+        propertyType: propertyType,
+        propertyKind: propertyKind,
         address: [
           property.address_line_1,
           property.address_line_2,
-          property.city && property.state && property.zip 
-            ? `${property.city}, ${property.state} ${property.zip}`
-            : null
-        ].filter(Boolean).join(', ') || 'No address provided',
-        numberOfUnits: property.units?.length || 0
+          property.city,
+          property.state,
+          property.zip
+        ].filter(Boolean).join(', '),
+        numberOfUnits: property.units?.length || 0,
+        status: propertySetting && propertySetting.status !== false ? 'active' : 'inactive'
       };
-      console.log('Transformed property:', result);
-      return result;
     });
-
   } catch (error) {
-    console.error('Error in getProperties:', error);
-    return [];
+    console.error('Unexpected error in getProperties:', error);
+    throw error;
   }
 }
 
 export default async function PropertyPage() {
-  const properties = await getProperties();
-
-  return (
-    <div className="p-6">
-      <h1 className="text-4xl font-semibold mb-6">Property</h1>
-      <PropertyTable initialProperties={properties} />
-    </div>
-  );
+  try {
+    const properties = await getProperties();
+    
+    return (
+      <Suspense fallback={<div className="p-6">Loading properties...</div>}>
+        <PropertyClient initialProperties={properties} />
+      </Suspense>
+    );
+  } catch (error) {
+    return (
+      <div className="p-6">
+        <ErrorAlert error={error instanceof Error ? error : new Error('An unknown error occurred')} />
+      </div>
+    );
+  }
 }

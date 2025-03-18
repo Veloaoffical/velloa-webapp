@@ -40,464 +40,176 @@ import { cn } from "@/lib/utils"
 import { CalendarIcon } from "lucide-react"
 
 interface UnitListingDetailsProps {
-  unitId: string
+  unitId: string;
+  unitDetails: UnitDetails;
+  listingDetails: ListingDetails;
+  photos: Photo[];
 }
 
 interface UnitDetails {
-  unit_name: string
-  beds: number
-  baths: number
-  size: number
-  market_rent: number
-}
-
-interface APIPhoto {
-  id: string
-  fileUrl: string
-  fileName: string
-  createdAt: string
-  favorite?: boolean
-  isFavorite?: boolean
+  unit_name: string;
+  beds: number;
+  baths: number;
+  size: number;
+  market_rent: number;
+  property_id: string;
 }
 
 interface Photo {
-  id: string
-  fileUrl: string
-  fileName: string
-  createdAt: string
+  id: string;
+  fileUrl: string;
+  fileName: string;
 }
 
 interface ListingDetails {
-  listing_description: string
-  property_title: string
-  status: string
-  favorite_photo: string | null
-  available_date?: Date | null
+  listing_description: string;
+  property_title: string;
+  status: string;
+  favorite_photo: string | null;
+  available_date?: Date | null;
   included_in_rent: {
-    water: boolean
-    sewage: boolean
-    garbage: boolean
-    electricity: boolean
-    gas: boolean
-    internet: boolean
-    cable: boolean
-    sat_tv: boolean
-    hot_water: boolean
-  }
+    water: boolean;
+    sewage: boolean;
+    garbage: boolean;
+    electricity: boolean;
+    gas: boolean;
+    internet: boolean;
+    cable: boolean;
+    sat_tv: boolean;
+    hot_water: boolean;
+  };
   interior_appliances: {
-    dishwasher: boolean
-    washer: boolean
-    dryer: boolean
-    freezer: boolean
-    microwave: boolean
-    range_oven: boolean
-    ac: boolean
-    ceiling_fan: boolean
-    refrigerator: boolean
-    fireplace: boolean
-    intercom: boolean
-    security_system: boolean
-  }
+    dishwasher: boolean;
+    washer: boolean;
+    dryer: boolean;
+    freezer: boolean;
+    microwave: boolean;
+    range_oven: boolean;
+    ac: boolean;
+    ceiling_fan: boolean;
+    refrigerator: boolean;
+    fireplace: boolean;
+    intercom: boolean;
+    security_system: boolean;
+  };
   heating: {
-    central: boolean
-    forced_air: boolean
-    heat_pump: boolean
-    radiant: boolean
-    electric: boolean
-    geothermal: boolean
-    solar: boolean
-    ductless_mini_split: boolean
-    natural_gas: boolean
-    other: boolean
-  }
+    central: boolean;
+    forced_air: boolean;
+    heat_pump: boolean;
+    radiant: boolean;
+    electric: boolean;
+    geothermal: boolean;
+    solar: boolean;
+    ductless_mini_split: boolean;
+    natural_gas: boolean;
+    other: boolean;
+  };
   cooling: {
-    central: boolean
-    evaporative: boolean
-    geothermal: boolean
-    heat_pump: boolean
-    wall: boolean
-    solar: boolean
-    ceiling_fans: boolean
-    ductless_mini_split: boolean
-    other: boolean
-  }
+    central: boolean;
+    evaporative: boolean;
+    geothermal: boolean;
+    heat_pump: boolean;
+    wall: boolean;
+    solar: boolean;
+    ceiling_fans: boolean;
+    ductless_mini_split: boolean;
+    other: boolean;
+  };
   laundry: {
-    in_unit: boolean
-    shared: boolean
-  }
+    in_unit: boolean;
+    shared: boolean;
+  };
   parking: {
-    carport: boolean
-    garage_attached: boolean
-    garage_detached: boolean
-    off_street: boolean
-  }
+    carport: boolean;
+    garage_attached: boolean;
+    garage_detached: boolean;
+    off_street: boolean;
+  };
   exterior: {
-    deck: boolean
-    courtyard: boolean
-    fenced_yard: boolean
-    garden: boolean
-    lawn: boolean
-    pool: boolean
-    patio: boolean
-    balcony: boolean
-  }
+    deck: boolean;
+    courtyard: boolean;
+    fenced_yard: boolean;
+    garden: boolean;
+    lawn: boolean;
+    pool: boolean;
+    patio: boolean;
+    balcony: boolean;
+  };
 }
 
-export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
+export function UnitListingDetails({ unitId, unitDetails, listingDetails: initialListingDetails, photos }: UnitListingDetailsProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isAmenitiesDialogOpen, setIsAmenitiesDialogOpen] = useState(false)
   const [tempDescription, setTempDescription] = useState("")
   const [tempPropertyTitle, setTempPropertyTitle] = useState("")
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false)
-  const [photos, setPhotos] = useState<Photo[]>([])
-  const [propertyId, setPropertyId] = useState<string>("")
-  const [favoritePhoto, setFavoritePhoto] = useState<string | null>(null)
-  const [unitDetails, setUnitDetails] = useState<UnitDetails>({
-    unit_name: "",
-    beds: 0,
-    baths: 0,
-    size: 0,
-    market_rent: 0
-  })
-  const [listingDetails, setListingDetails] = useState<ListingDetails>({
-    listing_description: "",
-    property_title: "",
-    status: "draft",
-    favorite_photo: null,
-    included_in_rent: {
-      water: false,
-      sewage: false,
-      garbage: false,
-      electricity: false,
-      gas: false,
-      internet: false,
-      cable: false,
-      sat_tv: false,
-      hot_water: false
-    },
-    interior_appliances: {
-      dishwasher: false,
-      washer: false,
-      dryer: false,
-      freezer: false,
-      microwave: false,
-      range_oven: false,
-      ac: false,
-      ceiling_fan: false,
-      refrigerator: false,
-      fireplace: false,
-      intercom: false,
-      security_system: false
-    },
-    heating: {
-      central: false,
-      forced_air: false,
-      heat_pump: false,
-      radiant: false,
-      electric: false,
-      geothermal: false,
-      solar: false,
-      ductless_mini_split: false,
-      natural_gas: false,
-      other: false
-    },
-    cooling: {
-      central: false,
-      evaporative: false,
-      geothermal: false,
-      heat_pump: false,
-      wall: false,
-      solar: false,
-      ceiling_fans: false,
-      ductless_mini_split: false,
-      other: false
-    },
-    laundry: {
-      in_unit: false,
-      shared: false
-    },
-    parking: {
-      carport: false,
-      garage_attached: false,
-      garage_detached: false,
-      off_street: false
-    },
-    exterior: {
-      deck: false,
-      courtyard: false,
-      fenced_yard: false,
-      garden: false,
-      lawn: false,
-      pool: false,
-      patio: false,
-      balcony: false
-    }
-  })
-  const [isLoading, setIsLoading] = useState(true)
+  const [favoritePhoto, setFavoritePhoto] = useState<string | null>(initialListingDetails.favorite_photo)
+  const [currentListingDetails, setCurrentListingDetails] = useState<ListingDetails>(initialListingDetails)
+  const [isLoading, setIsLoading] = useState(false)
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false)
-  const [publishDate, setPublishDate] = useState<Date | undefined>(undefined)
+  const [publishDate, setPublishDate] = useState<Date | undefined>(
+    initialListingDetails.available_date ? new Date(initialListingDetails.available_date) : undefined
+  )
   const [confirmPublish, setConfirmPublish] = useState(false)
 
   useEffect(() => {
-    const fetchUnitDetails = async () => {
-      try {
-        const response = await fetch(`/api/unit/${unitId}`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch unit details')
-        }
-        const data = await response.json()
-        setPropertyId(data.property_id)
-        setUnitDetails({
-          unit_name: data.unit_name,
-          beds: data.beds,
-          baths: data.baths,
-          size: data.size,
-          market_rent: data.market_rent
-        })
-        setListingDetails(prev => ({
-          ...prev,
-          property_title: prev.property_title || data.unit_name
-        }))
-      } catch (error) {
-        console.error('Error fetching unit details:', error)
-      }
+    // Initialize temp values when dialog opens
+    if (isDialogOpen) {
+      setTempDescription(currentListingDetails.listing_description)
+      setTempPropertyTitle(currentListingDetails.property_title)
     }
-
-    const fetchListingDetails = async () => {
-      try {
-        const response = await fetch(`/api/unit/${unitId}/listing-details`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch listing details')
-        }
-        const data = await response.json()
-        if (Object.keys(data).length > 0) {
-          setListingDetails({
-            listing_description: data.listing_description || "",
-            property_title: data.property_title || unitDetails.unit_name,
-            status: data.status || "draft",
-            favorite_photo: data.favorite_photo || null,
-            included_in_rent: data.included_in_rent || {
-              water: false,
-              sewage: false,
-              garbage: false,
-              electricity: false,
-              gas: false,
-              internet: false,
-              cable: false,
-              sat_tv: false,
-              hot_water: false
-            },
-            interior_appliances: data.interior_appliances || {
-              dishwasher: false,
-              washer: false,
-              dryer: false,
-              freezer: false,
-              microwave: false,
-              range_oven: false,
-              ac: false,
-              ceiling_fan: false,
-              refrigerator: false,
-              fireplace: false,
-              intercom: false,
-              security_system: false
-            },
-            heating: data.heating || {
-              central: false,
-              forced_air: false,
-              heat_pump: false,
-              radiant: false,
-              electric: false,
-              geothermal: false,
-              solar: false,
-              ductless_mini_split: false,
-              natural_gas: false,
-              other: false
-            },
-            cooling: data.cooling || {
-              central: false,
-              evaporative: false,
-              geothermal: false,
-              heat_pump: false,
-              wall: false,
-              solar: false,
-              ceiling_fans: false,
-              ductless_mini_split: false,
-              other: false
-            },
-            laundry: data.laundry || {
-              in_unit: false,
-              shared: false
-            },
-            parking: data.parking || {
-              carport: false,
-              garage_attached: false,
-              garage_detached: false,
-              off_street: false
-            },
-            exterior: data.exterior || {
-              deck: false,
-              courtyard: false,
-              fenced_yard: false,
-              garden: false,
-              lawn: false,
-              pool: false,
-              patio: false,
-              balcony: false
-            }
-          })
-          setFavoritePhoto(data.favorite_photo || null)
-        }
-      } catch (error) {
-        console.error('Error fetching listing details:', error)
-      }
-    }
-
-    const fetchAllPhotos = async () => {
-      try {
-        const unitPhotosResponse = await fetch(`/api/unit/${unitId}/photos`)
-        const unitPhotos = unitPhotosResponse.ok ? await unitPhotosResponse.json() : []
-
-        let propertyPhotos: Photo[] = []
-        if (propertyId) {
-          const propertyPhotosResponse = await fetch(`/api/property/${propertyId}/photos`)
-          propertyPhotos = propertyPhotosResponse.ok ? await propertyPhotosResponse.json() : []
-        }
-
-        const mapPhoto = (photo: APIPhoto): Photo => ({
-          id: photo.id,
-          fileUrl: photo.fileUrl,
-          fileName: photo.fileName,
-          createdAt: photo.createdAt
-        })
-
-        const allPhotos = [...unitPhotos.map(mapPhoto), ...propertyPhotos.map(mapPhoto)]
-        const uniquePhotos = allPhotos.filter((photo, index, self) =>
-          index === self.findIndex((p) => p.id === photo.id)
-        )
-
-        setPhotos(uniquePhotos)
-      } catch (error) {
-        console.error('Error fetching photos:', error)
-      }
-    }
-
-    const fetchData = async () => {
-      setIsLoading(true)
-      try {
-        await Promise.all([
-          fetchUnitDetails(),
-          fetchListingDetails(),
-          fetchAllPhotos()
-        ])
-      } catch (error) {
-        console.error('Error fetching data:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [unitId, propertyId, unitDetails.unit_name])
+  }, [isDialogOpen, currentListingDetails])
 
   const handleOpenDialog = () => {
-    setTempDescription(listingDetails.listing_description)
-    setTempPropertyTitle(listingDetails.property_title || unitDetails.unit_name)
     setIsDialogOpen(true)
   }
 
   const handleSaveDialog = () => {
-    setListingDetails({
-      ...listingDetails,
+    setCurrentListingDetails(prev => ({
+      ...prev,
       listing_description: tempDescription,
       property_title: tempPropertyTitle
-    })
+    }))
+    handleSaveAsDraft()
     setIsDialogOpen(false)
   }
 
   const handleSaveAsDraft = async () => {
+    setIsLoading(true)
     try {
-      // First update the unit details
-      const unitResponse = await fetch(`/api/unit/${unitId}`, {
+      const response = await fetch(`/api/unit/${unitId}/listing-details`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          unit_name: unitDetails.unit_name,
-          beds: unitDetails.beds,
-          baths: unitDetails.baths,
-          size: unitDetails.size,
-          market_rent: unitDetails.market_rent
-        }),
-      })
-
-      if (!unitResponse.ok) {
-        const errorData = await unitResponse.json()
-        throw new Error(errorData.error || 'Failed to update unit details')
-      }
-
-      // Then update the listing details
-      const listingResponse = await fetch(`/api/unit/${unitId}/listing-details`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          description: listingDetails.listing_description,
-          property_title: listingDetails.property_title,
+          description: tempDescription || currentListingDetails.listing_description,
+          property_title: tempPropertyTitle || currentListingDetails.property_title,
           status: 'draft',
-          favorite_photo: listingDetails.favorite_photo,
-          included_in_rent: listingDetails.included_in_rent,
-          interior_appliances: listingDetails.interior_appliances,
-          heating: listingDetails.heating,
-          cooling: listingDetails.cooling,
-          laundry: listingDetails.laundry,
-          parking: listingDetails.parking,
-          exterior: listingDetails.exterior
+          included_in_rent: currentListingDetails.included_in_rent,
+          interior_appliances: currentListingDetails.interior_appliances,
+          heating: currentListingDetails.heating,
+          cooling: currentListingDetails.cooling,
+          laundry: currentListingDetails.laundry,
+          parking: currentListingDetails.parking,
+          exterior: currentListingDetails.exterior,
+          favorite_photo: favoritePhoto
         }),
       })
 
-      if (!listingResponse.ok) {
-        const errorData = await listingResponse.json()
-        throw new Error(errorData.error || 'Failed to update listing details')
-      }
-
-      const updatedListingData = await listingResponse.json()
+      const data = await response.json()
       
-      // Update the local state with the response from the server
-      setListingDetails(prev => ({
-        ...prev,
-        status: 'draft',
-        listing_description: updatedListingData.description || prev.listing_description,
-        property_title: updatedListingData.property_title || prev.property_title,
-        favorite_photo: updatedListingData.favorite_photo || prev.favorite_photo,
-        included_in_rent: updatedListingData.included_in_rent || prev.included_in_rent,
-        interior_appliances: updatedListingData.interior_appliances || prev.interior_appliances,
-        heating: updatedListingData.heating || prev.heating,
-        cooling: updatedListingData.cooling || prev.cooling,
-        laundry: updatedListingData.laundry || prev.laundry,
-        parking: updatedListingData.parking || prev.parking,
-        exterior: updatedListingData.exterior || prev.exterior
-      }))
-
-      // Fetch the latest listing details to ensure we have the most up-to-date data
-      const refreshResponse = await fetch(`/api/unit/${unitId}/listing-details`)
-      if (refreshResponse.ok) {
-        const refreshedData = await refreshResponse.json()
-        setListingDetails(prev => ({
-          ...prev,
-          included_in_rent: refreshedData.included_in_rent || prev.included_in_rent,
-          interior_appliances: refreshedData.interior_appliances || prev.interior_appliances,
-          heating: refreshedData.heating || prev.heating,
-          cooling: refreshedData.cooling || prev.cooling,
-          laundry: refreshedData.laundry || prev.laundry,
-          parking: refreshedData.parking || prev.parking,
-          exterior: refreshedData.exterior || prev.exterior
-        }))
+      if (!response.ok) {
+        console.error('API error response:', data)
+        throw new Error(data.error || 'Failed to save listing details')
       }
+
+      console.log('Saved listing details:', data)
     } catch (error) {
-      console.error('Error updating listing details:', error)
-      throw error
+      console.error('Error saving listing details:', error)
+      // You could add a toast notification here to show the error to the user
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -515,7 +227,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...listingDetails,
+          ...currentListingDetails,
           favorite_photo: newFavorite
         }),
       })
@@ -524,7 +236,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
         throw new Error('Failed to update favorite photo')
       }
 
-      setListingDetails(prev => ({
+      setCurrentListingDetails(prev => ({
         ...prev,
         favorite_photo: newFavorite
       }))
@@ -543,7 +255,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
         },
         body: JSON.stringify({
           unitDetails,
-          listingDetails,
+          listingDetails: currentListingDetails,
           photos
         }),
       })
@@ -569,18 +281,18 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
       const formattedDate = publishDate.toISOString()
 
       const requestBody = {
-        description: listingDetails.listing_description || "This is a property listing.",
-        property_title: listingDetails.property_title,
+        description: currentListingDetails.listing_description || "This is a property listing.",
+        property_title: currentListingDetails.property_title,
         status: 'published',
         available_date: formattedDate,
-        favorite_photo: listingDetails.favorite_photo,
-        included_in_rent: listingDetails.included_in_rent,
-        interior_appliances: listingDetails.interior_appliances,
-        heating: listingDetails.heating,
-        cooling: listingDetails.cooling,
-        laundry: listingDetails.laundry,
-        parking: listingDetails.parking,
-        exterior: listingDetails.exterior
+        favorite_photo: currentListingDetails.favorite_photo,
+        included_in_rent: currentListingDetails.included_in_rent,
+        interior_appliances: currentListingDetails.interior_appliances,
+        heating: currentListingDetails.heating,
+        cooling: currentListingDetails.cooling,
+        laundry: currentListingDetails.laundry,
+        parking: currentListingDetails.parking,
+        exterior: currentListingDetails.exterior
       }
 
       console.log('Sending request with body:', requestBody)
@@ -602,7 +314,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
       }
 
       // Update local state with the response data
-      setListingDetails(prev => ({
+      setCurrentListingDetails(prev => ({
         ...prev,
         status: 'published',
         available_date: publishDate,
@@ -789,7 +501,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
 
   return (
     <div>
-      {listingDetails.status === 'draft' && (
+      {currentListingDetails.status === 'draft' && (
         <div className="rounded-lg border border-blue-500/50 px-4 py-3 text-blue-600 mb-6">
           <p className="text-sm">
             <Info
@@ -814,7 +526,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
 
               {/* Property Details */}
               <div className="mb-4">
-                <h3 className="text-xl font-semibold">{listingDetails.property_title || unitDetails.unit_name}</h3>
+                <h3 className="text-xl font-semibold">{currentListingDetails.property_title || unitDetails.unit_name}</h3>
                 <p className="text-sm text-green-600">Monthly payments | ${unitDetails.market_rent} | Available Today</p>
               </div>
 
@@ -892,7 +604,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                   <Edit2 className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-sm text-muted-foreground">{listingDetails.listing_description}</p>
+              <p className="text-sm text-muted-foreground">{currentListingDetails.listing_description}</p>
 
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent>
@@ -1028,7 +740,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                     <h3 className="text-base font-semibold">Included in Rent</h3>
                   </div>
                   <div className="space-y-3">
-                    {Object.entries(listingDetails.included_in_rent).map(([key, value]) => {
+                    {Object.entries(currentListingDetails.included_in_rent).map(([key, value]) => {
                       if (!value) return null;
                       const icons = {
                         water: Droplets,
@@ -1062,7 +774,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                         </div>
                       );
                     })}
-                    {!Object.values(listingDetails.included_in_rent).some(Boolean) && (
+                    {!Object.values(currentListingDetails.included_in_rent).some(Boolean) && (
                       <p className="text-sm text-muted-foreground italic">No items included in rent</p>
                     )}
                   </div>
@@ -1075,7 +787,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                     <h3 className="text-base font-semibold">Interior & Appliances</h3>
                   </div>
                   <div className="space-y-3">
-                    {Object.entries(listingDetails.interior_appliances).map(([key, value]) => {
+                    {Object.entries(currentListingDetails.interior_appliances).map(([key, value]) => {
                       if (!value) return null;
                       const icons = {
                         dishwasher: Utensils,
@@ -1115,7 +827,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                         </div>
                       );
                     })}
-                    {!Object.values(listingDetails.interior_appliances).some(Boolean) && (
+                    {!Object.values(currentListingDetails.interior_appliances).some(Boolean) && (
                       <p className="text-sm text-muted-foreground italic">No interior amenities listed</p>
                     )}
                   </div>
@@ -1128,7 +840,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                     <h3 className="text-base font-semibold">Heating</h3>
                   </div>
                   <div className="space-y-3">
-                    {Object.entries(listingDetails.heating).map(([key, value]) => {
+                    {Object.entries(currentListingDetails.heating).map(([key, value]) => {
                       if (!value) return null;
                       const icons = {
                         central: SunSnow,
@@ -1164,7 +876,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                         </div>
                       );
                     })}
-                    {!Object.values(listingDetails.heating).some(Boolean) && (
+                    {!Object.values(currentListingDetails.heating).some(Boolean) && (
                       <p className="text-sm text-muted-foreground italic">No heating systems listed</p>
                     )}
                   </div>
@@ -1177,7 +889,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                     <h3 className="text-base font-semibold">Cooling</h3>
                   </div>
                   <div className="space-y-3">
-                    {Object.entries(listingDetails.cooling).map(([key, value]) => {
+                    {Object.entries(currentListingDetails.cooling).map(([key, value]) => {
                       if (!value) return null;
                       const icons = {
                         central: SunSnow,
@@ -1211,7 +923,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                         </div>
                       );
                     })}
-                    {!Object.values(listingDetails.cooling).some(Boolean) && (
+                    {!Object.values(currentListingDetails.cooling).some(Boolean) && (
                       <p className="text-sm text-muted-foreground italic">No cooling systems listed</p>
                     )}
                   </div>
@@ -1224,7 +936,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                     <h3 className="text-base font-semibold">Laundry</h3>
                   </div>
                   <div className="space-y-3">
-                    {Object.entries(listingDetails.laundry).map(([key, value]) => {
+                    {Object.entries(currentListingDetails.laundry).map(([key, value]) => {
                       if (!value) return null;
                       const icons = {
                         in_unit: Home,
@@ -1244,7 +956,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                         </div>
                       );
                     })}
-                    {!Object.values(listingDetails.laundry).some(Boolean) && (
+                    {!Object.values(currentListingDetails.laundry).some(Boolean) && (
                       <p className="text-sm text-muted-foreground italic">No laundry facilities listed</p>
                     )}
                   </div>
@@ -1257,7 +969,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                     <h3 className="text-base font-semibold">Parking</h3>
                   </div>
                   <div className="space-y-3">
-                    {Object.entries(listingDetails.parking).map(([key, value]) => {
+                    {Object.entries(currentListingDetails.parking).map(([key, value]) => {
                       if (!value) return null;
                       const icons = {
                         carport: Car,
@@ -1281,7 +993,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                         </div>
                       );
                     })}
-                    {!Object.values(listingDetails.parking).some(Boolean) && (
+                    {!Object.values(currentListingDetails.parking).some(Boolean) && (
                       <p className="text-sm text-muted-foreground italic">No parking options listed</p>
                     )}
                   </div>
@@ -1294,7 +1006,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                     <h3 className="text-base font-semibold">Exterior</h3>
                   </div>
                   <div className="space-y-3">
-                    {Object.entries(listingDetails.exterior).map(([key, value]) => {
+                    {Object.entries(currentListingDetails.exterior).map(([key, value]) => {
                       if (!value) return null;
                       const icons = {
                         deck: Columns,
@@ -1326,7 +1038,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                         </div>
                       );
                     })}
-                    {!Object.values(listingDetails.exterior).some(Boolean) && (
+                    {!Object.values(currentListingDetails.exterior).some(Boolean) && (
                       <p className="text-sm text-muted-foreground italic">No exterior features listed</p>
                     )}
                   </div>
@@ -1360,7 +1072,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                       }).map(([key, { label, icon: Icon }]) => (
                         <button
                           key={key}
-                          onClick={() => setListingDetails(prev => ({
+                          onClick={() => setCurrentListingDetails(prev => ({
                             ...prev,
                             included_in_rent: {
                               ...prev.included_in_rent,
@@ -1368,7 +1080,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                             }
                           }))}
                           className={`relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border px-4 py-3 text-center hover:border-gray-300 ${
-                            listingDetails.included_in_rent[key as keyof typeof listingDetails.included_in_rent]
+                            currentListingDetails.included_in_rent[key as keyof typeof currentListingDetails.included_in_rent]
                               ? 'border-green-500 bg-green-50'
                               : 'border-gray-200'
                           }`}
@@ -1402,7 +1114,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                       }).map(([key, { label, icon: Icon }]) => (
                         <button
                           key={key}
-                          onClick={() => setListingDetails(prev => ({
+                          onClick={() => setCurrentListingDetails(prev => ({
                             ...prev,
                             interior_appliances: {
                               ...prev.interior_appliances,
@@ -1410,7 +1122,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                             }
                           }))}
                           className={`relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border px-4 py-3 text-center hover:border-gray-300 ${
-                            listingDetails.interior_appliances[key as keyof typeof listingDetails.interior_appliances]
+                            currentListingDetails.interior_appliances[key as keyof typeof currentListingDetails.interior_appliances]
                               ? 'border-green-500 bg-green-50'
                               : 'border-gray-200'
                           }`}
@@ -1442,7 +1154,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                       }).map(([key, { label, icon: Icon }]) => (
                         <button
                           key={key}
-                          onClick={() => setListingDetails(prev => ({
+                          onClick={() => setCurrentListingDetails(prev => ({
                             ...prev,
                             heating: {
                               ...prev.heating,
@@ -1450,7 +1162,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                             }
                           }))}
                           className={`relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border px-4 py-3 text-center hover:border-gray-300 ${
-                            listingDetails.heating[key as keyof typeof listingDetails.heating]
+                            currentListingDetails.heating[key as keyof typeof currentListingDetails.heating]
                               ? 'border-green-500 bg-green-50'
                               : 'border-gray-200'
                           }`}
@@ -1481,7 +1193,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                       }).map(([key, { label, icon: Icon }]) => (
                         <button
                           key={key}
-                          onClick={() => setListingDetails(prev => ({
+                          onClick={() => setCurrentListingDetails(prev => ({
                             ...prev,
                             cooling: {
                               ...prev.cooling,
@@ -1489,7 +1201,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                             }
                           }))}
                           className={`relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border px-4 py-3 text-center hover:border-gray-300 ${
-                            listingDetails.cooling[key as keyof typeof listingDetails.cooling]
+                            currentListingDetails.cooling[key as keyof typeof currentListingDetails.cooling]
                               ? 'border-green-500 bg-green-50'
                               : 'border-gray-200'
                           }`}
@@ -1513,7 +1225,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                       }).map(([key, { label, icon: Icon }]) => (
                         <button
                           key={key}
-                          onClick={() => setListingDetails(prev => ({
+                          onClick={() => setCurrentListingDetails(prev => ({
                             ...prev,
                             laundry: {
                               ...prev.laundry,
@@ -1521,7 +1233,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                             }
                           }))}
                           className={`relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border px-4 py-3 text-center hover:border-gray-300 ${
-                            listingDetails.laundry[key as keyof typeof listingDetails.laundry]
+                            currentListingDetails.laundry[key as keyof typeof currentListingDetails.laundry]
                               ? 'border-green-500 bg-green-50'
                               : 'border-gray-200'
                           }`}
@@ -1547,7 +1259,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                       }).map(([key, { label, icon: Icon }]) => (
                         <button
                           key={key}
-                          onClick={() => setListingDetails(prev => ({
+                          onClick={() => setCurrentListingDetails(prev => ({
                             ...prev,
                             parking: {
                               ...prev.parking,
@@ -1555,7 +1267,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                             }
                           }))}
                           className={`relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border px-4 py-3 text-center hover:border-gray-300 ${
-                            listingDetails.parking[key as keyof typeof listingDetails.parking]
+                            currentListingDetails.parking[key as keyof typeof currentListingDetails.parking]
                               ? 'border-green-500 bg-green-50'
                               : 'border-gray-200'
                           }`}
@@ -1585,7 +1297,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                       }).map(([key, { label, icon: Icon }]) => (
                         <button
                           key={key}
-                          onClick={() => setListingDetails(prev => ({
+                          onClick={() => setCurrentListingDetails(prev => ({
                             ...prev,
                             exterior: {
                               ...prev.exterior,
@@ -1593,7 +1305,7 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
                             }
                           }))}
                           className={`relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border px-4 py-3 text-center hover:border-gray-300 ${
-                            listingDetails.exterior[key as keyof typeof listingDetails.exterior]
+                            currentListingDetails.exterior[key as keyof typeof currentListingDetails.exterior]
                               ? 'border-green-500 bg-green-50'
                               : 'border-gray-200'
                           }`}
@@ -1626,11 +1338,11 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
         {/* Sidebar */}
         <div className="space-y-6">
           <div className="grid grid-cols-3 gap-2">
-            <Button variant="outline" className="w-full gap-2">
+            <Button variant="outline" className="w-full gap-2 border-red-600 hover:border-red-700 hover:bg-red-50 text-red-600 hover:text-red-700">
               <Trash className="h-4 w-4" />
               Remove
             </Button>
-            <Button variant="outline" onClick={handleSaveAsDraft} className="w-full gap-2">
+            <Button variant="secondary" onClick={handleSaveAsDraft} className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white">
               <Save className="h-4 w-4" />
               Draft
             </Button>
@@ -1740,43 +1452,43 @@ export function UnitListingDetails({ unitId }: UnitListingDetailsProps) {
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold">Share listing</h2>
-              </div>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-2 border rounded-lg">
-                  <span className="text-sm text-muted-foreground truncate">https://velloa.vercel.app/company/TM3HZhZTVy/3wEMCHOFw/listings/5hmngqo-EhK5dSYPFWnVA/nFhxZ9</span>
-                  <SharePopover url="https://velloa.vercel.app/company/TM3HZhZTVy/3wEMCHOFw/listings/5hmngqo-EhK5dSYPFWnVA/nFhxZ9" />
                 </div>
-                <div className="flex items-center justify-between p-2 border rounded-lg">
-                  <span className="text-sm text-muted-foreground truncate">https://velloa.vercel.app/company/TM3HZhZTVy/3wEMCHOFw/listings/5hmngqo-EhK5dSYPFWnVA/nFhxZ9#screen=true</span>
-                  <SharePopover url="https://velloa.vercel.app/company/TM3HZhZTVy/3wEMCHOFw/listings/5hmngqo-EhK5dSYPFWnVA/nFhxZ9#screen=true" />
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-2 border rounded-lg">
+                    <span className="text-sm text-muted-foreground truncate">https://velloa.vercel.app/company/TM3HZhZTVy/3wEMCHOFw/listings/5hmngqo-EhK5dSYPFWnVA/nFhxZ9</span>
+                    <SharePopover url="https://velloa.vercel.app/company/TM3HZhZTVy/3wEMCHOFw/listings/5hmngqo-EhK5dSYPFWnVA/nFhxZ9" />
+                  </div>
+                  <div className="flex items-center justify-between p-2 border rounded-lg">
+                    <span className="text-sm text-muted-foreground truncate">https://velloa.vercel.app/company/TM3HZhZTVy/3wEMCHOFw/listings/5hmngqo-EhK5dSYPFWnVA/nFhxZ9#screen=true</span>
+                    <SharePopover url="https://velloa.vercel.app/company/TM3HZhZTVy/3wEMCHOFw/listings/5hmngqo-EhK5dSYPFWnVA/nFhxZ9#screen=true" />
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          {/* Contact */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">Contact</h2>
-                <Button variant="ghost" size="icon">
-                  <Edit2 className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
-                  JM
+            {/* Contact */}
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold">Contact</h2>
+                  <Button variant="ghost" size="icon">
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
                 </div>
-                <div>
-                  <h3 className="font-medium">John Murphy</h3>
-                  <p className="text-sm text-muted-foreground">armin12312@gmail.com</p>
-                  <p className="text-sm text-muted-foreground">(416) 719-2928</p>
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                    JM
+                  </div>
+                  <div>
+                    <h3 className="font-medium">John Murphy</h3>
+                    <p className="text-sm text-muted-foreground">armin12312@gmail.com</p>
+                    <p className="text-sm text-muted-foreground">(416) 719-2928</p>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
-    </div>
   )
 }

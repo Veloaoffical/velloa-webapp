@@ -279,6 +279,7 @@ interface UnitListing {
   created_at: string;
   title: string | null;
   description: string | null;
+  
   amenities: Record<string, unknown> | null;
   available_from: string | null;
   status: string | null;
@@ -307,6 +308,7 @@ export default function AddProspectPage() {
   const router = useRouter();
   const [step, setStep] = useState<'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'income' | 'pets' | 'vehicles' | 'dependents' | 'summary'>('intro');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
   const [listings, setListings] = useState<UnitListing[]>([]);
   const [isLoadingListings, setIsLoadingListings] = useState(true);
   const [listingsError, setListingsError] = useState<string | null>(null);
@@ -531,28 +533,49 @@ export default function AddProspectPage() {
       markStepCompleted('dependents');
       setStep('summary');
     } else if (step === 'summary') {
+      // Log the final property and unit IDs before submission
+      console.log('Final property and unit IDs before submission:', {
+        propertyId: selectedPropertyId,
+        unitId: selectedUnitId
+      });
+      
       handleSubmit();
     }
   };
 
   const handleSubmit = async () => {
     try {
+      // Prepare data for submission - unit_id and property_id will be saved to prospect_property in the API
+      console.log(`Saving prospect with unit_id: ${selectedUnitId} and property_id: ${selectedPropertyId} to prospect_property`);
+      
+      // Ensure we have values for unit_id and property_id, even if they're empty strings
+      const unitId = selectedUnitId || '';
+      const propertyId = selectedPropertyId || '';
+      
+      console.log(`Final values being sent: unit_id: ${unitId}, property_id: ${propertyId}`);
+      
+      // Create the request payload
+      const payload = {
+        contact,
+        residence,
+        pets,
+        vehicles,
+        dependents,
+        employment,
+        income,
+        role: 'prospect',
+        unit_id: unitId,
+        property_id: propertyId
+      };
+      
+      console.log('Full request payload:', JSON.stringify(payload));
+      
       const response = await fetch('/api/people/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          contact,
-          residence,
-          pets,
-          vehicles,
-          dependents,
-          employment,
-          income,
-          role: 'prospect',
-          unit_id: selectedUnitId
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -561,7 +584,8 @@ export default function AddProspectPage() {
         throw new Error(errorData.error || 'Failed to create prospect');
       }
 
-      await response.json(); // consume the response but don't store it
+      const responseData = await response.json();
+      console.log('Response from API:', responseData);
       router.push('/people');
     } catch (error) {
       console.error('Error creating prospect:', error);
@@ -590,6 +614,7 @@ export default function AddProspectPage() {
           console.log('First Listing Details:', {
             listingId: firstListing.listingid,
             unitId: firstListing.unitid,
+            propertyId: firstListing.propertyid,
             hasUnits: Boolean(firstListing.units),
             unitsObject: firstListing.units,
             unitImages: firstListing.units?.unit_images,
@@ -660,6 +685,7 @@ export default function AddProspectPage() {
     console.log('Rendering listing:', {
       listingId: listing.listingid,
       unitId: listing.units.unit_id, // Direct reference to unit_id
+      propertyId: listing.units.property_id, // Property ID from unit
       hasUnit: Boolean(listing.units),
       unitDetails: listing.units ? {
         unit_id: listing.units.unit_id,
@@ -694,13 +720,36 @@ export default function AddProspectPage() {
             : 'border-border hover:border-primary hover:bg-primary/5'
         } cursor-pointer transition-all h-full flex flex-col`}
         onClick={() => {
+          // Log the current state before making changes
+          console.log('Before selection change:', { 
+            currentUnitId: selectedUnitId, 
+            currentPropertyId: selectedPropertyId,
+            clickedUnitId: listing.units.unit_id,
+            clickedPropertyId: listing.units.property_id
+          });
+          
           setSelectedUnitId(prev => {
             if (prev === listing.units.unit_id) {
+              // Deselect the unit
+              setSelectedPropertyId('');
+              console.log('Deselected unit and property');
               return '';
             } else {
+              // Select the unit and property - this will be saved to prospect_property
+              const newPropertyId = listing.units.property_id;
+              setSelectedPropertyId(newPropertyId);
+              console.log(`Selected unit ${listing.units.unit_id} and property ${newPropertyId} for prospect`);
               return listing.units.unit_id;
             }
           });
+          
+          // Log the state after the change (will be one render behind due to state updates)
+          setTimeout(() => {
+            console.log('After selection change (delayed):', { 
+              newUnitId: selectedUnitId, 
+              newPropertyId: selectedPropertyId 
+            });
+          }, 100);
         }}
       >
         {listing.units && listing.units.unit_images && listing.units.unit_images.length > 0 ? (
@@ -722,14 +771,14 @@ export default function AddProspectPage() {
         <div className="p-4">
           <div className="flex justify-between items-start">
             <div className="space-y-2 text-left flex-grow">
-              <div className="flex items-start gap-2 justify-between">
-                <h3 className="text-lg font-semibold line-clamp-2">{listing.title}</h3>
-                <div className="flex items-center justify-center w-5 h-5 border-2 rounded-full border-primary flex-shrink-0">
-                  {selectedUnitId === listing.units.unit_id && (
-                    <div className="w-3 h-3 bg-primary rounded-full" />
-                  )}
-                </div>
-              </div>
+              <h3 className="font-medium text-base">
+                {listing.units.properties.name} - Unit {listing.units.unit_name}
+                {selectedUnitId === listing.units.unit_id && (
+                  <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Selected
+                  </span>
+                )}
+              </h3>
               <div className="text-xs text-muted-foreground">
                 <p>{listing.units.properties.address_line_1}</p>
                 <p>
@@ -2666,6 +2715,43 @@ export default function AddProspectPage() {
                             <p className="mt-1">{contact.firstName} {contact.middleName ? contact.middleName + ' ' : ''}{contact.lastName}</p>
                           </div>
                           
+                          {/* Property Information */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Property & Unit</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('properties')}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                            <div className="mt-1">
+                              {selectedUnitId && selectedPropertyId ? (
+                                <div>
+                                  {(() => {
+                                    const selectedListing = listings.find(
+                                      listing => listing.units.unit_id === selectedUnitId
+                                    );
+                                    return selectedListing ? (
+                                      <>
+                                        <p className="font-medium">{selectedListing.units.properties.name} - Unit {selectedListing.units.unit_name}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                          {selectedListing.units.properties.address_line_1}, {selectedListing.units.properties.city}, {selectedListing.units.properties.state} {selectedListing.units.properties.zip}
+                                        </p>
+                                      </>
+                                    ) : (
+                                      <p>Selected unit information not available</p>
+                                    );
+                                  })()}
+                                </div>
+                              ) : (
+                                <p className="text-gray-500">No property or unit selected</p>
+                              )}
+                            </div>
+                          </div>
+                          
                           {/* Contact Information */}
                           <div className="p-4">
                             <div className="flex items-center justify-between">
@@ -2708,50 +2794,7 @@ export default function AddProspectPage() {
                         </div>
                       </div>
 
-                          {/* Selected Property */}
-                          <div className="p-4">
-                            <div className="flex items-center justify-between">
-                              <Label className="text-muted-foreground text-sm">Selected Property</Label>
-                              <Button
-                                variant="link"
-                                className="h-auto p-0 text-primary hover:text-primary/90"
-                                onClick={() => setStep('properties')}
-                              >
-                                Edit
-                              </Button>
-                            </div>
-                            <div className="mt-1">
-                        {selectedUnitId ? (
-                                listings
-                              .filter(listing => listing.units.unit_id === selectedUnitId)
-                              .map(listing => (
-                                    <div key={listing.listingid} className="flex items-center gap-3">
-                                      <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
-                                    {listing.units && listing.units.unit_images && listing.units.unit_images.length > 0 ? (
-                                      <Image
-                                        src={listing.units.unit_images[0]?.fileUrl || listing.units.unit_images[0]?.image_url || '/placeholder-property.jpg'}
-                                        alt={`Unit ${listing.units.unit_name}`}
-                                        fill
-                                            className="object-cover"
-                                      />
-                                    ) : (
-                                          <div className="w-full h-full bg-gray-100 flex items-center justify-center">
-                                            <span className="text-gray-400 text-xs">No image</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div>
-                                        <p className="font-medium">{listing.title || `${listing.units.properties.name} - Unit ${listing.units.unit_name}`}</p>
-                                        <p className="text-sm text-gray-500">{listing.units.properties.address_line_1}, {listing.units.properties.city}</p>
-                                  </div>
-                                </div>
-                                  ))
-                        ) : (
-                            <p className="text-gray-500">No property selected</p>
-                        )}
-                      </div>
-                    </div>
-                              {/* Residence */}
+                          {/* Residence */}
                           <div className="p-4">
                             <div className="flex items-center justify-between">
                               <Label className="text-muted-foreground text-sm">Residence</Label>

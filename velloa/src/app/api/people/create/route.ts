@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { ApplicationSubmittedEmail } from '@/components/Emails/NewProspectEmail';
+import crypto from 'crypto';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -50,6 +51,27 @@ export async function POST(request: Request) {
       hasPropertyId: Boolean(property_id)
     });
 
+    // Generate a 16 character application ID with only uppercase letters and numbers
+    const generateApplicationId = () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let result = '';
+      for (let i = 0; i < 16; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    };
+
+    // Generate a unique ID for the application
+    const applicationId = generateApplicationId();
+    // Generate a unique token for application access (32 characters)
+    const applicationToken = crypto.randomBytes(16).toString('hex');
+    // Set token expiration to 7 days from now in local timezone
+    const now = new Date();
+    // Add 7 days to the current time
+    const tokenExpiration = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    // Format with timezone offset
+    const tokenExpirationISO = tokenExpiration.toISOString();
+
     // Prepare the base insert data
     const insertData = {
       // Contact information
@@ -73,6 +95,11 @@ export async function POST(request: Request) {
       lead_medium: contact.leadMedium || null,
       assignee_id: contact.assigneeId || null,
       expected_move_in_date: contact.expected_move_in_date || null,
+
+      // Set application details directly in the insert
+      application_id: applicationId,
+      application_token: applicationToken,
+      application_token_exp: tokenExpirationISO,
 
       // Store property information as JSONB - ensure it's always saved
       prospect_property: {
@@ -148,7 +175,9 @@ export async function POST(request: Request) {
     console.log('Created prospect with data:', { 
       id: prospectData.id,
       unit_id: prospectData.unit_id,
-      prospect_property: prospectData.prospect_property
+      prospect_property: prospectData.prospect_property,
+      application_id: prospectData.application_id,
+      application_token: prospectData.application_token
     });
 
     // Get company name
@@ -162,18 +191,17 @@ export async function POST(request: Request) {
       console.error('Error fetching company name:', companyNameError);
     }
 
-    // Generate a unique ID for the application
-    const applicationId = crypto.randomUUID();
-
     // Generate a sign-in link for the prospect using OTP instead of admin.generateLink
     const { error: magicLinkError } = await supabase.auth.signInWithOtp({
       email: contact.email,
       options: {
-        emailRedirectTo: `http://localhost:3001/update-prospect?id=${prospectData.id}`,
+        emailRedirectTo: `http://localhost:3001/update-prospect?id=${prospectData.id}&application_id=${applicationId}&token=${applicationToken}`,
         data: {
           prospect_id: prospectData.id,
           company_id: companyMember.company_id,
-          role: 'prospect'
+          role: 'prospect',
+          application_id: applicationId,
+          application_token: applicationToken
         }
       }
     });
@@ -191,9 +219,9 @@ export async function POST(request: Request) {
         subject: 'Welcome to Velloa - Complete Your Application',
         react: ApplicationSubmittedEmail({
           name: `${contact.firstName} ${contact.lastName}`,
-          confirmationNumber: applicationId,
+          applicationId: applicationId,
           CompanyName: companyData?.name || 'Velloa',
-          magicLink: `http://localhost:3001/update-prospect?id=${prospectData.id}` // Fallback URL if OTP link fails
+          magicLink: `http://localhost:3001/update-prospect?id=${prospectData.id}&application_id=${applicationId}&token=${applicationToken}`
         }) as React.ReactElement,
         headers: {
           'X-Entity-Ref-ID': applicationId,

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Building, ArrowUpDown, Search, MoreHorizontal, CheckCircle, XCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Building, ArrowUpDown, Search, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -95,7 +95,7 @@ function TableSkeleton() {
   );
 }
 
-function DataTable({ data, currentTab, isLoading }: { data: Property[]; currentTab?: string; isLoading?: boolean }) {
+function DataTable({ data, isLoading }: { data: Property[]; isLoading?: boolean }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const router = useRouter();
@@ -168,31 +168,11 @@ function DataTable({ data, currentTab, isLoading }: { data: Property[]; currentT
       header: "",
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => router.push(`/property/${row.original.id}`)}>
-                View Details
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push(`/property/${row.original.id}/settings`)}>
-                Edit Property
-              </DropdownMenuItem>
-              {currentTab === "active" && (
-                <DropdownMenuItem onClick={() => console.log("Mark as inactive")}>
-                  Mark as Inactive
-                </DropdownMenuItem>
-              )}
-              {currentTab === "inactive" && (
-                <DropdownMenuItem onClick={() => console.log("Mark as active")}>
-                  Mark as Active
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Link href={`/property/${row.original.id}`} onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </Link>
         </div>
       ),
     },
@@ -341,22 +321,6 @@ export function PropertyClient({ initialProperties, isLoading = false }: Propert
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-4xl font-semibold">Properties</h1>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Add Property
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href="/property/add" className="flex items-center">
-                <Building className="opacity-60 mr-2" size={16} strokeWidth={2} aria-hidden="true" />
-                New Property
-              </Link>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
       
       <Card>
@@ -370,6 +334,22 @@ export function PropertyClient({ initialProperties, isLoading = false }: Propert
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                Add Property
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link href="/property/add" className="flex items-center">
+                  <Building className="opacity-60 mr-2" size={16} strokeWidth={2} aria-hidden="true" />
+                  New Property
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="all" className="w-full">
@@ -388,13 +368,13 @@ export function PropertyClient({ initialProperties, isLoading = false }: Propert
               </TabsTrigger>
             </TabsList>
             <TabsContent value="all">
-              <DataTable data={filteredAllProperties} currentTab="all" isLoading={isLoading} />
+              <DataTable data={filteredAllProperties} isLoading={isLoading} />
             </TabsContent>
             <TabsContent value="active">
-              <DataTable data={filteredActiveProperties} currentTab="active" isLoading={isLoading} />
+              <DataTable data={filteredActiveProperties} isLoading={isLoading} />
             </TabsContent>
             <TabsContent value="inactive">
-              <DataTable data={filteredInactiveProperties} currentTab="inactive" isLoading={isLoading} />
+              <DataTable data={filteredInactiveProperties} isLoading={isLoading} />
             </TabsContent>
           </Tabs>
         </CardContent>

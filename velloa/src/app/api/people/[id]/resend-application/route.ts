@@ -108,17 +108,66 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
       prospect.last_name || ''
     ].filter(Boolean).join(' ').trim() || 'Valued Prospect';
 
+    // Check if the prospect already has an application ID
+    let applicationId = prospect.application_id;
+    
+    // If no application ID exists, generate a new one
+    if (!applicationId) {
+      // Generate a 16 character application ID with only uppercase letters and numbers
+      const generateApplicationId = () => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let result = '';
+        for (let i = 0; i < 16; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+      };
+
+      applicationId = generateApplicationId();
+    } else {
+      console.log('Reusing existing application ID:', applicationId);
+    }
+
+    // Always generate a new token for application access
+    const applicationToken = crypto.randomBytes(16).toString('hex');
+
+    // Set token expiration to 7 days from now in local timezone
+    const now = new Date();
+    // Add 7 days to the current time
+    const tokenExpiration = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    // Format with timezone offset
+    const tokenExpirationISO = tokenExpiration.toISOString();
+
+    // Update the prospect with application details (new token and expiration)
+    const { error: updateError } = await supabase
+      .from('people')
+      .update({
+        application_id: applicationId,
+        application_token: applicationToken,
+        application_token_exp: tokenExpirationISO
+      })
+      .eq('id', prospect.id);
+
+    if (updateError) {
+      console.error('Error updating prospect with application details:', updateError);
+      // Continue with email even if update fails
+    }
+
+    // Create secure application link with application ID and token
+    const applicationLink = `http://localhost:3001/update-prospect?id=${prospect.id}&application_id=${applicationId}&token=${applicationToken}`;
+
     const emailData = {
       from: 'Velloa <onboarding@velloa.ca>',
       to: [emailAddress],
       subject: 'Welcome to Velloa - Complete Your Application',
       react: ApplicationSubmittedEmail({
         name: fullName,
-        confirmationNumber: prospect.id,
-        CompanyName: companyData?.name || 'Velloa'
+        applicationId: applicationId,
+        CompanyName: companyData?.name || 'Velloa',
+        magicLink: applicationLink
       }) as React.ReactElement,
       headers: {
-        'X-Entity-Ref-ID': crypto.randomUUID(),
+        'X-Entity-Ref-ID': applicationId,
       }
     };
 

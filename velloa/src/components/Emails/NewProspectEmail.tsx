@@ -16,7 +16,7 @@ import {
   interface ApplicationSubmittedEmailProps {
     name?: string;
     address?: string;
-    confirmationNumber?: string;
+    applicationId?: string;
     CompanyName?: string;
     magicLink?: string;
   }
@@ -24,7 +24,7 @@ import {
   export const ApplicationSubmittedEmail = ({
     name = "No Name",
     CompanyName = "Velloa",
-    confirmationNumber = "#123456",
+    applicationId = "#123456",
     magicLink = "https://www.velloa.ca",
   }: ApplicationSubmittedEmailProps) => {
     return (
@@ -50,7 +50,7 @@ import {
               </Text>
               
               <Text style={text}>
-                We&apos;re excited about your interest in our properties. Your next step is to complete the application process, which will help us get to know you better as a potential resident.
+                We&apos;re excited about your interest in our properties at {CompanyName}. Your next step is to complete the application process, which will help us get to know you better as a potential resident.
               </Text>
   
               <Button style={button} href={magicLink}>
@@ -73,7 +73,7 @@ import {
               </Text>
   
               <Text style={confirmationText}>
-                Application ID: {confirmationNumber}
+                Application ID: {applicationId}
               </Text>
             </Section>
   

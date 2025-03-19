@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
-import { Plus, ChevronLeft, ChevronRight, ArrowRight, ShieldCheck, ShieldX, User } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, ShieldCheck, ShieldX, User } from 'lucide-react';
 import Link from 'next/link';
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
@@ -95,7 +95,7 @@ function LeaseTable({ leases }: { leases: Lease[] }) {
                 <TableCell>
                   <Link href={`/leases/${lease.id}`} onClick={(e) => e.stopPropagation()}>
                     <Button variant="ghost" size="icon">
-                      <ArrowRight className="h-4 w-4" />
+                      <ChevronRight className="h-4 w-4" />
                     </Button>
                   </Link>
                 </TableCell>

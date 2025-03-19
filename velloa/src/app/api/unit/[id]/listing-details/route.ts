@@ -9,7 +9,7 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
     // First get the unit details to ensure the unit exists
     const { data: unitDetails, error: unitError } = await supabase
       .from('units')
-      .select('unit_name, beds, baths, size, property_id')
+      .select('unit_name, beds, baths, size, property_id, market_rent')
       .eq('unit_id', params.id)
       .single()
 
@@ -49,6 +49,7 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
         beds: unitDetails.beds || null,
         baths: unitDetails.baths || null,
         size: unitDetails.size || null,
+        price: unitDetails.market_rent || null,
         images: [],
         views: 0,
         leads: 0,
@@ -84,6 +85,7 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       beds: listingDetails.beds || unitDetails.beds || null,
       baths: listingDetails.baths || unitDetails.baths || null,
       size: listingDetails.size_sqft || unitDetails.size || null,
+      price: listingDetails.price || unitDetails.market_rent || null,
       images: listingDetails.images || [],
       views: listingDetails.views || 0,
       leads: listingDetails.leads || 0,
@@ -190,6 +192,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
           beds: body.beds || unitDetails.beds || null,
           baths: body.baths || unitDetails.baths || null,
           size_sqft: body.size_sqft || unitDetails.size || null,
+          price: body.price || unitDetails.market_rent || null,
           images: body.images || null,
           type: 'house', // Add a default type if needed
           views: body.views || 0,
@@ -224,6 +227,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
           beds: body.beds || unitDetails.beds || null,
           baths: body.baths || unitDetails.baths || null,
           size_sqft: body.size_sqft || unitDetails.size || null,
+          price: body.price || unitDetails.market_rent || null,
           images: body.images || null,
           type: 'house', // Add a default type if needed
           views: 0,

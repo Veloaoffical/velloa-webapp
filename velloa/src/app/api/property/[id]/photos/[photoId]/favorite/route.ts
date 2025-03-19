@@ -82,7 +82,7 @@ export async function PUT(
     const transformedPhotos = await Promise.all(allPhotos.map(async (photo) => {
       const { data: urlData } = await supabase.storage
         .from('property_images')
-        .createSignedUrl(photo.file_path, 3600)
+        .createSignedUrl(photo.file_path, 157680000)
 
       return {
         id: photo.id,

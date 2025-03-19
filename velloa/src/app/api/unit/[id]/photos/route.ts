@@ -50,7 +50,7 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
     const transformedPhotos: Promise<TransformedUnitImage>[] = photos.map(async (photo: UnitImage) => {
       const { data } = await supabase.storage
         .from('property_images')
-        .createSignedUrl(photo.file_path, 3600) // 1 hour signed URL
+        .createSignedUrl(photo.file_path, 157680000) // 5 year signed URL
 
       return {
         id: photo.id,
@@ -119,7 +119,7 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
     // Get signed URL
     const { data } = await supabase.storage
       .from('property_images')
-      .createSignedUrl(uniqueFileName, 3600) // 1 hour signed URL
+      .createSignedUrl(uniqueFileName, 157680000) // 5 year signed URL
 
     // Save to database with signed URL
     const { data: imageRecord, error: dbError } = await supabase

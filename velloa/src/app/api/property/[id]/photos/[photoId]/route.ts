@@ -68,7 +68,7 @@ export async function DELETE(
     const transformedPhotos = await Promise.all(photos.map(async (photo) => {
       const { data } = await supabase.storage
         .from('property_images')
-        .createSignedUrl(photo.file_path, 3600)
+        .createSignedUrl(photo.file_path, 157680000)
 
       return {
         id: photo.id,

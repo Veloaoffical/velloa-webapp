@@ -90,13 +90,14 @@ export async function GET() {
 
       // Get signed URLs for each photo using the same approach as unit photos API
       const unitImages = await Promise.all((photos || []).map(async (photo: UnitImage) => {
-        const { data } = await supabase.storage
+        // Use public URL instead of signed URL to prevent expiration
+        const { data } = supabase.storage
           .from('property_images')
-          .createSignedUrl(photo.file_path, 3600); // 1 hour signed URL
+          .getPublicUrl(photo.file_path);
 
         return {
           id: photo.id,
-          fileUrl: data?.signedUrl || photo.image_url,
+          fileUrl: data?.publicUrl || photo.image_url,
           fileName: photo.file_name,
           createdAt: photo.created_at,
           favorite: photo.favorite || false,

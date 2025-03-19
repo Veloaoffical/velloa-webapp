@@ -41,14 +41,16 @@ export async function POST(request: Request) {
     }
 
     const data = await request.json();
-    const { contact, residence, pets, vehicles, dependents, employment, income, role, unit_id, property_id } = data;
+    const { contact, residence, pets, vehicles, dependents, employment, income, role, unit_id, property_id, listing_id } = data;
 
     // Debug logging
     console.log('Received data for prospect creation:', { 
       unit_id, 
       property_id,
+      listing_id,
       hasUnitId: Boolean(unit_id),
-      hasPropertyId: Boolean(property_id)
+      hasPropertyId: Boolean(property_id),
+      hasListingId: Boolean(listing_id)
     });
 
     // Generate a 16 character application ID with only uppercase letters and numbers
@@ -102,10 +104,11 @@ export async function POST(request: Request) {
       application_token_exp: tokenExpirationISO,
 
       // Store property information as JSONB - ensure it's always saved
-      prospect_property: {
-        property_id: property_id || null,
-        unit_id: unit_id || null
-      },
+      prospect_property: listing_id ? [
+        {
+          "listing_id": listing_id
+        }
+      ] : [],
 
       // Store employment as JSON
       employment: {
@@ -176,6 +179,7 @@ export async function POST(request: Request) {
       id: prospectData.id,
       unit_id: prospectData.unit_id,
       prospect_property: prospectData.prospect_property,
+      prospect_property_format: Array.isArray(prospectData.prospect_property) ? 'array' : 'object',
       application_id: prospectData.application_id,
       application_token: prospectData.application_token
     });

@@ -186,14 +186,24 @@ export function UnitListingDetails({ unitId, unitDetails, listingDetails: initia
           description: tempDescription || currentListingDetails.listing_description,
           property_title: tempPropertyTitle || currentListingDetails.property_title,
           status: 'draft',
-          included_in_rent: currentListingDetails.included_in_rent,
-          interior_appliances: currentListingDetails.interior_appliances,
-          heating: currentListingDetails.heating,
-          cooling: currentListingDetails.cooling,
-          laundry: currentListingDetails.laundry,
-          parking: currentListingDetails.parking,
-          exterior: currentListingDetails.exterior,
-          favorite_photo: favoritePhoto
+          amenities: {
+            included_in_rent: currentListingDetails.included_in_rent,
+            interior_appliances: currentListingDetails.interior_appliances,
+            heating: currentListingDetails.heating,
+            cooling: currentListingDetails.cooling,
+            laundry: currentListingDetails.laundry,
+            parking: currentListingDetails.parking,
+            exterior: currentListingDetails.exterior,
+            favorite_photo: favoritePhoto
+          },
+          beds: unitDetails.beds,
+          baths: unitDetails.baths,
+          size_sqft: unitDetails.size,
+          images: photos.map(photo => ({
+            id: photo.id,
+            url: photo.fileUrl,
+            file_name: photo.fileName
+          }))
         }),
       })
 
@@ -220,16 +230,39 @@ export function UnitListingDetails({ unitId, unitDetails, listingDetails: initia
 
       setFavoritePhoto(newFavorite)
 
+      // Prepare the request body with all needed fields
+      const requestBody = {
+        description: currentListingDetails.listing_description,
+        property_title: currentListingDetails.property_title,
+        status: currentListingDetails.status || 'draft',
+        available_date: currentListingDetails.available_date,
+        amenities: {
+          included_in_rent: currentListingDetails.included_in_rent,
+          interior_appliances: currentListingDetails.interior_appliances,
+          heating: currentListingDetails.heating,
+          cooling: currentListingDetails.cooling,
+          laundry: currentListingDetails.laundry,
+          parking: currentListingDetails.parking,
+          exterior: currentListingDetails.exterior,
+          favorite_photo: newFavorite
+        },
+        beds: unitDetails.beds,
+        baths: unitDetails.baths,
+        size_sqft: unitDetails.size,
+        images: photos.map(photo => ({
+          id: photo.id,
+          url: photo.fileUrl,
+          file_name: photo.fileName
+        }))
+      }
+
       // Update listing details with new favorite
       const response = await fetch(`/api/unit/${unitId}/listing-details`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...currentListingDetails,
-          favorite_photo: newFavorite
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
@@ -285,14 +318,24 @@ export function UnitListingDetails({ unitId, unitDetails, listingDetails: initia
         property_title: currentListingDetails.property_title,
         status: 'published',
         available_date: formattedDate,
-        favorite_photo: currentListingDetails.favorite_photo,
-        included_in_rent: currentListingDetails.included_in_rent,
-        interior_appliances: currentListingDetails.interior_appliances,
-        heating: currentListingDetails.heating,
-        cooling: currentListingDetails.cooling,
-        laundry: currentListingDetails.laundry,
-        parking: currentListingDetails.parking,
-        exterior: currentListingDetails.exterior
+        amenities: {
+          included_in_rent: currentListingDetails.included_in_rent,
+          interior_appliances: currentListingDetails.interior_appliances,
+          heating: currentListingDetails.heating,
+          cooling: currentListingDetails.cooling,
+          laundry: currentListingDetails.laundry,
+          parking: currentListingDetails.parking,
+          exterior: currentListingDetails.exterior,
+          favorite_photo: currentListingDetails.favorite_photo
+        },
+        beds: unitDetails.beds,
+        baths: unitDetails.baths,
+        size_sqft: unitDetails.size,
+        images: photos.map(photo => ({
+          id: photo.id,
+          url: photo.fileUrl,
+          file_name: photo.fileName
+        }))
       }
 
       console.log('Sending request with body:', requestBody)
@@ -314,21 +357,35 @@ export function UnitListingDetails({ unitId, unitDetails, listingDetails: initia
       }
 
       // Update local state with the response data
-      setCurrentListingDetails(prev => ({
-        ...prev,
-        status: 'published',
-        available_date: publishDate,
-        listing_description: responseData.data?.listing_description || prev.listing_description,
-        property_title: responseData.data?.property_title || prev.property_title,
-        favorite_photo: responseData.data?.favorite_photo || prev.favorite_photo,
-        included_in_rent: responseData.data?.included_in_rent || prev.included_in_rent,
-        interior_appliances: responseData.data?.interior_appliances || prev.interior_appliances,
-        heating: responseData.data?.heating || prev.heating,
-        cooling: responseData.data?.cooling || prev.cooling,
-        laundry: responseData.data?.laundry || prev.laundry,
-        parking: responseData.data?.parking || prev.parking,
-        exterior: responseData.data?.exterior || prev.exterior
-      }))
+      setCurrentListingDetails(prev => {
+        // Extract amenities from the response data or use existing ones
+        const amenities = responseData.data?.amenities || {
+          included_in_rent: prev.included_in_rent,
+          interior_appliances: prev.interior_appliances,
+          heating: prev.heating,
+          cooling: prev.cooling,
+          laundry: prev.laundry,
+          parking: prev.parking,
+          exterior: prev.exterior,
+          favorite_photo: prev.favorite_photo
+        };
+        
+        return {
+          ...prev,
+          status: 'published',
+          available_date: publishDate,
+          listing_description: responseData.data?.description || prev.listing_description,
+          property_title: responseData.data?.property_title || prev.property_title,
+          favorite_photo: amenities.favorite_photo,
+          included_in_rent: amenities.included_in_rent,
+          interior_appliances: amenities.interior_appliances,
+          heating: amenities.heating,
+          cooling: amenities.cooling,
+          laundry: amenities.laundry,
+          parking: amenities.parking,
+          exterior: amenities.exterior
+        };
+      });
       
       setIsPublishDialogOpen(false)
       setPublishDate(undefined)

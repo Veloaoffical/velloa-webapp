@@ -9,7 +9,7 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
     // First get the unit details to ensure the unit exists
     const { data: unitDetails, error: unitError } = await supabase
       .from('units')
-      .select('unit_name')
+      .select('unit_name, beds, baths, size, property_id')
       .eq('unit_id', params.id)
       .single()
 
@@ -45,7 +45,14 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
         cooling: {},
         laundry: {},
         parking: {},
-        exterior: {}
+        exterior: {},
+        beds: unitDetails.beds || null,
+        baths: unitDetails.baths || null,
+        size: unitDetails.size || null,
+        images: [],
+        views: 0,
+        leads: 0,
+        applications_filled: 0
       })
     }
 
@@ -57,7 +64,8 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       cooling = {},
       laundry = {},
       parking = {},
-      exterior = {}
+      exterior = {},
+      favorite_photo = null
     } = listingDetails.amenities || {}
 
     // Return the formatted response
@@ -65,14 +73,21 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       listing_description: listingDetails.listing_description || "",
       property_title: listingDetails.property_title || unitDetails.unit_name,
       status: listingDetails.status || "draft",
-      favorite_photo: listingDetails.favorite_photo || null,
+      favorite_photo: favorite_photo,
       included_in_rent,
       interior_appliances,
       heating,
       cooling,
       laundry,
       parking,
-      exterior
+      exterior,
+      beds: listingDetails.beds || unitDetails.beds || null,
+      baths: listingDetails.baths || unitDetails.baths || null,
+      size: listingDetails.size_sqft || unitDetails.size || null,
+      images: listingDetails.images || [],
+      views: listingDetails.views || 0,
+      leads: listingDetails.leads || 0,
+      applications_filled: listingDetails.applications_filled || 0
     })
   } catch (error) {
     console.error('Error:', error)
@@ -136,7 +151,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
     // Fetch unit details
     const { data: unitDetails, error: unitError } = await supabase
       .from('units')
-      .select('unit_name, beds, baths, market_rent, size')
+      .select('unit_name, beds, baths, market_rent, size, property_id')
       .eq('unit_id', params.id)
       .single()
 
@@ -150,14 +165,14 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
 
     // Prepare amenities object including favorite_photo
     const amenities = {
-      included_in_rent: body.included_in_rent || {},
-      interior_appliances: body.interior_appliances || {},
-      heating: body.heating || {},
-      cooling: body.cooling || {},
-      laundry: body.laundry || {},
-      parking: body.parking || {},
-      exterior: body.exterior || {},
-      favorite_photo: body.favorite_photo || null
+      included_in_rent: body.amenities?.included_in_rent || {},
+      interior_appliances: body.amenities?.interior_appliances || {},
+      heating: body.amenities?.heating || {},
+      cooling: body.amenities?.cooling || {},
+      laundry: body.amenities?.laundry || {},
+      parking: body.amenities?.parking || {},
+      exterior: body.amenities?.exterior || {},
+      favorite_photo: body.amenities?.favorite_photo || null
     }
 
     let result;
@@ -171,7 +186,15 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
           property_title: body.property_title || unitDetails.unit_name,
           status: body.status || 'draft',
           available_date: body.available_date,
-          amenities: amenities
+          amenities: amenities,
+          beds: body.beds || unitDetails.beds || null,
+          baths: body.baths || unitDetails.baths || null,
+          size_sqft: body.size_sqft || unitDetails.size || null,
+          images: body.images || null,
+          type: 'house', // Add a default type if needed
+          views: body.views || 0,
+          leads: body.leads || 0,
+          applications_filled: body.applications_filled || 0
         })
         .eq('listingid', existingRecord.listingid)
         .select()
@@ -198,6 +221,15 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
           status: body.status || 'draft',
           available_date: body.available_date,
           amenities: amenities,
+          beds: body.beds || unitDetails.beds || null,
+          baths: body.baths || unitDetails.baths || null,
+          size_sqft: body.size_sqft || unitDetails.size || null,
+          images: body.images || null,
+          type: 'house', // Add a default type if needed
+          views: 0,
+          leads: 0,
+          applications_filled: 0,
+          "propertyId": unitDetails.property_id, // Use the property_id from unit details
           created_at: new Date().toISOString()
         })
         .select()

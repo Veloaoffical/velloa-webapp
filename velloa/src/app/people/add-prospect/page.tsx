@@ -309,6 +309,7 @@ export default function AddProspectPage() {
   const [step, setStep] = useState<'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'income' | 'pets' | 'vehicles' | 'dependents' | 'summary'>('intro');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
+  const [selectedListingId, setSelectedListingId] = useState<string>('');
   const [listings, setListings] = useState<UnitListing[]>([]);
   const [isLoadingListings, setIsLoadingListings] = useState(true);
   const [listingsError, setListingsError] = useState<string | null>(null);
@@ -534,9 +535,10 @@ export default function AddProspectPage() {
       setStep('summary');
     } else if (step === 'summary') {
       // Log the final property and unit IDs before submission
-      console.log('Final property and unit IDs before submission:', {
+      console.log('Final data before submission:', {
         propertyId: selectedPropertyId,
-        unitId: selectedUnitId
+        unitId: selectedUnitId,
+        listingId: selectedListingId
       });
       
       handleSubmit();
@@ -545,14 +547,8 @@ export default function AddProspectPage() {
 
   const handleSubmit = async () => {
     try {
-      // Prepare data for submission - unit_id and property_id will be saved to prospect_property in the API
-      console.log(`Saving prospect with unit_id: ${selectedUnitId} and property_id: ${selectedPropertyId} to prospect_property`);
-      
-      // Ensure we have values for unit_id and property_id, even if they're empty strings
-      const unitId = selectedUnitId || '';
-      const propertyId = selectedPropertyId || '';
-      
-      console.log(`Final values being sent: unit_id: ${unitId}, property_id: ${propertyId}`);
+      // Prepare data for submission - listing_id will be saved in an array format in prospect_property
+      console.log(`Saving prospect with listing_id: ${selectedListingId} to prospect_property as array`);
       
       // Create the request payload
       const payload = {
@@ -564,8 +560,9 @@ export default function AddProspectPage() {
         employment,
         income,
         role: 'prospect',
-        unit_id: unitId,
-        property_id: propertyId
+        unit_id: selectedUnitId || '',
+        property_id: selectedPropertyId || '',
+        listing_id: selectedListingId || ''
       };
       
       console.log('Full request payload:', JSON.stringify(payload));
@@ -732,13 +729,15 @@ export default function AddProspectPage() {
             if (prev === listing.units.unit_id) {
               // Deselect the unit
               setSelectedPropertyId('');
+              setSelectedListingId('');
               console.log('Deselected unit and property');
               return '';
             } else {
               // Select the unit and property - this will be saved to prospect_property
               const newPropertyId = listing.units.property_id;
               setSelectedPropertyId(newPropertyId);
-              console.log(`Selected unit ${listing.units.unit_id} and property ${newPropertyId} for prospect`);
+              setSelectedListingId(listing.listingid);
+              console.log(`Selected unit ${listing.units.unit_id}, property ${newPropertyId}, and listing ${listing.listingid} for prospect`);
               return listing.units.unit_id;
             }
           });
@@ -747,7 +746,8 @@ export default function AddProspectPage() {
           setTimeout(() => {
             console.log('After selection change (delayed):', { 
               newUnitId: selectedUnitId, 
-              newPropertyId: selectedPropertyId 
+              newPropertyId: selectedPropertyId,
+              newListingId: selectedListingId
             });
           }, 100);
         }}
@@ -2728,11 +2728,11 @@ export default function AddProspectPage() {
                               </Button>
                             </div>
                             <div className="mt-1">
-                              {selectedUnitId && selectedPropertyId ? (
+                              {selectedListingId ? (
                                 <div>
                                   {(() => {
                                     const selectedListing = listings.find(
-                                      listing => listing.units.unit_id === selectedUnitId
+                                      listing => listing.listingid === selectedListingId
                                     );
                                     return selectedListing ? (
                                       <>
@@ -2742,7 +2742,7 @@ export default function AddProspectPage() {
                                         </p>
                                       </>
                                     ) : (
-                                      <p>Selected unit information not available</p>
+                                      <p>Selected listing information not available</p>
                                     );
                                   })()}
                                 </div>

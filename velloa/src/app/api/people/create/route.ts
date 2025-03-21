@@ -147,18 +147,40 @@ export async function POST(request: Request) {
     // Add residence information only if it exists and noPastResidence is false
     if (residence && !residence.noPastResidence) {
       Object.assign(insertData, {
-        current_address: {
-          street: residence.address.street,
-          city: residence.address.city,
-          province: residence.address.province,
-          postal_code: residence.address.postalCode
-        },
-        move_in_date: residence.moveInDate || null,
-        monthly_rent: residence.monthlyRent ? parseFloat(residence.monthlyRent) : null,
-        reason_for_leaving: residence.reasonForLeaving,
-        landlord_name: residence.landlordName,
-        landlord_phone: residence.landlordPhone,
-        landlord_email: residence.landlordEmail,
+        residence: {
+          address: {
+            street: residence.address.street,
+            city: residence.address.city,
+            province: residence.address.province,
+            postal_code: residence.address.postalCode
+          },
+          monthly_rent: residence.monthlyRent ? parseFloat(residence.monthlyRent) : null,
+          move_in_date: residence.moveInDate || null,
+          landlord_name: residence.landlordName,
+          landlord_email: residence.landlordEmail,
+          landlord_phone: residence.landlordPhone,
+          no_past_residence: false,
+          reason_for_leaving: residence.reasonForLeaving
+        }
+      });
+    } else {
+      // Store empty residence object if no past residence
+      Object.assign(insertData, {
+        residence: {
+          address: {
+            city: "",
+            street: "",
+            province: "",
+            postal_code: ""
+          },
+          monthly_rent: null,
+          move_in_date: null,
+          landlord_name: "",
+          landlord_email: "",
+          landlord_phone: "",
+          no_past_residence: true,
+          reason_for_leaving: ""
+        }
       });
     }
 

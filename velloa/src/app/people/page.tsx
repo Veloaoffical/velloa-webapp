@@ -54,7 +54,7 @@ async function fetchPeople() {
         unit_id,
         role,
         status,
-        move_in_date,
+        expected_move_in_date,
         assignee_id
       `)
       .eq('company_id', companyMember.company_id);
@@ -133,6 +133,7 @@ async function fetchPeople() {
 
       return {
         ...person,
+        move_in_date: person.expected_move_in_date,
         unit: unit ? {
           unit_number: unit.unit_name,
           property_name: property?.name

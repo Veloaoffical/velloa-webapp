@@ -57,6 +57,21 @@ interface PersonDetails {
     method?: 'email' | 'mail_check';
     billing_email?: string;
   };
+  residence?: {
+    address?: {
+      street: string;
+      city: string;
+      province: string;
+      postal_code: string;
+    };
+    move_in_date?: string | null;
+    monthly_rent?: number | null;
+    reason_for_leaving?: string;
+    landlord_name?: string;
+    landlord_phone?: string;
+    landlord_email?: string;
+    noPastResidence?: boolean;
+  };
 }
 
 export default function PersonDetails() {

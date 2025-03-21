@@ -37,7 +37,7 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
         about_you,
         status,
         company_id,
-        current_address,
+        residence,
         pets,
         vehicles,
         dependents,

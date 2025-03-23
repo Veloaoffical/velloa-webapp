@@ -1,10 +1,41 @@
-import { createClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
+import { createClient } from '@/utils/supabase/server';
 import { Resend } from 'resend';
 import { ApplicationSubmittedEmail } from '@/components/Emails/NewProspectEmail';
 import crypto from 'crypto';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+interface ResidenceAddress {
+  address: {
+    street: string;
+    city: string;
+    province: string;
+    postalCode: string;
+  };
+  moveInDate: string;
+  monthlyRent: string;
+  reasonForLeaving: string;
+  landlordName: string;
+  landlordPhone: string;
+  landlordEmail: string;
+}
+
+interface EmploymentData {
+  employerName: string;
+  jobTitle: string;
+  monthlyIncome: string;
+  employmentType: string;
+  startDate: string;
+  supervisorName: string;
+  supervisorPhone: string;
+  address: {
+    street: string;
+    city: string;
+    province: string;
+    postalCode: string;
+  };
+}
 
 export async function POST(request: Request) {
   try {
@@ -111,20 +142,21 @@ export async function POST(request: Request) {
       ] : [],
 
       // Store employment as JSON
-      employment: {
-        employer_name: employment.employerName,
-        job_title: employment.jobTitle,
-        monthly_income: employment.monthlyIncome ? parseFloat(employment.monthlyIncome) : null,
-        employment_start_date: employment.startDate || null,
-        supervisor_name: employment.supervisorName,
-        supervisor_phone: employment.supervisorPhone,
+      employment: employment.map((job: EmploymentData) => ({
+        employer_name: job.employerName,
+        job_title: job.jobTitle,
+        monthly_income: job.monthlyIncome ? parseFloat(job.monthlyIncome) : null,
+        employment_type: job.employmentType,
+        employment_start_date: job.startDate || null,
+        supervisor_name: job.supervisorName,
+        supervisor_phone: job.supervisorPhone,
         address: {
-          street: employment.address.street,
-          city: employment.address.city,
-          province: employment.address.province,
-          postal_code: employment.address.postalCode
+          street: job.address.street,
+          city: job.address.city,
+          province: job.address.province,
+          postal_code: job.address.postalCode
         }
-      },
+      })),
 
       // Store income as JSON
       income: {
@@ -147,26 +179,26 @@ export async function POST(request: Request) {
     // Add residence information only if it exists and noPastResidence is false
     if (residence && !residence.noPastResidence) {
       Object.assign(insertData, {
-        residence: {
+        residences: residence.addresses.map((addr: ResidenceAddress) => ({
           address: {
-            street: residence.address.street,
-            city: residence.address.city,
-            province: residence.address.province,
-            postal_code: residence.address.postalCode
+            street: addr.address.street,
+            city: addr.address.city,
+            province: addr.address.province,
+            postal_code: addr.address.postalCode
           },
-          monthly_rent: residence.monthlyRent ? parseFloat(residence.monthlyRent) : null,
-          move_in_date: residence.moveInDate || null,
-          landlord_name: residence.landlordName,
-          landlord_email: residence.landlordEmail,
-          landlord_phone: residence.landlordPhone,
+          monthly_rent: addr.monthlyRent ? parseFloat(addr.monthlyRent) : null,
+          move_in_date: addr.moveInDate || null,
+          landlord_name: addr.landlordName,
+          landlord_email: addr.landlordEmail,
+          landlord_phone: addr.landlordPhone,
           no_past_residence: false,
-          reason_for_leaving: residence.reasonForLeaving
-        }
+          reason_for_leaving: addr.reasonForLeaving
+        }))
       });
     } else {
       // Store empty residence object if no past residence
       Object.assign(insertData, {
-        residence: {
+        residences: [{
           address: {
             city: "",
             street: "",
@@ -180,7 +212,7 @@ export async function POST(request: Request) {
           landlord_phone: "",
           no_past_residence: true,
           reason_for_leaving: ""
-        }
+        }]
       });
     }
 

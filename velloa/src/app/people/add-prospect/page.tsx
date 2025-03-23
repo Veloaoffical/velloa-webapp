@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { ChevronDown, Phone, Mail, Lock, Search, X, Plus, Check, DollarSign, Cat, Ban, Car, Users, EyeIcon, EyeOffIcon, Home } from 'lucide-react';
+import { ChevronDown, Phone, Mail, Lock, Search, X, Plus, Check, DollarSign, Cat, Ban, Car, Users, EyeIcon, EyeOffIcon, Home, Trash2, Upload, FileText } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import * as RPNInput from "react-phone-number-input";
 import flags from "react-phone-number-input/flags";
@@ -63,6 +63,11 @@ import {
 import CalendarInput from "@/components/calendarwithmonthsinput";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
+import { DateRange } from "react-day-picker";
+import { format } from "date-fns";
+import { ResidenceDateRangePicker } from "@/components/ResidenceDateRangePicker";
+import { Checkbox } from "@/components/ui/checkbox";
+import React from 'react';
 
 // Province data
 const provinces = [
@@ -154,7 +159,7 @@ interface ContactForm {
   lastName: string;
   email: string;
   phone: string;
-  ssn: string;
+  ssn?: string;  // Made optional with ?
   driversLicenseState: string;
   driversLicenseNumber: string;
   dateOfBirth: Date | undefined;
@@ -169,18 +174,21 @@ interface ContactForm {
 }
 
 interface ResidenceForm {
-  address: {
-    street: string;
-    city: string;
-    province: string;
-    postalCode: string;
-  };
-  moveInDate: string;
-  monthlyRent: string;
-  reasonForLeaving: string;
-  landlordName: string;
-  landlordPhone: string;
-  landlordEmail: string;
+  addresses: {
+    address: {
+      street: string;
+      city: string;
+      province: string;
+      postalCode: string;
+    };
+    lengthOfStay: DateRange | undefined;
+    monthlyRent: string;
+    residentialStatus: 'rent' | 'mortgage';
+    reasonForLeaving: string;
+    landlordName?: string;
+    landlordPhone?: string;
+    landlordEmail?: string;
+  }[];
   noPastResidence: boolean | null;
 }
 
@@ -218,6 +226,8 @@ interface EmploymentForm {
   monthlyIncome: string;
   employmentType: string;
   startDate: string;
+  endDate: string;
+  isCurrentJob: boolean;
   supervisorName: string;
   supervisorPhone: string;
   address: {
@@ -226,6 +236,7 @@ interface EmploymentForm {
     province: string;
     postalCode: string;
   };
+  documents?: File[];
 }
 
 interface IncomeForm {
@@ -274,17 +285,51 @@ interface Unit {
   properties: Property;
 }
 
+interface PropertyAddress {
+  address_line_1?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  street?: string;
+  province?: string;
+  postal_code?: string;
+  country?: string;
+}
+
+interface ImageData {
+  id: string;
+  url?: string;
+  fileUrl?: string;
+  image_url?: string;
+  file_name?: string;
+  fileName?: string;
+  createdAt?: string;
+  favorite?: boolean;
+  isFavorite?: boolean;
+}
+
 interface UnitListing {
   listingid: string;
   created_at: string;
-  title: string | null;
-  description: string | null;
-  
+  property_title: string | null;
+  listing_description: string | null;
   amenities: Record<string, unknown> | null;
-  available_from: string | null;
+  available_date: string | null;
   status: string | null;
   unitid: string | null;
-  units: Unit;
+  propertyId: string | null;
+  views: number | null;
+  leads: number | null;
+  beds: number | null;
+  baths: number | null;
+  images: ImageData[] | null;
+  type: string | null;
+  size_sqft: number | null;
+  applications_filled: number | null;
+  property_address: PropertyAddress | null;
+  unit_title: string | null;
+  price: number | null;
+  units?: Unit; // Optional reference to joined units table
 }
 
 // Driver's License Format Patterns
@@ -302,6 +347,22 @@ const driverLicenseFormats = {
   QC: { pattern: "[A-Z][0-9]{12}", format: "A999999999999", maxLength: 13 },
   SK: { pattern: "[0-9]{8}", format: "99999999", maxLength: 8 },
   YT: { pattern: "[0-9]{6}", format: "999999", maxLength: 6 }
+};
+
+const defaultResidence = {
+  address: {
+    street: '',
+    city: '',
+    province: '',
+    postalCode: '',
+  },
+  lengthOfStay: undefined,
+  monthlyRent: '',
+  residentialStatus: 'rent' as const,
+  reasonForLeaving: '',
+  landlordName: '',
+  landlordPhone: '',
+  landlordEmail: '',
 };
 
 export default function AddProspectPage() {
@@ -335,18 +396,7 @@ export default function AddProspectPage() {
   const [emails, setEmails] = useState<string[]>(['']);
   const [phones, setPhones] = useState<string[]>(['']);
   const [residence, setResidence] = useState<ResidenceForm>({
-    address: {
-      street: '',
-      city: '',
-      province: '',
-      postalCode: ''
-    },
-    moveInDate: '',
-    monthlyRent: '',
-    reasonForLeaving: '',
-    landlordName: '',
-    landlordPhone: '',
-    landlordEmail: '',
+    addresses: [defaultResidence],
     noPastResidence: null
   });
   const [pets, setPets] = useState<PetForm[]>([{
@@ -375,12 +425,14 @@ export default function AddProspectPage() {
     relationship: '',
     age: ''
   }]);
-  const [employment, setEmployment] = useState<EmploymentForm>({
+  const [employment, setEmployment] = useState<EmploymentForm[]>([{
     employerName: '',
     jobTitle: '',
     monthlyIncome: '',
     employmentType: '',
     startDate: '',
+    endDate: '',
+    isCurrentJob: true,
     supervisorName: '',
     supervisorPhone: '',
     address: {
@@ -388,8 +440,9 @@ export default function AddProspectPage() {
       city: '',
       province: '',
       postalCode: ''
-    }
-  });
+    },
+    documents: []
+  }]);
   const [income, setIncome] = useState<IncomeForm>({
     employmentIncome: '',
     governmentAssistance: '',
@@ -486,13 +539,6 @@ export default function AddProspectPage() {
         });
         return;
       }
-      
-      if (!contact.ssn || contact.ssn.length !== 9) {
-        toast.error('Invalid SSN', {
-          description: 'SSN must be exactly 9 digits'
-        });
-        return;
-      }
 
       if (!contact.expected_move_in_date) {
         toast.error('Missing Information', {
@@ -510,7 +556,7 @@ export default function AddProspectPage() {
         });
         return;
       }
-      if (!residence.noPastResidence && (!residence.address.street || !residence.address.city || !residence.address.province || !residence.address.postalCode)) {
+      if (!residence.noPastResidence && (!residence.addresses[0].address.street || !residence.addresses[0].address.city || !residence.addresses[0].address.province || !residence.addresses[0].address.postalCode)) {
         toast.error('Missing Information', {
           description: 'Please fill out all address fields.'
         });
@@ -519,6 +565,18 @@ export default function AddProspectPage() {
       markStepCompleted('residence');
       setStep('employment');
     } else if (step === 'employment') {
+      // Check if documents are provided for current jobs
+      const missingDocuments = employment.some(job => 
+        job.isCurrentJob && (!job.documents || job.documents.length === 0)
+      );
+      
+      if (missingDocuments) {
+        toast.error('Missing Documents', {
+          description: 'Please upload employment verification documents for all current jobs'
+        });
+        return;
+      }
+      
       markStepCompleted('employment');
       setStep('income');
     } else if (step === 'income') {
@@ -681,38 +739,46 @@ export default function AddProspectPage() {
   const renderListing = (listing: UnitListing) => {
     console.log('Rendering listing:', {
       listingId: listing.listingid,
-      unitId: listing.units.unit_id, // Direct reference to unit_id
-      propertyId: listing.units.property_id, // Property ID from unit
-      hasUnit: Boolean(listing.units),
-      unitDetails: listing.units ? {
-        unit_id: listing.units.unit_id,
-        unit_name: listing.units.unit_name,
-        hasImages: Boolean(listing.units.unit_images),
-        imageCount: listing.units.unit_images?.length || 0,
-        firstImage: listing.units.unit_images?.[0],
-        allImages: listing.units.unit_images?.map(img => ({
-          id: img.id,
-          fileUrl: img.fileUrl,
-          fileName: img.fileName,
-          createdAt: img.createdAt,
-          favorite: img.favorite,
-          isFavorite: img.isFavorite
-        }))
-      } : null
+      unitId: listing.unitid,
+      propertyId: listing.propertyId,
+      images: listing.images,
+      beds: listing.beds,
+      baths: listing.baths,
+      price: listing.price,
+      size: listing.size_sqft
     });
 
-    // Find the image URL to use - prefer fileUrl over image_url
-    const imageUrl = listing.units?.unit_images?.length > 0 
-      ? (listing.units.unit_images[0]?.fileUrl || listing.units.unit_images[0]?.image_url)
-      : null;
+    // Find the image URL to use from the images array in the listing
+    let imageUrl = '/placeholder-property.jpg'; // Default placeholder
+    
+    if (listing.images && Array.isArray(listing.images) && listing.images.length > 0) {
+      // Try multiple possible property names for the URL
+      const firstImage = listing.images[0];
+      imageUrl = firstImage.url || 
+                firstImage.fileUrl || 
+                firstImage.image_url || 
+                '/placeholder-property.jpg';
+    }
     
     console.log('Using image URL:', imageUrl);
+    
+    // Try to get unit and property info either from joined unit or from listing directly
+    const unitName = listing.units?.unit_name || listing.unit_title || 'Unknown Unit';
+    const propertyName = listing.units?.properties?.name || listing.property_title || 'Unknown Property';
+    
+    // Get property address from either joined property or direct listing data
+    const propertyAddress: PropertyAddress = listing.property_address || {
+      address_line_1: listing.units?.properties?.address_line_1 || '',
+      city: listing.units?.properties?.city || '',
+      state: listing.units?.properties?.state || '',
+      zip: listing.units?.properties?.zip || ''
+    };
     
     return (
       <div
         key={listing.listingid}
         className={`rounded-lg border overflow-hidden ${
-          selectedUnitId === listing.units.unit_id
+          selectedUnitId === listing.unitid
             ? 'border-primary bg-primary/5'
             : 'border-border hover:border-primary hover:bg-primary/5'
         } cursor-pointer transition-all h-full flex flex-col`}
@@ -721,12 +787,12 @@ export default function AddProspectPage() {
           console.log('Before selection change:', { 
             currentUnitId: selectedUnitId, 
             currentPropertyId: selectedPropertyId,
-            clickedUnitId: listing.units.unit_id,
-            clickedPropertyId: listing.units.property_id
+            clickedUnitId: listing.unitid,
+            clickedPropertyId: listing.propertyId
           });
           
           setSelectedUnitId(prev => {
-            if (prev === listing.units.unit_id) {
+            if (prev === listing.unitid) {
               // Deselect the unit
               setSelectedPropertyId('');
               setSelectedListingId('');
@@ -734,11 +800,11 @@ export default function AddProspectPage() {
               return '';
             } else {
               // Select the unit and property - this will be saved to prospect_property
-              const newPropertyId = listing.units.property_id;
+              const newPropertyId = listing.propertyId || '';
               setSelectedPropertyId(newPropertyId);
               setSelectedListingId(listing.listingid);
-              console.log(`Selected unit ${listing.units.unit_id}, property ${newPropertyId}, and listing ${listing.listingid} for prospect`);
-              return listing.units.unit_id;
+              console.log(`Selected unit ${listing.unitid}, property ${newPropertyId}, and listing ${listing.listingid} for prospect`);
+              return listing.unitid || '';
             }
           });
           
@@ -752,45 +818,39 @@ export default function AddProspectPage() {
           }, 100);
         }}
       >
-        {listing.units && listing.units.unit_images && listing.units.unit_images.length > 0 ? (
-          <div className="relative w-full h-36">
-            <Image
-              src={imageUrl || '/placeholder-property.jpg'}
-              alt={`Unit ${listing.units.unit_name}`}
-              fill
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              className="object-cover"
-              priority
-            />
-          </div>
-        ) : (
-          <div className="relative w-full h-36 bg-muted flex items-center justify-center">
-            <div className="text-muted-foreground">No image available</div>
-          </div>
-        )}
+        <div className="relative w-full h-36">
+          <Image
+            src={imageUrl}
+            alt={`${propertyName} - ${unitName}`}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="object-cover"
+            priority
+          />
+        </div>
         <div className="p-4">
           <div className="flex justify-between items-start">
             <div className="space-y-2 text-left flex-grow">
               <h3 className="font-medium text-base">
-                {listing.units.properties.name} - Unit {listing.units.unit_name}
-                {selectedUnitId === listing.units.unit_id && (
+                {propertyName} - Unit {unitName}
+                {selectedUnitId === listing.unitid && (
                   <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                     Selected
                   </span>
                 )}
               </h3>
               <div className="text-xs text-muted-foreground">
-                <p>{listing.units.properties.address_line_1}</p>
+                <p>{propertyAddress.address_line_1 || propertyAddress.street || ''}</p>
                 <p>
-                  {listing.units.properties.city}, {listing.units.properties.state}{' '}
-                  {listing.units.properties.zip}
+                  {propertyAddress.city || ''}, {propertyAddress.state || propertyAddress.province || ''}{' '}
+                  {propertyAddress.zip || propertyAddress.postal_code || ''}
                 </p>
               </div>
             </div>
           </div>
           <div className="mt-3 flex justify-between items-center text-xs text-muted-foreground pt-2 border-t">
-            <p>{listing.units.properties.name} - Unit {listing.units.unit_name}</p>
-            <p>Available {new Date(listing.available_from || '').toLocaleDateString()}</p>
+            <p>{propertyName} - Unit {unitName}</p>
+            <p>Available {new Date(listing.available_date || '').toLocaleDateString()}</p>
           </div>
         </div>
       </div>
@@ -898,7 +958,7 @@ export default function AddProspectPage() {
           <h3 className="text-lg font-semibold mb-4">Identification</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="ssn">SSN <span className="text-red-500">*</span></Label>
+              <Label htmlFor="ssn">SSN</Label>
               <div className="relative">
                 <Input 
                   id="ssn"
@@ -909,13 +969,16 @@ export default function AddProspectPage() {
                     const value = e.target.value.replace(/[^0-9]/g, '');
                     if (value.length <= 9) {
                       setContact({...contact, ssn: value});
+                      // Only validate if there is a value
+                      if (value && value.length > 0 && value.length !== 9) {
+                        toast.error('Invalid SSN', {
+                          description: 'SSN must be exactly 9 digits'
+                        });
+                      }
                     }
                   }}
-                  pattern="[0-9]{9}"
                   maxLength={9}
                   className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20 pr-10"
-                  required
-                  title="SSN must be exactly 9 digits"
                 />
                 <button
                   type="button"
@@ -1023,6 +1086,29 @@ export default function AddProspectPage() {
 
     setLicenseError('');
     return true;
+  };
+
+  const handleFileUpload = (files: FileList | null, jobIndex: number) => {
+    if (!files) return;
+    
+    const newEmployment = [...employment];
+    const fileArray = Array.from(files);
+    
+    newEmployment[jobIndex] = { 
+      ...newEmployment[jobIndex], 
+      documents: [...(newEmployment[jobIndex].documents || []), ...fileArray]
+    };
+    
+    setEmployment(newEmployment);
+    toast.success(`${fileArray.length} ${fileArray.length === 1 ? 'file' : 'files'} uploaded`);
+  };
+  
+  const handleRemoveFile = (jobIndex: number, fileIndex: number) => {
+    const newEmployment = [...employment];
+    if (newEmployment[jobIndex].documents) {
+      newEmployment[jobIndex].documents = newEmployment[jobIndex].documents?.filter((_, idx) => idx !== fileIndex);
+      setEmployment(newEmployment);
+    }
   };
 
   return (
@@ -1576,18 +1662,21 @@ export default function AddProspectPage() {
                             setResidence({
                               ...residence,
                               noPastResidence: value === 'no',
-                              address: value === 'no' ? {
-                                street: '',
-                                city: '',
-                                province: '',
-                                postalCode: ''
-                              } : residence.address,
-                              moveInDate: value === 'no' ? '' : residence.moveInDate,
-                              monthlyRent: value === 'no' ? '' : residence.monthlyRent,
-                              reasonForLeaving: value === 'no' ? '' : residence.reasonForLeaving,
-                              landlordName: value === 'no' ? '' : residence.landlordName,
-                              landlordPhone: value === 'no' ? '' : residence.landlordPhone,
-                              landlordEmail: value === 'no' ? '' : residence.landlordEmail
+                              addresses: value === 'no' ? [{
+                                address: {
+                                  street: '',
+                                  city: '',
+                                  province: '',
+                                  postalCode: ''
+                                },
+                                lengthOfStay: undefined,
+                                monthlyRent: '',
+                                residentialStatus: 'rent',
+                                reasonForLeaving: '',
+                                landlordName: '',
+                                landlordPhone: '',
+                                landlordEmail: ''
+                              }] : residence.addresses,
                             });
                           }}
                         >
@@ -1622,337 +1711,705 @@ export default function AddProspectPage() {
                           <>
                             <div>
                               <h3 className="text-lg font-semibold mb-4">Address Information</h3>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="grid gap-2">
-                                  <Label htmlFor="street">Street Address</Label>
-                        <Input 
-                          id="street"
-                                    placeholder="Enter street address"
-                          value={residence.address.street}
-                                    onChange={(e) => setResidence({
-                                      ...residence, 
-                                      address: {...residence.address, street: e.target.value}
-                                    })}
-                          className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                        />
-                      </div>
-                                <div className="grid gap-2">
-                                  <Label htmlFor="city">City</Label>
-                        <Input 
-                          id="city"
-                                    placeholder="Enter city"
-                          value={residence.address.city}
-                                    onChange={(e) => setResidence({
-                                      ...residence, 
-                                      address: {...residence.address, city: e.target.value}
-                                    })}
-                          className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                        />
-                      </div>
-                                <div className="grid gap-2">
-                                  <Label htmlFor="province">Province</Label>
-                                  <Select
-                                    value={residence.address.province}
-                                    onValueChange={(value) => setResidence({
-                                      ...residence,
-                                      address: {...residence.address, province: value}
-                                    })}
-                                  >
-                                    <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
-                                      <SelectValue placeholder="Select Province" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {provinces.map((province) => (
-                                        <SelectItem key={province.value} value={province.value}>
-                                          {province.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                      </div>
-                                <div className="grid gap-2">
-                                  <Label htmlFor="postalCode">Postal Code</Label>
-                        <Input 
-                          id="postalCode"
-                                    placeholder="Enter postal code"
-                          value={residence.address.postalCode}
-                                    onChange={(e) => setResidence({
-                                      ...residence, 
-                                      address: {...residence.address, postalCode: e.target.value}
-                                    })}
-                          className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                        />
-                      </div>
-                              </div>
-                            </div>
-
-                            <Separator />
-
-                            <div>
-                              <h3 className="text-lg font-semibold mb-4">Residence Details</h3>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="grid gap-2">
-                                  <Label htmlFor="moveInDate">Move-in Date</Label>
-                                  <CalendarInput
-                                    value={residence.moveInDate ? new Date(residence.moveInDate) : undefined}
-                                    onChange={(date) => setResidence({...residence, moveInDate: date ? date.toISOString().split('T')[0] : ''})}
-                                    className="w-full"
-                                    placeholder="Select move-in date"
-                                  />
-                                </div>
-                                <div className="grid gap-2">
-                                  <Label htmlFor="monthlyRent">Monthly Rent</Label>
-                                  <div className="relative">
-                                    <Input 
-                                      type="number"
-                                      placeholder="Enter amount"
-                                      value={residence.monthlyRent}
-                                      onChange={(e) => setResidence({...residence, monthlyRent: e.target.value})}
-                                      className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                                    />
-                                    <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
-                                      <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
+                              {residence.addresses.map((addressInfo, index) => (
+                                <div key={index} className="mb-8">
+                                  {index > 0 && (
+                                    <div className="flex justify-between items-center mb-4">
+                                      <h4 className="text-md font-medium">Previous Address</h4>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setResidence({
+                                            ...residence,
+                                            addresses: residence.addresses.filter((_, i) => i !== index)
+                                          });
+                                        }}
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Remove Address
+                                      </Button>
+                                    </div>
+                                  )}
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                      <Label htmlFor={`street-${index}`}>Street Address</Label>
+                                      <Input 
+                                        id={`street-${index}`}
+                                        placeholder="Enter street address"
+                                        value={addressInfo.address.street}
+                                        onChange={(e) => {
+                                          const newAddresses = [...residence.addresses];
+                                          newAddresses[index] = {
+                                            ...newAddresses[index],
+                                            address: {
+                                              ...newAddresses[index].address,
+                                              street: e.target.value
+                                            }
+                                          };
+                                          setResidence({
+                                            ...residence,
+                                            addresses: newAddresses
+                                          });
+                                        }}
+                                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                      />
+                                    </div>
+                                    <div className="grid gap-2">
+                                      <Label htmlFor={`city-${index}`}>City</Label>
+                                      <Input 
+                                        id={`city-${index}`}
+                                        placeholder="Enter city"
+                                        value={addressInfo.address.city}
+                                        onChange={(e) => {
+                                          const newAddresses = [...residence.addresses];
+                                          newAddresses[index] = {
+                                            ...newAddresses[index],
+                                            address: {
+                                              ...newAddresses[index].address,
+                                              city: e.target.value
+                                            }
+                                          };
+                                          setResidence({
+                                            ...residence,
+                                            addresses: newAddresses
+                                          });
+                                        }}
+                                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                      />
+                                    </div>
+                                    <div className="grid gap-2">
+                                      <Label htmlFor={`province-${index}`}>Province</Label>
+                                      <Select
+                                        value={addressInfo.address.province}
+                                        onValueChange={(value) => {
+                                          const newAddresses = [...residence.addresses];
+                                          newAddresses[index] = {
+                                            ...newAddresses[index],
+                                            address: {
+                                              ...newAddresses[index].address,
+                                              province: value
+                                            }
+                                          };
+                                          setResidence({
+                                            ...residence,
+                                            addresses: newAddresses
+                                          });
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                          <SelectValue placeholder="Select Province" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {provinces.map((province) => (
+                                            <SelectItem key={province.value} value={province.value}>
+                                              {province.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="grid gap-2">
+                                      <Label htmlFor={`postalCode-${index}`}>Postal Code</Label>
+                                      <Input 
+                                        id={`postalCode-${index}`}
+                                        placeholder="Enter postal code"
+                                        value={addressInfo.address.postalCode}
+                                        onChange={(e) => {
+                                          const newAddresses = [...residence.addresses];
+                                          newAddresses[index] = {
+                                            ...newAddresses[index],
+                                            address: {
+                                              ...newAddresses[index].address,
+                                              postalCode: e.target.value
+                                            }
+                                          };
+                                          setResidence({
+                                            ...residence,
+                                            addresses: newAddresses
+                                          });
+                                        }}
+                                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                      />
                                     </div>
                                   </div>
+
+                                  <div className="mt-6">
+                                    <h4 className="text-md font-medium mb-4">Residence Details</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div className="grid gap-2">
+                                        <Label htmlFor={`residentialStatus-${index}`}>Residential Status</Label>
+                                        <Select
+                                          value={addressInfo.residentialStatus}
+                                          onValueChange={(value: 'rent' | 'mortgage') => {
+                                            const newAddresses = [...residence.addresses];
+                                            newAddresses[index] = {
+                                              ...newAddresses[index],
+                                              residentialStatus: value,
+                                              ...(value === 'mortgage' && {
+                                                landlordName: '',
+                                                landlordPhone: '',
+                                                landlordEmail: ''
+                                              })
+                                            };
+                                            setResidence({
+                                              ...residence,
+                                              addresses: newAddresses
+                                            });
+                                          }}
+                                        >
+                                          <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                            <SelectValue placeholder="Select Status" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="rent">Rent</SelectItem>
+                                            <SelectItem value="mortgage">Mortgage</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="grid gap-2">
+                                        <Label>Length of Stay</Label>
+                                        <div className="h-[42px]">
+                                          <ResidenceDateRangePicker
+                                            value={addressInfo.lengthOfStay}
+                                            onChange={(range) => {
+                                              const newAddresses = [...residence.addresses];
+                                              newAddresses[index] = {
+                                                ...newAddresses[index],
+                                                lengthOfStay: range
+                                              };
+                                              setResidence({
+                                                ...residence,
+                                                addresses: newAddresses
+                                              });
+                                            }}
+                                            label=""
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="grid gap-2">
+                                        <Label htmlFor={`monthlyRent-${index}`}>Monthly Rent</Label>
+                                        <div className="relative">
+                                          <Input 
+                                            type="number"
+                                            id={`monthlyRent-${index}`}
+                                            placeholder="Enter monthly rent"
+                                            value={addressInfo.monthlyRent}
+                                            onChange={(e) => {
+                                              const newAddresses = [...residence.addresses];
+                                              newAddresses[index] = {
+                                                ...newAddresses[index],
+                                                monthlyRent: e.target.value
+                                              };
+                                              setResidence({
+                                                ...residence,
+                                                addresses: newAddresses
+                                              });
+                                            }}
+                                            className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                          />
+                                          <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+                                            <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="grid gap-2">
+                                        <Label htmlFor={`reasonForLeaving-${index}`}>Reason for Leaving</Label>
+                                        <Input 
+                                          id={`reasonForLeaving-${index}`}
+                                          placeholder="Enter reason"
+                                          value={addressInfo.reasonForLeaving}
+                                          onChange={(e) => {
+                                            const newAddresses = [...residence.addresses];
+                                            newAddresses[index] = {
+                                              ...newAddresses[index],
+                                              reasonForLeaving: e.target.value
+                                            };
+                                            setResidence({
+                                              ...residence,
+                                              addresses: newAddresses
+                                            });
+                                          }}
+                                          className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {addressInfo.residentialStatus === 'rent' && (
+                                    <div className="mt-6">
+                                      <h4 className="text-md font-medium mb-4">Landlord Information</h4>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="grid gap-2">
+                                          <Label htmlFor={`landlordName-${index}`}>Landlord Name</Label>
+                                          <Input 
+                                            id={`landlordName-${index}`}
+                                            placeholder="Enter landlord name"
+                                            value={addressInfo.landlordName}
+                                            onChange={(e) => {
+                                              const newAddresses = [...residence.addresses];
+                                              newAddresses[index] = {
+                                                ...newAddresses[index],
+                                                landlordName: e.target.value
+                                              };
+                                              setResidence({
+                                                ...residence,
+                                                addresses: newAddresses
+                                              });
+                                            }}
+                                            className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                          />
+                                        </div>
+                                        <div className="grid gap-2">
+                                          <Label htmlFor={`landlordPhone-${index}`}>Landlord Phone</Label>
+                                          <RPNInput.default
+                                            className="flex rounded-lg shadow-sm shadow-black/5 bg-background hover:bg-background focus-within:border-ring focus-within:outline-[3px] focus-within:outline-ring/20"
+                                            international
+                                            flagComponent={FlagComponent}
+                                            countrySelectComponent={CountrySelect}
+                                            inputComponent={PhoneInput}
+                                            id={`landlordPhone-${index}`}
+                                            placeholder="Enter landlord phone"
+                                            value={addressInfo.landlordPhone}
+                                            onChange={(newValue) => {
+                                              const newAddresses = [...residence.addresses];
+                                              newAddresses[index] = {
+                                                ...newAddresses[index],
+                                                landlordPhone: newValue ?? ""
+                                              };
+                                              setResidence({
+                                                ...residence,
+                                                addresses: newAddresses
+                                              });
+                                            }}
+                                          />
+                                        </div>
+                                        <div className="grid gap-2">
+                                          <Label htmlFor={`landlordEmail-${index}`}>Landlord Email</Label>
+                                          <Input 
+                                            id={`landlordEmail-${index}`}
+                                            type="email"
+                                            placeholder="Enter landlord email"
+                                            value={addressInfo.landlordEmail}
+                                            onChange={(e) => {
+                                              const newAddresses = [...residence.addresses];
+                                              newAddresses[index] = {
+                                                ...newAddresses[index],
+                                                landlordEmail: e.target.value
+                                              };
+                                              setResidence({
+                                                ...residence,
+                                                addresses: newAddresses
+                                              });
+                                            }}
+                                            className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                                <div className="grid gap-2 md:col-span-2">
-                                  <Label htmlFor="reasonForLeaving">Reason for Leaving</Label>
-                        <Input 
-                          id="reasonForLeaving"
-                                    placeholder="Enter reason"
-                          value={residence.reasonForLeaving}
-                                    onChange={(e) => setResidence({...residence, reasonForLeaving: e.target.value})}
-                          className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                        />
-                      </div>
-                              </div>
+                              ))}
+                              
+                              {residence.addresses.length < 2 && !residence.noPastResidence && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="mt-4"
+                                  onClick={() => {
+                                    setResidence({
+                                      ...residence,
+                                      addresses: [
+                                        ...residence.addresses,
+                                        defaultResidence
+                                      ]
+                                    });
+                                  }}
+                                >
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Add Previous Address
+                                </Button>
+                              )}
                             </div>
-
-                            <Separator />
-
-                            <div>
-                              <h3 className="text-lg font-semibold mb-4">Landlord Information</h3>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="grid gap-2">
-                                  <Label htmlFor="landlordName">Landlord Name</Label>
-                        <Input 
-                          id="landlordName"
-                                    placeholder="Enter landlord name"
-                          value={residence.landlordName}
-                                    onChange={(e) => setResidence({...residence, landlordName: e.target.value})}
-                          className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                        />
-                      </div>
-                                <div className="grid gap-2">
-                                  <Label htmlFor="landlordPhone">Landlord Phone</Label>
-                                  <RPNInput.default
-                                    className="flex rounded-lg shadow-sm shadow-black/5 bg-background hover:bg-background focus-within:border-ring focus-within:outline-[3px] focus-within:outline-ring/20"
-                                    international
-                                    flagComponent={FlagComponent}
-                                    countrySelectComponent={CountrySelect}
-                                    inputComponent={PhoneInput}
-                                    id="landlordPhone"
-                                    placeholder="Enter landlord phone"
-                                    value={residence.landlordPhone}
-                                    onChange={(newValue) => setResidence({...residence, landlordPhone: newValue ?? ""})}
-                                  />
-                                </div>
-                                <div className="grid gap-2">
-                                  <Label htmlFor="landlordEmail">Landlord Email</Label>
-                          <Input 
-                            id="landlordEmail"
-                            type="email"
-                                    placeholder="Enter landlord email"
-                            value={residence.landlordEmail}
-                                    onChange={(e) => setResidence({...residence, landlordEmail: e.target.value})}
-                                    className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                                  />
-                          </div>
-                                </div>
-                              </div>
                           </>
                   )}
                       </div>
                 </div>
               </div>
             ) : step === 'employment' ? (
-                  <div className="flex flex-col">
-                    <div className="space-y-4">
-                      <h2 className="text-2xl font-semibold">Employment</h2>
-                      <p className="text-gray-600">
-                        Enter information about the prospect&apos;s employment.
-                      </p>
-                  </div>
+      <div className="flex flex-col">
+        <div className="space-y-4">
+          <h2 className="text-2xl font-semibold">Employment</h2>
+          <p className="text-gray-600">
+            Enter information about the prospect&apos;s employment. You can add up to 2 jobs.
+          </p>
+      </div>
 
-                    <div className="max-w-4xl mx-auto w-full mt-6">
-                      <div className="space-y-6">
-                        <div>
-                          <h3 className="text-lg font-semibold mb-4">Employer Information</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                      <Label htmlFor="employerName">Employer Name</Label>
+        <div className="max-w-4xl mx-auto w-full mt-6">
+          {employment.map((job, jobIndex) => (
+            <div key={jobIndex} className="mb-8">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xl font-semibold">
+                </h3>
+                {jobIndex > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      const newEmployment = [...employment];
+                      newEmployment.splice(jobIndex, 1);
+                      setEmployment(newEmployment);
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" /> Remove
+                  </Button>
+                )}
+              </div>
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Employer Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor={`employerName-${jobIndex}`}>Employer Name</Label>
                       <Input 
-                        id="employerName"
-                                placeholder="Enter employer name"
-                        value={employment.employerName}
-                                onChange={(e) => setEmployment({...employment, employerName: e.target.value})}
+                        id={`employerName-${jobIndex}`}
+                        placeholder="Enter employer name"
+                        value={job.employerName}
+                        onChange={(e) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { ...newEmployment[jobIndex], employerName: e.target.value };
+                          setEmployment(newEmployment);
+                        }}
                         className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                       />
                     </div>
-                            <div className="grid gap-2">
-                      <Label htmlFor="jobTitle">Job Title</Label>
+                    <div className="grid gap-2">
+                      <Label htmlFor={`jobTitle-${jobIndex}`}>Job Title</Label>
                       <Input 
-                        id="jobTitle"
-                                placeholder="Enter job title"
-                        value={employment.jobTitle}
-                                onChange={(e) => setEmployment({...employment, jobTitle: e.target.value})}
+                        id={`jobTitle-${jobIndex}`}
+                        placeholder="Enter job title"
+                        value={job.jobTitle}
+                        onChange={(e) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { ...newEmployment[jobIndex], jobTitle: e.target.value };
+                          setEmployment(newEmployment);
+                        }}
                         className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
                       />
                     </div>
-                            <div className="grid gap-2">
-                      <Label htmlFor="monthlyIncome">Monthly Income</Label>
-                        <Input 
-                          id="monthlyIncome"
-                          type="number"
-                                placeholder="Enter monthly income"
-                          value={employment.monthlyIncome}
-                                onChange={(e) => setEmployment({...employment, monthlyIncome: e.target.value})}
-                                className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                              />
+                    <div className="grid gap-2">
+                      <Label htmlFor={`monthlyIncome-${jobIndex}`}>Monthly Income</Label>
+                      <Input 
+                        id={`monthlyIncome-${jobIndex}`}
+                        type="number"
+                        placeholder="Enter monthly income"
+                        value={job.monthlyIncome}
+                        onChange={(e) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { ...newEmployment[jobIndex], monthlyIncome: e.target.value };
+                          setEmployment(newEmployment);
+                        }}
+                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor={`employmentType-${jobIndex}`}>Employment Type</Label>
+                      <Select
+                        value={job.employmentType}
+                        onValueChange={(value) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { ...newEmployment[jobIndex], employmentType: value };
+                          setEmployment(newEmployment);
+                        }}
+                      >
+                        <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                          <SelectValue placeholder="Select Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="full-time">Full-time</SelectItem>
+                          <SelectItem value="part-time">Part-time</SelectItem>
+                          <SelectItem value="contract">Contract</SelectItem>
+                          <SelectItem value="self-employed">Self-employed</SelectItem>
+                          <SelectItem value="unemployed">Unemployed</SelectItem>
+                          <SelectItem value="retired">Retired</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor={`startDate-${jobIndex}`}>Start Date</Label>
+                      <CalendarInput
+                        value={job.startDate ? new Date(job.startDate) : undefined}
+                        onChange={(date) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { 
+                            ...newEmployment[jobIndex], 
+                            startDate: date ? date.toISOString().split('T')[0] : '' 
+                          };
+                          setEmployment(newEmployment);
+                        }}
+                        className="w-full"
+                        placeholder="Select start date"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor={`endDate-${jobIndex}`}>End Date</Label>
+                      <CalendarInput
+                        value={job.endDate ? new Date(job.endDate) : undefined}
+                        onChange={(date) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { 
+                            ...newEmployment[jobIndex], 
+                            endDate: date ? date.toISOString().split('T')[0] : '' 
+                          };
+                          setEmployment(newEmployment);
+                        }}
+                        className="w-full"
+                        placeholder="Select end date"
+                        disabled={job.isCurrentJob}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Checkbox
+                        id={`isCurrentJob-${jobIndex}`}
+                        checked={job.isCurrentJob}
+                        onCheckedChange={(checked) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { 
+                            ...newEmployment[jobIndex], 
+                            isCurrentJob: checked as boolean,
+                            // Clear end date if current job is checked
+                            ...(checked ? { endDate: '' } : {})
+                          };
+                          setEmployment(newEmployment);
+                        }}
+                      />
+                      <Label 
+                        htmlFor={`isCurrentJob-${jobIndex}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >
+                        This is my current job
+                      </Label>
+                    </div>
+                    
+                    <div className="col-span-2 mt-4">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-sm mb-2 block">Upload document showing your employment verification</Label>
+                        <span className="text-sm text-red-500">*</span>
                       </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="employmentType">Employment Type</Label>
-                              <Select
-                                value={employment.employmentType}
-                                onValueChange={(value) => setEmployment({...employment, employmentType: value})}
-                              >
-                                <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
-                                  <SelectValue placeholder="Select Type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="full-time">Full-time</SelectItem>
-                                  <SelectItem value="part-time">Part-time</SelectItem>
-                                  <SelectItem value="contract">Contract</SelectItem>
-                                  <SelectItem value="self-employed">Self-employed</SelectItem>
-                                  <SelectItem value="unemployed">Unemployed</SelectItem>
-                                  <SelectItem value="retired">Retired</SelectItem>
-                                </SelectContent>
-                              </Select>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center gap-1"
+                          onClick={() => document.getElementById(`file-upload-${jobIndex}`)?.click()}
+                        >
+                          <Upload className="h-4 w-4" />
+                          <span>Upload Document</span>
+                        </Button>
+                        <span className="text-xs text-muted-foreground">
+                          Upload pay stubs, employment letter, or other verification documents
+                        </span>
+                        <input
+                          type="file"
+                          id={`file-upload-${jobIndex}`}
+                          className="hidden"
+                          onChange={(e) => handleFileUpload(e.target.files, jobIndex)}
+                          multiple
+                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                          required
+                        />
+                      </div>
                     </div>
-                            <div className="grid gap-2">
-                      <Label htmlFor="startDate">Start Date</Label>
-                              <CalendarInput
-                                value={employment.startDate ? new Date(employment.startDate) : undefined}
-                                onChange={(date) => setEmployment({...employment, startDate: date ? date.toISOString().split('T')[0] : ''})}
-                                className="w-full"
-                                placeholder="Select start date"
-                              />
-                    </div>
-                          </div>
-                        </div>
-
-                        <Separator />
-
-                        <div>
-                          <h3 className="text-lg font-semibold mb-4">Supervisor Information</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                      <Label htmlFor="supervisorName">Supervisor Name</Label>
-                      <Input 
-                        id="supervisorName"
-                                placeholder="Enter supervisor name"
-                        value={employment.supervisorName}
-                                onChange={(e) => setEmployment({...employment, supervisorName: e.target.value})}
-                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                      />
-                    </div>
-                            <div className="grid gap-2">
-                      <Label htmlFor="supervisorPhone">Supervisor Phone</Label>
-                              <RPNInput.default
-                                className="flex rounded-lg shadow-sm shadow-black/5 bg-background hover:bg-background focus-within:border-ring focus-within:outline-[3px] focus-within:outline-ring/20"
-                                international
-                                flagComponent={FlagComponent}
-                                countrySelectComponent={CountrySelect}
-                                inputComponent={PhoneInput}
-                                id="supervisorPhone"
-                                placeholder="Enter supervisor phone"
-                                value={employment.supervisorPhone}
-                                onChange={(newValue) => setEmployment({...employment, supervisorPhone: newValue ?? ""})}
-                              />
-                    </div>
-                          </div>
-                        </div>
-
-                        <Separator />
-
-                        <div>
-                          <h3 className="text-lg font-semibold mb-4">Employer Address</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="empStreet">Street Address</Label>
-                      <Input 
-                                id="empStreet"
-                                placeholder="Enter street address"
-                        value={employment.address.street}
-                                onChange={(e) => setEmployment({
-                                  ...employment, 
-                                  address: {...employment.address, street: e.target.value}
-                                })}
-                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                      />
-                    </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="empCity">City</Label>
-                      <Input 
-                                id="empCity"
-                                placeholder="Enter city"
-                        value={employment.address.city}
-                                onChange={(e) => setEmployment({
-                                  ...employment, 
-                                  address: {...employment.address, city: e.target.value}
-                                })}
-                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                      />
-                    </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="empProvince">Province</Label>
-                              <Select
-                                value={employment.address.province}
-                                onValueChange={(value) => setEmployment({
-                                  ...employment, 
-                                  address: {...employment.address, province: value}
-                                })}
-                              >
-                                <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
-                                  <SelectValue placeholder="Select Province" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {provinces.map((province) => (
-                                    <SelectItem key={province.value} value={province.value}>
-                                      {province.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                    </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="empPostalCode">Postal Code</Label>
-                      <Input 
-                                id="empPostalCode"
-                                placeholder="Enter postal code"
-                        value={employment.address.postalCode}
-                                onChange={(e) => setEmployment({
-                                  ...employment, 
-                                  address: {...employment.address, postalCode: e.target.value}
-                                })}
-                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                      />
+                    
+                    {job.documents && job.documents.length > 0 && (
+                      <div className="col-span-2 mt-2 space-y-2">
+                        {job.documents.map((file, fileIndex) => (
+                          <div key={fileIndex} className="flex items-center justify-between bg-muted p-2 rounded">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm truncate max-w-[300px]">{file.name}</span>
                             </div>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6" 
+                              onClick={() => handleRemoveFile(jobIndex, fileIndex)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
                           </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Supervisor Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor={`supervisorName-${jobIndex}`}>Supervisor Name</Label>
+                      <Input 
+                        id={`supervisorName-${jobIndex}`}
+                        placeholder="Enter supervisor name"
+                        value={job.supervisorName}
+                        onChange={(e) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { ...newEmployment[jobIndex], supervisorName: e.target.value };
+                          setEmployment(newEmployment);
+                        }}
+                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor={`supervisorPhone-${jobIndex}`}>Supervisor Phone</Label>
+                      <RPNInput.default
+                        className="flex rounded-lg shadow-sm shadow-black/5 bg-background hover:bg-background focus-within:border-ring focus-within:outline-[3px] focus-within:outline-ring/20"
+                        international
+                        flagComponent={FlagComponent}
+                        countrySelectComponent={CountrySelect}
+                        inputComponent={PhoneInput}
+                        id={`supervisorPhone-${jobIndex}`}
+                        placeholder="Enter supervisor phone"
+                        value={job.supervisorPhone}
+                        onChange={(newValue) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { ...newEmployment[jobIndex], supervisorPhone: newValue ?? "" };
+                          setEmployment(newEmployment);
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Employer Address</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor={`empStreet-${jobIndex}`}>Street Address</Label>
+                      <Input 
+                        id={`empStreet-${jobIndex}`}
+                        placeholder="Enter street address"
+                        value={job.address.street}
+                        onChange={(e) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { 
+                            ...newEmployment[jobIndex], 
+                            address: { ...newEmployment[jobIndex].address, street: e.target.value }
+                          };
+                          setEmployment(newEmployment);
+                        }}
+                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor={`empCity-${jobIndex}`}>City</Label>
+                      <Input 
+                        id={`empCity-${jobIndex}`}
+                        placeholder="Enter city"
+                        value={job.address.city}
+                        onChange={(e) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { 
+                            ...newEmployment[jobIndex], 
+                            address: { ...newEmployment[jobIndex].address, city: e.target.value }
+                          };
+                          setEmployment(newEmployment);
+                        }}
+                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor={`empProvince-${jobIndex}`}>Province</Label>
+                      <Select
+                        value={job.address.province}
+                        onValueChange={(value) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { 
+                            ...newEmployment[jobIndex], 
+                            address: { ...newEmployment[jobIndex].address, province: value }
+                          };
+                          setEmployment(newEmployment);
+                        }}
+                      >
+                        <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                          <SelectValue placeholder="Select Province" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {provinces.map((province) => (
+                            <SelectItem key={province.value} value={province.value}>
+                              {province.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor={`empPostalCode-${jobIndex}`}>Postal Code</Label>
+                      <Input 
+                        id={`empPostalCode-${jobIndex}`}
+                        placeholder="Enter postal code"
+                        value={job.address.postalCode}
+                        onChange={(e) => {
+                          const newEmployment = [...employment];
+                          newEmployment[jobIndex] = { 
+                            ...newEmployment[jobIndex], 
+                            address: { ...newEmployment[jobIndex].address, postalCode: e.target.value }
+                          };
+                          setEmployment(newEmployment);
+                        }}
+                        className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                      />
                     </div>
                   </div>
                 </div>
               </div>
+            </div>
+          ))}
+          
+          {employment.length < 2 && (
+            <div className="flex justify-center mt-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (employment.length < 2) {
+                    setEmployment([
+                      ...employment,
+                      {
+                        employerName: '',
+                        jobTitle: '',
+                        monthlyIncome: '',
+                        employmentType: '',
+                        startDate: '',
+                        endDate: '',
+                        isCurrentJob: true,
+                        supervisorName: '',
+                        supervisorPhone: '',
+                        address: {
+                          street: '',
+                          city: '',
+                          province: '',
+                          postalCode: ''
+                        },
+                        documents: []
+                      }
+                    ]);
+                  }
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Another Job
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
             ) : step === 'income' ? (
                   <div className="flex flex-col">
                     <div className="space-y-4">
@@ -2730,21 +3187,43 @@ export default function AddProspectPage() {
                             <div className="mt-1">
                               {selectedListingId ? (
                                 <div>
-                                  {(() => {
-                                    const selectedListing = listings.find(
-                                      listing => listing.listingid === selectedListingId
-                                    );
-                                    return selectedListing ? (
-                                      <>
-                                        <p className="font-medium">{selectedListing.units.properties.name} - Unit {selectedListing.units.unit_name}</p>
-                                        <p className="text-sm text-muted-foreground">
-                                          {selectedListing.units.properties.address_line_1}, {selectedListing.units.properties.city}, {selectedListing.units.properties.state} {selectedListing.units.properties.zip}
-                                        </p>
-                                      </>
-                                    ) : (
-                                      <p>Selected listing information not available</p>
-                                    );
-                                  })()}
+                                  {/* Simplified rendering approach */}
+                                  {listings.map(listing => {
+                                    if (listing.listingid === selectedListingId) {
+                                      // Property and unit names
+                                      const propertyName = listing.units?.properties?.name || 
+                                        listing.property_title || 'Unknown Property';
+                                      const unitName = listing.units?.unit_name || 
+                                        listing.unit_title || 'Unknown Unit';
+                                      
+                                      // Extract address data with proper type handling
+                                      const propAddr = typeof listing.property_address === 'object' ? 
+                                        listing.property_address as PropertyAddress : 
+                                        {};
+                                          
+                                      // Address components with type safety
+                                      const addressLine = listing.units?.properties?.address_line_1 || 
+                                        propAddr.address_line_1 || propAddr.street || '';
+                                      const city = listing.units?.properties?.city || 
+                                        propAddr.city || '';
+                                      const state = listing.units?.properties?.state || 
+                                        propAddr.state || propAddr.province || '';
+                                      const zip = listing.units?.properties?.zip || 
+                                        propAddr.zip || propAddr.postal_code || '';
+                                      
+                                      return (
+                                        <React.Fragment key={listing.listingid}>
+                                          <p className="font-medium">
+                                            {propertyName} - Unit {unitName}
+                                          </p>
+                                          <p className="text-sm text-muted-foreground">
+                                            {addressLine}, {city}, {state} {zip}
+                                          </p>
+                                        </React.Fragment>
+                                      );
+                                    }
+                                    return null;
+                                  })}
                                 </div>
                               ) : (
                                 <p className="text-gray-500">No property or unit selected</p>
@@ -2809,35 +3288,44 @@ export default function AddProspectPage() {
                             <div className="mt-1">
                               {residence.noPastResidence === true ? (
                                 <p className="text-gray-500">No</p>
-                              ) : (
-                                <div className="space-y-2">
-                                  <div>
-                                    <p className="text-sm text-muted-foreground">Current Address</p>
-                                    <p>{residence.address.street}</p>
-                                    <p>{residence.address.city}, {residence.address.province} {residence.address.postalCode}</p>
-                                  </div>
-                                  {residence.moveInDate && (
-                                    <div>
-                                      <p className="text-sm text-muted-foreground">Move-in Date</p>
-                                      <p>{new Date(residence.moveInDate).toLocaleDateString()}</p>
+                              ) :
+                                <div className="space-y-4">
+                                  {residence.addresses.map((addr, index) => (
+                                    <div key={index} className="space-y-2">
+                                      <div>
+                                        <p className="text-sm text-muted-foreground">
+                                          {index === 0 ? "Current Address" : "Previous Address"}
+                                        </p>
+                                        <p>{addr.address.street}</p>
+                                        <p>{addr.address.city}, {addr.address.province} {addr.address.postalCode}</p>
+                                      </div>
+                                      {addr.lengthOfStay && (
+                                        <div>
+                                          <p className="text-sm text-muted-foreground">Length of Stay</p>
+                                          <p>{addr.lengthOfStay.from ? format(addr.lengthOfStay.from, "LLL dd, y") : ''} - {addr.lengthOfStay.to ? format(addr.lengthOfStay.to, "LLL dd, y") : ''}</p>
+                                        </div>
+                                      )}
+                                      {addr.monthlyRent && (
+                                        <div>
+                                          <p className="text-sm text-muted-foreground">Monthly Rent</p>
+                                          <p>${addr.monthlyRent}</p>
+                                        </div>
+                                      )}
+                                      {addr.landlordName && (
+                                        <div>
+                                          <p className="text-sm text-muted-foreground">Landlord</p>
+                                          <p>{addr.landlordName}</p>
+                                          {addr.landlordPhone && <p>Phone: {addr.landlordPhone}</p>}
+                                          {addr.landlordEmail && <p>Email: {addr.landlordEmail}</p>}
+                                        </div>
+                                      )}
+                                      {index < residence.addresses.length - 1 && (
+                                        <Separator className="my-4" />
+                                      )}
                                     </div>
-                                  )}
-                                  {residence.monthlyRent && (
-                                    <div>
-                                      <p className="text-sm text-muted-foreground">Monthly Rent</p>
-                                      <p>${residence.monthlyRent}</p>
-                                    </div>
-                                  )}
-                                  {residence.landlordName && (
-                                    <div>
-                                      <p className="text-sm text-muted-foreground">Landlord</p>
-                                      <p>{residence.landlordName}</p>
-                                      {residence.landlordPhone && <p>Phone: {residence.landlordPhone}</p>}
-                                      {residence.landlordEmail && <p>Email: {residence.landlordEmail}</p>}
-                                    </div>
-                                  )}
+                                  ))}
                                 </div>
-                              )}
+                              }
                             </div>
                           </div>
                                 {/* Employment */}
@@ -2853,24 +3341,30 @@ export default function AddProspectPage() {
                               </Button>
                             </div>
                             <div className="mt-1">
-                              {employment.employerName ? (
-                                <div className="space-y-2">
-                                  <div>
-                                    <p className="text-sm text-muted-foreground">Employer</p>
-                                    <p>{employment.employerName}</p>
-                                  </div>
-                                  {employment.startDate && (
-                                    <div>
-                                      <p className="text-sm text-muted-foreground">Start Date</p>
-                                      <p>{new Date(employment.startDate).toLocaleDateString()}</p>
+                              {employment.length > 0 && employment[0].employerName ? (
+                                <div className="space-y-4">
+                                  {employment.map((job, index) => (
+                                    <div key={index} className="border-b pb-3 last:border-b-0 last:pb-0">
+                                      <div className="space-y-2">
+                                        <div>
+                                          <p className="text-sm text-muted-foreground">Employer</p>
+                                          <p>{job.employerName}</p>
+                                        </div>
+                                        {job.startDate && (
+                                          <div>
+                                            <p className="text-sm text-muted-foreground">Start Date</p>
+                                            <p>{new Date(job.startDate).toLocaleDateString()}</p>
+                                          </div>
+                                        )}
+                                        {job.monthlyIncome && (
+                                          <div>
+                                            <p className="text-sm text-muted-foreground">Monthly Income</p>
+                                            <p>${job.monthlyIncome}</p>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
-                                  )}
-                                  {employment.monthlyIncome && (
-                                    <div>
-                                      <p className="text-sm text-muted-foreground">Monthly Income</p>
-                                      <p>${employment.monthlyIncome}</p>
-                                    </div>
-                                  )}
+                                  ))}
                                 </div>
                               ) : (
                                 <p className="text-gray-500">No employer specified</p>

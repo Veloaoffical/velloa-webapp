@@ -65,6 +65,7 @@ const CalendarInput = forwardRef<{ hasDateSelected: () => boolean }, CalendarInp
         setInputValue(format(selectedDate, "yyyy/MM/dd"))
         setError(undefined)
         onChange?.(selectedDate)
+        setIsOpen(false)
       } else {
         setDate(undefined)
         setInputValue("")

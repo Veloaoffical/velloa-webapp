@@ -595,9 +595,7 @@ export function PersonRentalApplication() {
                             <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
                               <TableCell className="py-2.5">Address</TableCell>
                               <TableCell className="py-2.5 font-medium">
-                                {personDetails.residence?.address ? 
-                                  `${personDetails.residence.address.street}, ${personDetails.residence.address.city} ${personDetails.residence.address.province}, ${personDetails.residence.address.postal_code}` : 
-                                  '6021 Yonge Street, North York ON, Canada, M2M 3W2'}
+                                123 Main St, Toronto, ON, M5A 1A1
                               </TableCell>
                             </TableRow>
                             <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
@@ -1217,85 +1215,74 @@ export function PersonRentalApplication() {
             <CardContent className="p-6">
               <div className="space-y-4">
                 <h3 className="font-semibold text-lg mb-2">Public record results</h3>
-                <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="1" className="odd:bg-muted/50 border-none px-4 py-2">
-                    <AccordionTrigger className="py-2 text-[15px] leading-6 hover:no-underline hover:bg-transparent">
-                      LTB-L-00000-11: Filed by landlord on 2018-06-01
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground pb-2">
-                      <div className="space-y-2 pt-2">
-                        <div className="flex justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">Openroom</p>
-                          </div>
-                          <div className="text-sm">Date filed: Jun 01, 2023</div>
-                        </div>
-                        <div className="space-y-3 mt-4">
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Address:</span> 101 YONGE ST, TORONTO, ON M5C4B4
-                          </div>
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Tenant name:</span> John Doe
-                          </div>
-                          <div className="pt-2">
-                            <span className="text-sm font-medium text-foreground">Full details:</span> 
-                            <a href="https://openroom.ca/dashboard/document/817455f7-e9ee-438c-bfc4-6308f72e2714" className="text-primary ml-1 hover:underline">
-                              https://openroom.ca/dashboard/document/817455f7-e9ee-438c-bfc4-6308f72e2714
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                  
-                  <AccordionItem value="2" className="even:bg-transparent odd:bg-muted/50 border-none px-4 py-2">
-                    <AccordionTrigger className="py-2 text-[15px] leading-6 hover:no-underline hover:bg-transparent">
-                      Tremblay c. Doe
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground pb-2">
-                      <div className="space-y-2 pt-2">
-                        <div className="flex justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">Soquij</p>
-                          </div>
-                          <div className="text-sm">Date filed: Sep 02, 2019</div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                  
-                  <AccordionItem value="3" className="odd:bg-muted/50 border-none px-4 py-2">
-                    <AccordionTrigger className="py-2 text-[15px] leading-6 hover:no-underline hover:bg-transparent">
-                      Tremblay v. Doe
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground pb-2">
-                      <div className="space-y-2 pt-2">
-                        <div className="flex justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">CanLII</p>
-                          </div>
-                          <div className="text-sm">Date filed: Sep 02, 2019</div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                  
-                  <AccordionItem value="4" className="even:bg-transparent odd:bg-muted/50 border-none px-4 py-2">
-                    <AccordionTrigger className="py-2 text-[15px] leading-6 hover:no-underline hover:bg-transparent">
-                      Starlight Canadian Residential Growth F v Doe
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground pb-2">
-                      <div className="space-y-2 pt-2">
-                        <div className="flex justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">CanLII</p>
-                          </div>
-                          <div className="text-sm">Date filed: Nov 07, 2021</div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
+                <div className="grid grid-cols-2 gap-6 mt-6">
+                  <div className="h-full overflow-auto">
+                    <Table>
+                      <TableBody>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Public court records</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            <Badge variant="outline" className="gap-1">
+                              <CheckIcon className="text-emerald-500" size={12} aria-hidden="true" />
+                              Cleared
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Criminal record search</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            <Badge variant="outline" className="gap-1">
+                              <CheckIcon className="text-emerald-500" size={12} aria-hidden="true" />
+                              Cleared
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Fraud watchlist</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            <Badge variant="outline" className="gap-1">
+                              <CheckIcon className="text-emerald-500" size={12} aria-hidden="true" />
+                              Cleared
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="h-full overflow-auto">
+                    <Table>
+                      <TableBody>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Known affiliations</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            <Badge variant="outline" className="gap-1">
+                              <CheckIcon className="text-emerald-500" size={12} aria-hidden="true" />
+                              Cleared
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Global clearance check</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            <Badge variant="outline" className="gap-1">
+                              <CheckIcon className="text-emerald-500" size={12} aria-hidden="true" />
+                              Cleared
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Identity verification</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            <Badge variant="outline" className="gap-1">
+                              <CheckIcon className="text-emerald-500" size={12} aria-hidden="true" />
+                              Verified
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1850,172 +1837,144 @@ export function PersonRentalApplication() {
           {/* ID Verification Card */}
           <Card className="shadow-sm mt-6">
             <CardContent className="p-6">
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <h3 className="font-semibold text-lg mb-2">ID verification results</h3>
                 
-                {/* ID Document Images Display */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="border rounded-md overflow-hidden relative group">
-                    <div className="aspect-[3/2] relative bg-muted/60">
+                {/* Driver's License Images */}
+                <div className="flex flex-col md:flex-row gap-4 mb-6">
+                  <div className="flex-1">
+                    <div className=" rounded-md overflow-hidden">
                       <img 
-                        src="/uploads/drivers-license-front.jpg" 
-                        alt="Driver's License (Front)" 
-                        className="w-full h-full object-contain"
+                        src="/assets/driver-license/front-driver.png" 
+                        alt="Driver's License Front" 
+                        className="object-contain w-full h-full max-h-[150px] mx-auto"
                       />
                     </div>
-                    <div className="p-2 text-center">
-                      <p className="text-xs font-medium">Driver&apos;s License (Front)</p>
-                    </div>
-                    <Button variant="ghost" size="sm" className="absolute top-2 right-2 h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80">
-                      <Download className="h-4 w-4" />
-                      <span className="sr-only">Download</span>
-                    </Button>
+                    <p className="text-xs text-muted-foreground mt-2 text-center">Driver&apos;s License (Front)</p>
                   </div>
-                  
-                  <div className="border rounded-md overflow-hidden relative group">
-                    <div className="aspect-[3/2] relative bg-muted/60">
+                  <div className="flex-1">
+                    <div className="rounded-md overflow-hidden">
                       <img 
-                        src="/uploads/drivers-license-back.jpg" 
-                        alt="Driver's License (Back)" 
-                        className="w-full h-full object-contain" 
+                        src="/assets/driver-license/back-driver.png" 
+                        alt="Driver's License Back" 
+                        className="object-contain w-full h-full max-h-[150px] mx-auto"
                       />
                     </div>
-                    <div className="p-2 text-center">
-                      <p className="text-xs font-medium">Driver&apos;s License (Back)</p>
-                    </div>
-                    <Button variant="ghost" size="sm" className="absolute top-2 right-2 h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80">
-                      <Download className="h-4 w-4" />
-                      <span className="sr-only">Download</span>
-                    </Button>
+                    <p className="text-xs text-muted-foreground mt-2 text-center">Driver&apos;s License (Back)</p>
                   </div>
-                  
-                  <div className="border rounded-md overflow-hidden relative group">
-                    <div className="aspect-[3/2] relative bg-muted/60">
+                  <div className="flex-1">
+                    <div className="rounded-md overflow-hidden">
                       <img 
-                        src="/uploads/selfie.jpg" 
-                        alt="Identity Selfie" 
-                        className="w-full h-full object-contain" 
+                        src="/assets/driver-license/ID-selfie.png" 
+                        alt="ID Selfie" 
+                        className="object-contain w-full h-full max-h-[150px] mx-auto"
                       />
                     </div>
-                    <div className="p-2 text-center">
-                      <p className="text-xs font-medium">Identity Selfie</p>
-                    </div>
-                    <Button variant="ghost" size="sm" className="absolute top-2 right-2 h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80">
-                      <Download className="h-4 w-4" />
-                      <span className="sr-only">Download</span>
-                    </Button>
+                    <p className="text-xs text-muted-foreground mt-2 text-center">ID Selfie</p>
                   </div>
                 </div>
                 
-                <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="1" className="odd:bg-muted/50 border-none px-4 py-2">
-                    <AccordionTrigger className="py-2 text-[15px] leading-6 hover:no-underline hover:bg-transparent">
-                      Identity Document Verification
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground pb-2">
-                      <div className="space-y-2 pt-2">
-                        <div className="flex justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">Government ID Check</p>
-                          </div>
-                          <div className="text-sm">Date verified: May 13, 2023</div>
-                        </div>
-                        <div className="space-y-3 mt-4">
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Status:</span> ID verified successfully
-                          </div>
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Verification method:</span> Driver&apos;s license scan
-                          </div>
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Verification details:</span> Hologram and security features validated
-                          </div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                  
-                  <AccordionItem value="2" className="even:bg-transparent odd:bg-muted/50 border-none px-4 py-2">
-                    <AccordionTrigger className="py-2 text-[15px] leading-6 hover:no-underline hover:bg-transparent">
-                      Address Verification
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground pb-2">
-                      <div className="space-y-2 pt-2">
-                        <div className="flex justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">Proof of Address</p>
-                          </div>
-                          <div className="text-sm">Date verified: May 13, 2023</div>
-                        </div>
-                        <div className="space-y-3 mt-4">
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Status:</span> Address verified successfully
-                          </div>
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Verification method:</span> Utility bill submission
-                          </div>
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Address verified:</span> 6021 Yonge Street, North York ON, Canada, M2M 3W2
-                          </div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                  
-                  <AccordionItem value="3" className="odd:bg-muted/50 border-none px-4 py-2">
-                    <AccordionTrigger className="py-2 text-[15px] leading-6 hover:no-underline hover:bg-transparent">
-                      Facial Recognition
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground pb-2">
-                      <div className="space-y-2 pt-2">
-                        <div className="flex justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">Biometric Verification</p>
-                          </div>
-                          <div className="text-sm">Date verified: May 13, 2023</div>
-                        </div>
-                        <div className="space-y-3 mt-4">
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Status:</span> Facial match confirmed
-                          </div>
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Verification method:</span> Selfie compared to ID document
-                          </div>
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Confidence score:</span> 98.7%
-                          </div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                  
-                  <AccordionItem value="4" className="even:bg-transparent odd:bg-muted/50 border-none px-4 py-2">
-                    <AccordionTrigger className="py-2 text-[15px] leading-6 hover:no-underline hover:bg-transparent">
-                      Income Verification
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground pb-2">
-                      <div className="space-y-2 pt-2">
-                        <div className="flex justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">Financial Documentation</p>
-                          </div>
-                          <div className="text-sm">Date verified: May 14, 2023</div>
-                        </div>
-                        <div className="space-y-3 mt-4">
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Status:</span> Income verified successfully
-                          </div>
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Verification method:</span> Pay stubs and bank statements
-                          </div>
-                          <div>
-                            <span className="text-sm font-medium text-foreground">Verified income:</span> $80,000/year
-                          </div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
+                <div className="grid grid-cols-2 gap-6 mt-6">
+                  <div className="h-full overflow-auto">
+                    <Table>
+                      <TableHeader className="bg-transparent">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead colSpan={2} className="text-center font-semibold">ID Information</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <tbody aria-hidden="true" className="table-row h-2"></tbody>
+                      <TableBody>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Full name</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            John Doe
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Date of birth</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            01/01/1990
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Address</TableCell>
+                          <TableCell className="py-2.5 w-[180px]">
+                            123 Main St, Toronto, ON, M5A 1A1
+                          </TableCell>
+                        </TableRow>
+                         <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">ID number</TableCell>
+                          <TableCell className="py-2.5 w-[180px]">
+                            A6101-40706-60905
+                          </TableCell>
+                        </TableRow>
+                         <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Date of expiry</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            01/01/2025
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="h-full overflow-auto">
+                    <Table>
+                      <TableHeader className="bg-transparent">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead colSpan={2} className="text-center font-semibold">Verification</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <tbody aria-hidden="true" className="table-row h-2"></tbody>
+                      <TableBody>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Name match</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            <Badge variant="outline" className="gap-1">
+                              <CheckIcon className="text-emerald-500" size={12} aria-hidden="true" />
+                              Pass
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Date of birth match</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            <Badge variant="outline" className="gap-1">
+                              <CheckIcon className="text-emerald-500" size={12} aria-hidden="true" />
+                              Pass
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Valid ID</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            <Badge variant="outline" className="gap-1">
+                              <CheckIcon className="text-emerald-500" size={12} aria-hidden="true" />
+                              Pass
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Valid selfie</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            <Badge variant="outline" className="gap-1">
+                              <CheckIcon className="text-emerald-500" size={12} aria-hidden="true" />
+                              Pass
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="odd:bg-muted/50 odd:hover:bg-muted/50 border-none hover:bg-transparent">
+                          <TableCell className="py-2.5">Selfie matches ID photo</TableCell>
+                          <TableCell className="py-2.5 w-[120px]">
+                            <Badge variant="outline" className="gap-1">
+                              <CheckIcon className="text-emerald-500" size={12} aria-hidden="true" />
+                              Pass
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

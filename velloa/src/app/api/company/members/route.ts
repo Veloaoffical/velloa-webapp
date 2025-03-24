@@ -8,6 +8,7 @@ interface Profile {
 
 interface CompanyMember {
   id: string;
+  role: string;
   profiles: Profile;
 }
 
@@ -45,17 +46,19 @@ export async function GET() {
       return NextResponse.json({ error: 'User is not a member of any company' }, { status: 403 });
     }
 
-    // Fetch all company members
+    // Fetch all company members except tenants
     const { data: members, error: membersError } = await supabase
       .from('company_members')
       .select(`
         id,
+        role,
         profiles (
           first_name,
           last_name
         )
       `)
       .eq('company_id', companyMember.company_id)
+      .neq('role', 'tenant') // Exclude tenants
       .returns<CompanyMember[]>();
 
     if (membersError) {
@@ -67,7 +70,8 @@ export async function GET() {
     const transformedMembers = members.map(member => ({
       id: member.id,
       first_name: member.profiles.first_name,
-      last_name: member.profiles.last_name
+      last_name: member.profiles.last_name,
+      role: member.role
     }));
 
     return NextResponse.json(transformedMembers);

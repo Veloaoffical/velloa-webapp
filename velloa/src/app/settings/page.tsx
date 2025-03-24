@@ -227,7 +227,7 @@ export default function SettingsPage() {
           name: "Rental Application", 
           icon: ClipboardList,
           description: "Customize rental application forms and process",
-          href: "/settings/propertysettings?section=Rental Application"
+          href: "/settings/rentalapplication"
         },
         { 
           name: "Management Fees", 

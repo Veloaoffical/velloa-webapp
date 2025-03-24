@@ -193,14 +193,12 @@ interface ResidenceForm {
 }
 
 interface PetForm {
-  name: string;
   type: string;
   breed: string;
-  color: string;
   weight: string;
-  age: string;
   gender: string;
-  spayedNeutered: boolean;
+  age: string;
+  photo?: File;
 }
 
 interface VehicleForm {
@@ -239,16 +237,6 @@ interface EmploymentForm {
   documents?: File[];
 }
 
-interface IncomeForm {
-  employmentIncome: string;
-  governmentAssistance: string;
-  investments: string;
-  retirement: string;
-  childSupport: string;
-  alimony: string;
-  otherIncome: string;
-  otherIncomeSource: string;
-}
 
 interface UnitImage {
   id: string;
@@ -367,7 +355,7 @@ const defaultResidence = {
 
 export default function AddProspectPage() {
   const router = useRouter();
-  const [step, setStep] = useState<'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'income' | 'pets' | 'vehicles' | 'dependents' | 'summary'>('intro');
+  const [step, setStep] = useState<'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'summary'>('intro');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
   const [selectedListingId, setSelectedListingId] = useState<string>('');
@@ -400,14 +388,12 @@ export default function AddProspectPage() {
     noPastResidence: null
   });
   const [pets, setPets] = useState<PetForm[]>([{
-    name: '',
     type: '',
     breed: '',
-    color: '',
     weight: '',
-    age: '',
     gender: '',
-    spayedNeutered: false
+    age: '',
+    photo: undefined
   }]);
   const [havePets, setHavePets] = useState(false);
   const [vehicles, setVehicles] = useState<VehicleForm[]>([{
@@ -443,16 +429,7 @@ export default function AddProspectPage() {
     },
     documents: []
   }]);
-  const [income, setIncome] = useState<IncomeForm>({
-    employmentIncome: '',
-    governmentAssistance: '',
-    investments: '',
-    retirement: '',
-    childSupport: '',
-    alimony: '',
-    otherIncome: '',
-    otherIncomeSource: ''
-  });
+
   const [emailError, setEmailError] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSkipAlert, setShowSkipAlert] = useState(false);
@@ -470,7 +447,7 @@ export default function AddProspectPage() {
 
   // Helper function to check if a step is accessible
   const isStepAccessible = (targetStep: string) => {
-    const stepOrder = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment', 'income', 'pets', 'vehicles', 'dependents', 'summary'];
+    const stepOrder = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment', 'pets', 'vehicles', 'dependents', 'summary'];
     const currentStepIndex = stepOrder.indexOf(step);
     const targetStepIndex = stepOrder.indexOf(targetStep);
     
@@ -499,10 +476,8 @@ export default function AddProspectPage() {
       setStep('personal');
     } else if (step === 'employment') {
       setStep('residence');
-    } else if (step === 'income') {
-      setStep('employment');
     } else if (step === 'pets') {
-      setStep('income');
+      setStep('employment');
     } else if (step === 'vehicles') {
       setStep('pets');
     } else if (step === 'dependents') {
@@ -578,9 +553,6 @@ export default function AddProspectPage() {
       }
       
       markStepCompleted('employment');
-      setStep('income');
-    } else if (step === 'income') {
-      markStepCompleted('income');
       setStep('pets');
     } else if (step === 'pets') {
       markStepCompleted('pets');
@@ -616,7 +588,6 @@ export default function AddProspectPage() {
         vehicles,
         dependents,
         employment,
-        income,
         role: 'prospect',
         unit_id: selectedUnitId || '',
         property_id: selectedPropertyId || '',
@@ -1123,7 +1094,7 @@ export default function AddProspectPage() {
           <div className="w-72 shrink-0 border-r pr-6 overflow-y-auto">
             <div className="space-y-2">
               {(() => {
-                const stepOrder = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment', 'income', 'pets', 'vehicles', 'dependents', 'summary'];
+                const stepOrder = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment', 'pets', 'vehicles', 'dependents', 'summary'];
                 return (
                   <Stepper value={stepOrder.indexOf(step) + 1} orientation="vertical">
                     {[
@@ -1133,7 +1104,6 @@ export default function AddProspectPage() {
                       { step: 'personal', title: 'Personal Info' },
                       { step: 'residence', title: 'Residence' },
                       { step: 'employment', title: 'Employment' },
-                      { step: 'income', title: 'Income' },
                       { step: 'pets', title: 'Pets' },
                       { step: 'vehicles', title: 'Vehicles' },
                       { step: 'dependents', title: 'Dependents' },
@@ -1157,7 +1127,7 @@ export default function AddProspectPage() {
                             className="items-start pb-12 last:pb-0 w-full"
                             onClick={() => {
                               if (isAccessible) {
-                                setStep(stepName as 'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'income' | 'summary');
+                                setStep(stepName as 'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'summary');
                               }
                             }}
                             disabled={!isAccessible}
@@ -2070,7 +2040,10 @@ export default function AddProspectPage() {
                   <h3 className="text-lg font-semibold mb-4">Employer Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                      <Label htmlFor={`employerName-${jobIndex}`}>Employer Name</Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`employerName-${jobIndex}`}>Employer Name</Label>
+                        <span className="text-sm text-red-500">*</span>
+                      </div>
                       <Input 
                         id={`employerName-${jobIndex}`}
                         placeholder="Enter employer name"
@@ -2084,7 +2057,10 @@ export default function AddProspectPage() {
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor={`jobTitle-${jobIndex}`}>Job Title</Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`jobTitle-${jobIndex}`}>Job Title</Label>
+                        <span className="text-sm text-red-500">*</span>
+                      </div>
                       <Input 
                         id={`jobTitle-${jobIndex}`}
                         placeholder="Enter job title"
@@ -2098,7 +2074,10 @@ export default function AddProspectPage() {
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor={`monthlyIncome-${jobIndex}`}>Monthly Income</Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`monthlyIncome-${jobIndex}`}>Monthly Income</Label>
+                        <span className="text-sm text-red-500">*</span>
+                      </div>
                       <Input 
                         id={`monthlyIncome-${jobIndex}`}
                         type="number"
@@ -2113,7 +2092,10 @@ export default function AddProspectPage() {
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor={`employmentType-${jobIndex}`}>Employment Type</Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`employmentType-${jobIndex}`}>Employment Type</Label>
+                        <span className="text-sm text-red-500">*</span>
+                      </div>
                       <Select
                         value={job.employmentType}
                         onValueChange={(value) => {
@@ -2136,7 +2118,10 @@ export default function AddProspectPage() {
                       </Select>
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor={`startDate-${jobIndex}`}>Start Date</Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`startDate-${jobIndex}`}>Start Date</Label>
+                        <span className="text-sm text-red-500">*</span>
+                      </div>
                       <CalendarInput
                         value={job.startDate ? new Date(job.startDate) : undefined}
                         onChange={(date) => {
@@ -2410,148 +2395,7 @@ export default function AddProspectPage() {
           )}
         </div>
       </div>
-            ) : step === 'income' ? (
-                  <div className="flex flex-col">
-                    <div className="space-y-4">
-                      <h2 className="text-2xl font-semibold">Income</h2>
-                      <p className="text-gray-600">
-                        Enter information about the prospect&apos;s income sources.
-                      </p>
-                  </div>
-
-                    <div className="max-w-4xl mx-auto w-full mt-6">
-                      <div className="space-y-6">
-                        <div>
-                          <h3 className="text-lg font-semibold mb-4">Income Sources</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="employmentIncome">Employment Income</Label>
-                              <div className="relative">
-                                <Input 
-                                  id="employmentIncome"
-                                  type="number"
-                                  placeholder="Enter amount"
-                                  value={income.employmentIncome}
-                                  onChange={(e) => setIncome({...income, employmentIncome: e.target.value})}
-                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                                />
-                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
-                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="governmentAssistance">Government Assistance</Label>
-                              <div className="relative">
-                                <Input 
-                                  id="governmentAssistance"
-                                  type="number"
-                                  placeholder="Enter amount"
-                                  value={income.governmentAssistance}
-                                  onChange={(e) => setIncome({...income, governmentAssistance: e.target.value})}
-                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                                />
-                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
-                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="investments">Investments</Label>
-                              <div className="relative">
-                                <Input 
-                                  id="investments"
-                                  type="number"
-                                  placeholder="Enter amount"
-                                  value={income.investments}
-                                  onChange={(e) => setIncome({...income, investments: e.target.value})}
-                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                                />
-                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
-                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="retirement">Retirement</Label>
-                              <div className="relative">
-                                <Input 
-                                  id="retirement"
-                                  type="number"
-                                  placeholder="Enter amount"
-                                  value={income.retirement}
-                                  onChange={(e) => setIncome({...income, retirement: e.target.value})}
-                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                                />
-                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
-                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="childSupport">Child Support</Label>
-                              <div className="relative">
-                                <Input 
-                                  id="childSupport"
-                                  type="number"
-                                  placeholder="Enter amount"
-                                  value={income.childSupport}
-                                  onChange={(e) => setIncome({...income, childSupport: e.target.value})}
-                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                                />
-                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
-                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="alimony">Alimony</Label>
-                              <div className="relative">
-                                <Input 
-                                  id="alimony"
-                                  type="number"
-                                  placeholder="Enter amount"
-                                  value={income.alimony}
-                                  onChange={(e) => setIncome({...income, alimony: e.target.value})}
-                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                                />
-                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
-                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="otherIncome">Other Income</Label>
-                              <div className="relative">
-                                <Input 
-                                  id="otherIncome"
-                                  type="number"
-                                  placeholder="Enter amount"
-                                  value={income.otherIncome}
-                                  onChange={(e) => setIncome({...income, otherIncome: e.target.value})}
-                                  className="h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                                />
-                                <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
-                                  <DollarSign size={16} strokeWidth={2} aria-hidden="true" />
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="otherIncomeSource">Other Income Source</Label>
-                              <Input 
-                                id="otherIncomeSource"
-                                placeholder="Enter source"
-                                value={income.otherIncomeSource}
-                                onChange={(e) => setIncome({...income, otherIncomeSource: e.target.value})}
-                                className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                              />
-                            </div>
-                  </div>
-                </div>
-              </div>
-                            </div>
-                            </div>
-                ) : step === 'pets' ? (
+            ) : step === 'pets' ? (
               <div className="flex flex-col">
                 <div className="space-y-4">
                   <h2 className="text-2xl font-semibold">Pets</h2>
@@ -2569,14 +2413,12 @@ export default function AddProspectPage() {
                         setHavePets(value === 'yes');
                         if (value === 'no') {
                           setPets([{
-                            name: '',
                             type: '',
                             breed: '',
-                            color: '',
                             weight: '',
-                            age: '',
                             gender: '',
-                            spayedNeutered: false
+                            age: '',
+                            photo: undefined
                           }]);
                         }
                       }}
@@ -2632,24 +2474,13 @@ export default function AddProspectPage() {
                             <h3 className="text-lg font-semibold mb-4">Pet {index + 1}</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="grid gap-2">
-                                <Label htmlFor={`name-${index}`}>Name</Label>
-                                <Input 
-                                  id={`name-${index}`}
-                                  placeholder="Enter pet name"
-                                  value={pet.name}
-                                  onChange={(e) => {
-                                    const newPets = [...pets];
-                                    newPets[index] = {...pet, name: e.target.value};
-                                    setPets(newPets);
-                                  }}
-                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label htmlFor={`type-${index}`}>Type</Label>
+                                <div className="flex items-center gap-2">
+                                  <Label htmlFor={`type-${index}`}>Type</Label>
+                                  <span className="text-sm text-red-500">*</span>
+                                </div>
                                 <Input 
                                   id={`type-${index}`}
-                                  placeholder="Enter pet type"
+                                  placeholder="Enter pet type (e.g., Dog, Cat)"
                                   value={pet.type}
                                   onChange={(e) => {
                                     const newPets = [...pets];
@@ -2660,7 +2491,10 @@ export default function AddProspectPage() {
                                 />
                               </div>
                               <div className="grid gap-2">
-                                <Label htmlFor={`breed-${index}`}>Breed</Label>
+                                <div className="flex items-center gap-2">
+                                  <Label htmlFor={`breed-${index}`}>Breed</Label>
+                                  <span className="text-sm text-red-500">*</span>
+                                </div>
                                 <Input 
                                   id={`breed-${index}`}
                                   placeholder="Enter pet breed"
@@ -2674,23 +2508,13 @@ export default function AddProspectPage() {
                                 />
                               </div>
                               <div className="grid gap-2">
-                                <Label htmlFor={`color-${index}`}>Color</Label>
-                                <Input 
-                                  id={`color-${index}`}
-                                  placeholder="Enter pet color"
-                                  value={pet.color}
-                                  onChange={(e) => {
-                                    const newPets = [...pets];
-                                    newPets[index] = {...pet, color: e.target.value};
-                                    setPets(newPets);
-                                  }}
-                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label htmlFor={`weight-${index}`}>Weight</Label>
+                                <div className="flex items-center gap-2">
+                                  <Label htmlFor={`weight-${index}`}>Weight (lbs)</Label>
+                                  <span className="text-sm text-red-500">*</span>
+                                </div>
                                 <Input 
                                   id={`weight-${index}`}
+                                  type="number"
                                   placeholder="Enter pet weight"
                                   value={pet.weight}
                                   onChange={(e) => {
@@ -2702,7 +2526,32 @@ export default function AddProspectPage() {
                                 />
                               </div>
                               <div className="grid gap-2">
-                                <Label htmlFor={`age-${index}`}>Age</Label>
+                                <div className="flex items-center gap-2">
+                                  <Label htmlFor={`gender-${index}`}>Sex</Label>
+                                  <span className="text-sm text-red-500">*</span>
+                                </div>
+                                <Select
+                                  value={pet.gender}
+                                  onValueChange={(value) => {
+                                    const newPets = [...pets];
+                                    newPets[index] = {...pet, gender: value};
+                                    setPets(newPets);
+                                  }}
+                                >
+                                  <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                    <SelectValue placeholder="Select Sex" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="male">Male</SelectItem>
+                                    <SelectItem value="female">Female</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="grid gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Label htmlFor={`age-${index}`}>Age</Label>
+                                  <span className="text-sm text-red-500">*</span>
+                                </div>
                                 <Input 
                                   id={`age-${index}`}
                                   placeholder="Enter pet age"
@@ -2716,43 +2565,41 @@ export default function AddProspectPage() {
                                 />
                               </div>
                               <div className="grid gap-2">
-                                <Label htmlFor={`gender-${index}`}>Gender</Label>
-                                <Select
-                                  value={pet.gender}
-                                  onValueChange={(value) => {
-                                    const newPets = [...pets];
-                                    newPets[index] = {...pet, gender: value};
-                                    setPets(newPets);
-                                  }}
-                                >
-                                  <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
-                                    <SelectValue placeholder="Select Gender" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="male">Male</SelectItem>
-                                    <SelectItem value="female">Female</SelectItem>
-                                    <SelectItem value="other">Other</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="grid gap-2">
-                                <Label htmlFor={`spayedNeutered-${index}`}>Spayed/Neutered</Label>
-                                <Select
-                                  value={pet.spayedNeutered ? "Yes" : "No"}
-                                  onValueChange={(value) => {
-                                    const newPets = [...pets];
-                                    newPets[index] = {...pet, spayedNeutered: value === "Yes"};
-                                    setPets(newPets);
-                                  }}
-                                >
-                                  <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
-                                    <SelectValue placeholder="Select Spayed/Neutered" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="No">No</SelectItem>
-                                    <SelectItem value="Yes">Yes</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                <div className="flex items-center gap-2">
+                                  <Label>Pet Photo</Label>
+                                  <span className="text-sm text-red-500">*</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex items-center gap-1"
+                                    onClick={() => document.getElementById(`pet-photo-${index}`)?.click()}
+                                  >
+                                    <Upload className="h-4 w-4" />
+                                    <span>Upload Photo</span>
+                                  </Button>
+                                  <input
+                                    type="file"
+                                    id={`pet-photo-${index}`}
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const newPets = [...pets];
+                                        newPets[index] = {...pet, photo: file};
+                                        setPets(newPets);
+                                      }
+                                    }}
+                                    accept="image/*"
+                                  />
+                                  {pet.photo && (
+                                    <span className="text-xs text-muted-foreground">
+                                      {pet.photo.name}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -2761,14 +2608,12 @@ export default function AddProspectPage() {
                           variant="outline"
                           onClick={() => {
                             setPets([...pets, {
-                              name: '',
                               type: '',
                               breed: '',
-                              color: '',
                               weight: '',
-                              age: '',
                               gender: '',
-                              spayedNeutered: false
+                              age: '',
+                              photo: undefined
                             }]);
                           }}
                           className="flex items-center gap-2"
@@ -3369,43 +3214,6 @@ export default function AddProspectPage() {
                               ) : (
                                 <p className="text-gray-500">No employer specified</p>
                               )}
-                            </div>
-                          </div>
-                               {/* Income */}
-                          <div className="p-4">
-                            <div className="flex items-center justify-between">
-                              <Label className="text-muted-foreground text-sm">Income</Label>
-                              <Button
-                                variant="link"
-                                className="h-auto p-0 text-primary hover:text-primary/90"
-                                onClick={() => setStep('income')}
-                              >
-                                Edit
-                              </Button>
-                            </div>
-                            <div className="mt-1">
-                              {(() => {
-                                const totalIncome = [
-                                  income.employmentIncome,
-                                  income.governmentAssistance,
-                                  income.investments,
-                                  income.retirement,
-                                  income.childSupport,
-                                  income.alimony,
-                                  income.otherIncome
-                                ]
-                                .filter(Boolean)
-                                .reduce((sum, val) => sum + Number(val), 0);
-
-                                return totalIncome > 0 ? (
-                                  <div>
-                                    <p className="text-sm text-muted-foreground">Total Monthly Income</p>
-                                    <p>${totalIncome.toLocaleString()}</p>
-                                  </div>
-                                ) : (
-                                  <p className="text-gray-500">No income specified</p>
-                                );
-                              })()}
                             </div>
                           </div>
                                {/* Pets */}

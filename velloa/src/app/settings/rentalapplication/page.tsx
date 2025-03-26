@@ -16,8 +16,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import * as React from "react"
 import { useState, useEffect, useId } from "react"
 import Link from "next/link"
+import { toast } from "sonner"
 import {
   ArrowLeft,
   Settings,
@@ -30,14 +32,25 @@ import {
   FileQuestion,
   ScrollText,
   Bell,
-  Link2,
-  Shield,
-  UserCheck,
   CheckCircle,
   AlertCircle,
+  ChevronsUpDown,
+  Check,
 } from "lucide-react"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command"
 
-const settings = [
+const settingsMenu = [
   {
     icon: <Settings className="w-5 h-5 text-green-600" />,
     label: "Settings",
@@ -88,22 +101,79 @@ const settings = [
     label: "Notifications",
     description: "Configure application notification settings",
   },
-  {
-    icon: <Link2 className="w-5 h-5 text-green-600" />,
-    label: "Application Link",
-    description: "Manage public application form links",
-  },
-  {
-    icon: <Shield className="w-5 h-5 text-green-600" />,
-    label: "Background Check",
-    description: "Configure background check settings",
-  },
-  {
-    icon: <UserCheck className="w-5 h-5 text-green-600" />,
-    label: "ID Check",
-    description: "Set ID verification requirements",
-  },
 ];
+
+// Create a customized MultiSelect that doesn't show selected items as badges
+function CustomMultiSelect({
+  options,
+  selected,
+  onChange,
+  placeholder = 'Select options',
+  className,
+}: {
+  options: { label: string; value: string }[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+
+  const handleSelect = (value: string) => {
+    const newSelected = selected.includes(value)
+      ? selected.filter((item) => item !== value)
+      : [...selected, value];
+    onChange(newSelected);
+  };
+
+  return (
+    <div className={cn('space-y-1', className)}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between"
+          >
+            {selected.length === 0 ? (
+              <span className="text-muted-foreground">{placeholder}</span>
+            ) : (
+              <span className="truncate">
+                {selected.length} selected
+              </span>
+            )}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-full p-0">
+          <Command>
+            <CommandInput placeholder="Search options..." />
+            <CommandEmpty>No options found.</CommandEmpty>
+            <CommandGroup className="max-h-64 overflow-auto">
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  onSelect={() => handleSelect(option.value)}
+                >
+                  <Check
+                    className={cn(
+                      'mr-2 h-4 w-4',
+                      selected.includes(option.value)
+                        ? 'opacity-100'
+                        : 'opacity-0'
+                    )}
+                  />
+                  {option.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
 
 export default function RentalApplicationSettingsPage() {
   const [activeSection, setActiveSection] = useState("Settings");
@@ -172,14 +242,40 @@ export default function RentalApplicationSettingsPage() {
   const [termsText, setTermsText] = useState("");
   
   // Notifications state
-  const [selectedUser, setSelectedUser] = useState("");
+  const [notifiedUsers, setNotifiedUsers] = useState<string[]>([]);
   const [notifyOption, setNotifyOption] = useState("yes");
   const [companyMembers, setCompanyMembers] = useState<{ id: string, first_name: string, last_name: string, role: string }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState("all-in-one");
+  const [settings, setSettings] = useState({
+    allInOne: true,
+    custom: false,
+    applicationOnly: false,
+    creditCheck: false,
+    backgroundCheck: false,
+    idVerification: false,
+    termsAccepted: false,
+    termsAcceptedDate: null as string | null
+  });
+
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   // Fetch company members
   useEffect(() => {
@@ -196,7 +292,7 @@ export default function RentalApplicationSettingsPage() {
             
             // Select first member if available
             if (data.length > 0) {
-              setSelectedUser(data[0].id);
+              setNotifiedUsers([data[0].id]);
             }
           } else {
             console.error("Invalid response format:", data);
@@ -213,6 +309,131 @@ export default function RentalApplicationSettingsPage() {
     }
   }, [notifyOption]);
 
+  // Fetch settings
+  useEffect(() => {
+    fetchExistingSettings();
+  }, []);
+  
+  // Fetch existing settings
+  const fetchExistingSettings = async () => {
+    try {
+      // Use the correct API endpoint - no need to pass companyId anymore
+      const response = await fetch(`/api/company/settings/rental-application`);
+      
+      if (!response.ok) {
+        console.error("Error fetching settings:", response.status, await response.text());
+        return;
+      }
+      
+      const data = await response.json();
+      
+      if (data && data.rental_application) {
+        const existingSettings = data.rental_application;
+        
+        // Update settings state
+        if (existingSettings.settings) {
+          // If settings object already exists, use it
+          const newSettings = {
+            ...existingSettings.settings
+          };
+          
+          // Ensure all-in-one plan has all services enabled
+          if (newSettings.allInOne) {
+            newSettings.creditCheck = true;
+            newSettings.backgroundCheck = true;
+            newSettings.idVerification = true;
+          }
+          
+          setSettings(newSettings);
+          
+          // Set selected plan based on settings
+          if (newSettings.allInOne) setSelectedPlan('all-in-one');
+          else if (newSettings.custom) setSelectedPlan('specific');
+          else if (newSettings.applicationOnly) setSelectedPlan('application-only');
+        } else {
+          // For backward compatibility - convert from old format
+          const isAllInOne = existingSettings.plan === 'all-in-one';
+          const isCustom = existingSettings.plan === 'specific';
+          const isApplicationOnly = existingSettings.plan === 'application-only';
+          
+          const newSettings = {
+            allInOne: isAllInOne,
+            custom: isCustom,
+            applicationOnly: isApplicationOnly,
+            // For all-in-one, always set these to true
+            creditCheck: isAllInOne ? true : (existingSettings.specificServices?.creditCheck || false),
+            backgroundCheck: isAllInOne ? true : (existingSettings.specificServices?.backgroundCheck || false),
+            idVerification: isAllInOne ? true : (existingSettings.specificServices?.idVerification || false),
+            termsAccepted: existingSettings.termsAccepted || false,
+            termsAcceptedDate: existingSettings.termsAcceptedDate || null,
+          };
+          
+          setSettings(newSettings);
+          
+          // Set selected plan based on settings
+          if (existingSettings.plan) setSelectedPlan(existingSettings.plan);
+        }
+        
+        // Handle root level properties correctly
+        if (existingSettings.applicantFields) setApplicantFields(existingSettings.applicantFields);
+        if (existingSettings.residentialFields) setResidentialFields(existingSettings.residentialFields);
+        if (existingSettings.employmentFields) setEmploymentFields(existingSettings.employmentFields);
+        
+        // Handle custom questions from root level or nested
+        if (existingSettings.customQuestions) {
+          if (typeof existingSettings.customQuestions === 'object' && existingSettings.customQuestions.questions) {
+            // New format
+            setCustomQuestions(existingSettings.customQuestions.questions);
+            setCustomQuestionsOption(existingSettings.customQuestions.enabled ? 'ask' : 'dont-ask');
+          } else {
+            // Old format array
+            setCustomQuestions(existingSettings.customQuestions);
+            setCustomQuestionsOption(existingSettings.customQuestionsOption || 'ask');
+          }
+        }
+        
+        // Handle other root level properties
+        if (existingSettings.pets && typeof existingSettings.pets === 'object') {
+          setPetsOption(existingSettings.pets.enabled ? 'ask' : 'dont-ask');
+        } else if (existingSettings.petsOption) {
+          setPetsOption(existingSettings.petsOption);
+        }
+        
+        if (existingSettings.vehicle && typeof existingSettings.vehicle === 'object') {
+          setVehicleOption(existingSettings.vehicle.enabled ? 'ask' : 'dont-ask');
+        } else if (existingSettings.vehicleOption) {
+          setVehicleOption(existingSettings.vehicleOption);
+        }
+        
+        if (existingSettings.dependants && typeof existingSettings.dependants === 'object') {
+          setDependantsOption(existingSettings.dependants.enabled ? 'ask' : 'dont-ask');
+        } else if (existingSettings.dependantsOption) {
+          setDependantsOption(existingSettings.dependantsOption);
+        }
+        
+        // Handle terms from terms object or root level
+        if (existingSettings.terms && typeof existingSettings.terms === 'object') {
+          setTermsOption(existingSettings.terms.option || 'yes');
+          setTermsText(existingSettings.terms.text || '');
+        } else {
+          if (existingSettings.termsOption) setTermsOption(existingSettings.termsOption);
+          if (existingSettings.termsText) setTermsText(existingSettings.termsText);
+        }
+        
+        // Handle notifications from notifications object or root level
+        if (existingSettings.notifications && typeof existingSettings.notifications === 'object') {
+          setNotifyOption(existingSettings.notifications.option || 'yes');
+          setNotifiedUsers(existingSettings.notifications.notifiedUsers || []);
+        } else {
+          if (existingSettings.notifyOption) setNotifyOption(existingSettings.notifyOption);
+          if (existingSettings.notifiedUsers) setNotifiedUsers(existingSettings.notifiedUsers || []);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching existing settings:", error);
+    }
+  };
+
   const scrollToSection = (label: string) => {
     setActiveSection(label);
     const element = document.getElementById(`section-${label}`);
@@ -221,9 +442,90 @@ export default function RentalApplicationSettingsPage() {
     }
   };
   
-  const handleSave = () => {
-    // Add save functionality here
-    console.log("Settings saved");
+  const handleSave = async () => {
+    if (!settings.termsAccepted && !settings.applicationOnly) {
+      toast.error("You must accept the terms and conditions before saving.");
+      return;
+    }
+    
+    setIsSaving(true);
+    
+    try {
+      // Create the request body with just needed properties
+      const requestBody = {
+        settings: {
+          ...settings,
+          // Remove the nested properties that will be at the root level
+          pets: undefined,
+          vehicle: undefined,
+          dependants: undefined,
+          customQuestions: undefined
+        },
+        // Add these properties at the root level
+        pets: {
+          enabled: petsOption === 'ask'
+        },
+        vehicle: {
+          enabled: vehicleOption === 'ask'
+        },
+        dependants: {
+          enabled: dependantsOption === 'ask'
+        },
+        customQuestions: {
+          enabled: customQuestionsOption === 'ask',
+          questions: customQuestions
+        },
+        // Group terms related fields into a terms object
+        terms: {
+          option: termsOption,
+          text: termsText
+        },
+        // Group notification related fields into a notifications object
+        notifications: {
+          option: notifyOption,
+          notifiedUsers: notifiedUsers
+        },
+        applicantFields,
+        residentialFields,
+        employmentFields,
+        updatedAt: new Date().toISOString()
+      };
+      
+      console.log("Saving settings with payload:", JSON.stringify(requestBody));
+      
+      // Save to the database with the correct API endpoint
+      const response = await fetch('/api/company/settings/rental-application', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+      
+      // Check if response is ok before trying to parse JSON
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("API error response:", text);
+        throw new Error(`API responded with status ${response.status}: ${text}`);
+      }
+      
+      // Now that we know the response is OK, try to parse the JSON
+      console.log("Settings saved successfully");
+      setHasUnsavedChanges(false);
+      toast.success("Settings saved successfully!");
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error(`Failed to save settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  const handleCancel = () => {
+    // Reset all changes by re-fetching settings
+    fetchExistingSettings();
+    setHasUnsavedChanges(false);
+    toast.info("Changes discarded");
   };
   
   const handleApplicantFieldToggle = (field: string, type: 'enabled' | 'required') => {
@@ -234,6 +536,7 @@ export default function RentalApplicationSettingsPage() {
         [type]: !prev[field as keyof typeof applicantFields][type]
       }
     }));
+    setHasUnsavedChanges(true);
   };
   
   const handleResidentialFieldToggle = (field: string, type: 'enabled' | 'required') => {
@@ -244,6 +547,7 @@ export default function RentalApplicationSettingsPage() {
         [type]: !prev[field as keyof typeof residentialFields][type]
       }
     }));
+    setHasUnsavedChanges(true);
   };
   
   const handleEmploymentFieldToggle = (field: string, type: 'enabled' | 'required') => {
@@ -254,9 +558,11 @@ export default function RentalApplicationSettingsPage() {
         [type]: !prev[field as keyof typeof employmentFields][type]
       }
     }));
+    setHasUnsavedChanges(true);
   };
 
   const handleAddQuestion = () => {
+    // Update just customQuestions state
     setCustomQuestions(prev => [
       ...prev, 
       { 
@@ -265,20 +571,133 @@ export default function RentalApplicationSettingsPage() {
         answerType: "Yes/No" 
       }
     ]);
+    
+    setHasUnsavedChanges(true);
   };
   
   const handleRemoveQuestion = (id: number) => {
+    // Update just customQuestions state
     setCustomQuestions(prev => prev.filter(q => q.id !== id));
+    
+    setHasUnsavedChanges(true);
   };
   
   const handleQuestionChange = (id: number, field: 'question' | 'answerType', value: string) => {
+    // Update just customQuestions state
     setCustomQuestions(prev => 
       prev.map(q => q.id === id ? { ...q, [field]: value } : q)
     );
+    
+    setHasUnsavedChanges(true);
+  };
+
+  const handleServiceToggle = (service: string, checked: boolean) => {
+    if (selectedPlan !== 'specific') {
+      // First switch to specific plan if toggling a service but not in specific plan
+      setSelectedPlan('specific');
+      setSettings(prev => ({
+        ...prev,
+        allInOne: false,
+        custom: true,
+        applicationOnly: false,
+        [service]: checked,
+      }));
+    } else {
+      // Just update the individual service
+      setSettings(prev => ({
+        ...prev,
+        [service]: checked,
+      }));
+    }
+    setHasUnsavedChanges(true);
+  };
+
+  const calculateTotal = () => {
+    let total = 0;
+    if (settings.allInOne) {
+      // All-in-One solution has a fixed price
+      total = 30;
+    } else if (settings.custom) {
+      // Calculate based on selected services
+      total = (settings.creditCheck ? 20 : 0) + (settings.backgroundCheck ? 5 : 0) + (settings.idVerification ? 5 : 0);
+    } else if (settings.applicationOnly) {
+      // Application-only plan is free
+      total = 0;
+    }
+    return total.toFixed(2);
+  };
+
+  // Update the handlers to use settings object
+  const handleVehicleOptionChange = (value: string) => {
+    setVehicleOption(value);
+    setHasUnsavedChanges(true);
+  };
+  
+  const handleDependantsOptionChange = (value: string) => {
+    setDependantsOption(value);
+    setHasUnsavedChanges(true);
+  };
+  
+  const handlePetsOptionChange = (value: string) => {
+    setPetsOption(value);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleCustomQuestionsOptionChange = (value: string) => {
+    setCustomQuestionsOption(value);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleTermsOptionChange = (value: string) => {
+    setTermsOption(value);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleNotifyOptionChange = (value: string) => {
+    setNotifyOption(value);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleNotifiedUsersChange = (selected: string[]) => {
+    setNotifiedUsers(selected);
+    setHasUnsavedChanges(true);
+  };
+
+  // Handle plan selection changes
+  const handlePlanChange = (value: string) => {
+    setSelectedPlan(value);
+    
+    // Update the settings object based on the plan
+    setSettings(prev => ({
+      ...prev,
+      allInOne: value === 'all-in-one',
+      custom: value === 'specific',
+      applicationOnly: value === 'application-only',
+      // For all-in-one, set all check services to true
+      // For specific plan, keep existing values
+      // For application-only, set all to false
+      creditCheck: value === 'all-in-one' ? true : (value === 'specific' ? prev.creditCheck : false),
+      backgroundCheck: value === 'all-in-one' ? true : (value === 'specific' ? prev.backgroundCheck : false),
+      idVerification: value === 'all-in-one' ? true : (value === 'specific' ? prev.idVerification : false),
+      // Terms acceptance is not required for application-only
+      termsAccepted: value === 'application-only' ? true : prev.termsAccepted,
+    }));
+    
+    setHasUnsavedChanges(true);
+  };
+
+  // Handle terms acceptance change
+  const handleTermsAcceptance = (checked: boolean) => {
+    setSettings(prev => ({
+      ...prev,
+      termsAccepted: checked,
+      termsAcceptedDate: checked ? new Date().toISOString() : null,
+    }));
+    setHasUnsavedChanges(true);
   };
 
   return (
-    <div className="h-[calc(100vh-4rem)] p-6">
+    <div className="h-screen p-6">
       <Card className="h-full overflow-hidden">
         <div className="flex h-full">
           {/* Sidebar */}
@@ -296,19 +715,19 @@ export default function RentalApplicationSettingsPage() {
               Back to Settings
             </Link>
             <div className="border-b border-border mb-4" />
-            {settings.map((setting) => (
+            {settingsMenu.map((settingItem) => (
               <button
-                key={setting.label}
+                key={settingItem.label}
                 className={cn(
                   "flex items-center gap-3 p-2 rounded-lg text-sm w-full text-left transition-colors",
-                  activeSection === setting.label && isClient
+                  activeSection === settingItem.label && isClient
                     ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"
                     : "hover:bg-[hsl(var(--primary))] hover:text-[hsl(var(--primary-foreground))] hover:opacity-80"
                 )}
-                onClick={() => scrollToSection(setting.label)}
+                onClick={() => scrollToSection(settingItem.label)}
               >
-                {setting.icon}
-                {setting.label}
+                {settingItem.icon}
+                {settingItem.label}
               </button>
             ))}
           </div>
@@ -316,25 +735,28 @@ export default function RentalApplicationSettingsPage() {
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
             <div className="space-y-12">
-              {settings.map((setting) => (
-                <div id={`section-${setting.label}`} key={setting.label} className="space-y-6">
+              {settingsMenu.map((settingItem) => (
+                <div id={`section-${settingItem.label}`} key={settingItem.label} className="space-y-6">
                   <div>
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        {setting.icon}
+                        {settingItem.icon}
                       </div>
                       <div>
-                        <h2 className="text-2xl font-semibold">{setting.label}</h2>
-                        <p className="text-sm text-muted-foreground">{setting.description}</p>
+                        <h2 className="text-2xl font-semibold">{settingItem.label}</h2>
+                        <p className="text-sm text-muted-foreground">{settingItem.description}</p>
                       </div>
                     </div>
-                    {setting.label === "Settings" && <Separator className="mt-6" />}
+                    <Separator className="mt-6" />
                   </div>
 
-                  {setting.label === "Settings" ? (
+                  {settingItem.label === "Settings" ? (
                     <div className="grid gap-6">
                       {/* Settings content */}
-                      <RadioGroup className="gap-4" defaultValue="all-in-one">
+                      <RadioGroup className="gap-4" 
+                        defaultValue="all-in-one" 
+                        value={selectedPlan}
+                        onValueChange={handlePlanChange}>
                         {/* All-in-One Solution */}
                         <div className="border-input has-data-[state=checked]:border-ring has-data-[state=checked]:bg-accent relative flex w-full items-start gap-2 rounded-md border p-4 shadow-xs outline-none">
                           <RadioGroupItem
@@ -351,19 +773,56 @@ export default function RentalApplicationSettingsPage() {
                                   (Recommended)
                                 </span>
                               </div>
+                              <div className="text-sm font-medium text-green-600">$30/application</div>
                             </Label>
                             <div id={`${id}-all-in-one-description`} className="space-y-2">
                               <div className="flex items-center gap-2 text-sm">
                                 <CheckCircle className="h-4 w-4 text-green-600" />
+                                Credit check through TransUnion
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                                Background check using SoftCheck™ technology
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                                ID verification included
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <CheckCircle className="h-4 w-4 text-green-600" />
                                 No additional setup or merchant account required
                               </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Specific Solution */}
+                        <div className="border-input has-data-[state=checked]:border-ring has-data-[state=checked]:bg-accent relative flex w-full items-start gap-2 rounded-md border p-4 shadow-xs outline-none">
+                          <RadioGroupItem
+                            value="specific"
+                            id={`${id}-specific`}
+                            aria-describedby={`${id}-specific-description`}
+                            className="order-1 after:absolute after:inset-0"
+                          />
+                          <div className="grid grow gap-2">
+                            <Label htmlFor={`${id}-specific`} className="flex justify-between">
+                              <div>
+                                Specific Solution{" "}
+                              </div>
+                              <div className="text-sm font-medium text-green-600">Custom pricing</div>
+                            </Label>
+                            <div id={`${id}-specific-description`} className="space-y-2">
                               <div className="flex items-center gap-2 text-sm">
                                 <CheckCircle className="h-4 w-4 text-green-600" />
-                                Applicants pay $25 for their background check
+                                Choose specific screening services
                               </div>
                               <div className="flex items-center gap-2 text-sm">
                                 <CheckCircle className="h-4 w-4 text-green-600" />
-                                Access comprehensive criminal, eviction, and credit reports from TransUnion
+                                Pay only for what you need
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                                Flexible screening options
                               </div>
                             </div>
                           </div>
@@ -378,8 +837,11 @@ export default function RentalApplicationSettingsPage() {
                             className="order-1 after:absolute after:inset-0"
                           />
                           <div className="grid grow gap-2">
-                            <Label htmlFor={`${id}-application-only`}>
-                              Application-Only Plan{" "}
+                            <Label htmlFor={`${id}-application-only`} className="flex justify-between">
+                              <div>
+                                Application-Only Plan{" "}
+                              </div>
+                              <div className="text-sm font-medium text-green-600">Free</div>
                             </Label>
                             <div id={`${id}-application-only-description`} className="space-y-2">
                               <div className="flex items-center gap-2 text-sm">
@@ -388,615 +850,727 @@ export default function RentalApplicationSettingsPage() {
                               </div>
                               <div className="flex items-center gap-2 text-sm">
                                 <AlertCircle className="h-4 w-4 text-amber-600" />
-                                Screening not included; reports available for a fee upon request
+                                Screening not included
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <AlertCircle className="h-4 w-4 text-amber-600" />
+                                Background checks available for additional fee
                               </div>
                             </div>
                           </div>
                         </div>
                       </RadioGroup>
                       
-                      <div className="flex items-center justify-end gap-2 mt-6">
-                        <Button variant="outline">Cancel</Button>
-                        <Button onClick={handleSave}>Save Changes</Button>
+                      {/* Summary Section */}
+                      <div className="border rounded-md p-4 space-y-4">
+                        <h3 className="font-medium">Summary</h3>
+                        
+                        {selectedPlan === 'all-in-one' && (
+                          <div className="grid gap-4 border-b pb-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Switch 
+                                  className="rounded-sm [&_span]:rounded"
+                                  checked={true}
+                                  disabled={true}
+                                />
+                                <span className="text-sm">Credit Check</span>
+                              </div>
+                              <div className="text-sm font-medium">Included</div>
+                            </div>
+                            
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Switch 
+                                  className="rounded-sm [&_span]:rounded"
+                                  checked={true}
+                                  disabled={true}
+                                />
+                                <span className="text-sm">Background Check</span>
+                              </div>
+                              <div className="text-sm font-medium">Included</div>
+                            </div>
+                            
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Switch 
+                                  className="rounded-sm [&_span]:rounded"
+                                  checked={true}
+                                  disabled={true}
+                                />
+                                <span className="text-sm">ID Verification</span>
+                              </div>
+                              <div className="text-sm font-medium">Included</div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedPlan === 'specific' && (
+                          <div className="grid gap-4 border-b pb-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Switch 
+                                  className="rounded-sm [&_span]:rounded"
+                                  checked={settings.creditCheck}
+                                  onCheckedChange={(checked) => handleServiceToggle('creditCheck', checked)}
+                                />
+                                <span className="text-sm">Credit Check</span>
+                              </div>
+                              <div className="text-sm font-medium">$20.00</div>
+                            </div>
+                            
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Switch 
+                                  className="rounded-sm [&_span]:rounded"
+                                  checked={settings.backgroundCheck}
+                                  onCheckedChange={(checked) => handleServiceToggle('backgroundCheck', checked)}
+                                />
+                                <span className="text-sm">Background Check</span>
+                              </div>
+                              <div className="text-sm font-medium">$5.00</div>
+                            </div>
+                            
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                  checked={settings.idVerification}
+                                  onCheckedChange={(checked) => handleServiceToggle('idVerification', checked)}
+                                />
+                                <span className="text-sm">ID Verification</span>
+                              </div>
+                              <div className="text-sm font-medium">$5.00</div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm">Total cost for applicant</span>
+                            <span className="text-sm">${calculateTotal()}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Checkbox 
+                            id="terms" 
+                            checked={settings.termsAccepted}
+                            onCheckedChange={(checked) => {
+                              handleTermsAcceptance(checked === true);
+                            }}
+                            disabled={selectedPlan === 'application-only'}
+                          />
+                          <label htmlFor="terms" className="text-sm">
+                            I accept the <Link href="/terms" className="text-primary hover:underline">Terms and Conditions</Link> and agree to the terms of <Link href="https://stripe.com/legal" className="text-primary hover:underline">Stripe</Link>, <Link href="https://www.transunion.com/legal" className="text-primary hover:underline">TransUnion</Link>, and <Link href="https://certn.co/legal" className="text-primary hover:underline">Certn</Link>
+                          </label>
+                        </div>
                       </div>
                     </div>
-                  ) : setting.label === "Applicant Info" ? (
+                  ) : settingItem.label === "Applicant Info" ? (
                     <div className="grid gap-6">
-                     
-                      
-                      <div className="border rounded-md p-4 bg-background">
-                        <div className="grid gap-4">
-                          <div className="grid grid-cols-2 gap-4 border-b pb-2">
-                            <div className="font-medium text-sm">Field</div>
-                            <div className="font-medium text-sm text-right">Required</div>
+                      <div className="grid gap-4">
+                        <div className="grid grid-cols-2 gap-4 border-b pb-2">
+                          <div className="font-medium text-sm">Field</div>
+                          <div className="font-medium text-sm text-right">Required</div>
+                        </div>
+                        
+                        <div className="space-y-4">
+                          {/* First Name */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={true}
+                                disabled={true}
+                              />
+                              <div className="text-sm">First Name</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={true}
+                                disabled={true}
+                              />
+                            </div>
                           </div>
                           
-                          <div className="space-y-4">
-                            {/* First Name */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                                <div className="text-sm">First Name</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                              </div>
+                          {/* Middle Name */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={applicantFields.middleName.enabled}
+                                onCheckedChange={() => handleApplicantFieldToggle('middleName', 'enabled')}
+                              />
+                              <div className="text-sm">Middle Name</div>
                             </div>
-                            
-                            {/* Middle Name */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={applicantFields.middleName.enabled}
-                                  onCheckedChange={() => handleApplicantFieldToggle('middleName', 'enabled')}
-                                />
-                                <div className="text-sm">Middle Name</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={applicantFields.middleName.required}
-                                  onCheckedChange={() => handleApplicantFieldToggle('middleName', 'required')}
-                                  disabled={!applicantFields.middleName.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={applicantFields.middleName.required}
+                                onCheckedChange={() => handleApplicantFieldToggle('middleName', 'required')}
+                                disabled={!applicantFields.middleName.enabled}
+                              />
                             </div>
-                            
-                            {/* Last Name */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                                <div className="text-sm">Last Name</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Last Name */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={true}
+                                disabled={true}
+                              />
+                              <div className="text-sm">Last Name</div>
                             </div>
-                            
-                            {/* SSN */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={applicantFields.ssn.enabled}
-                                  onCheckedChange={() => handleApplicantFieldToggle('ssn', 'enabled')}
-                                />
-                                <div className="text-sm">SSN</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={applicantFields.ssn.required}
-                                  onCheckedChange={() => handleApplicantFieldToggle('ssn', 'required')}
-                                  disabled={!applicantFields.ssn.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={true}
+                                disabled={true}
+                              />
                             </div>
-                            
-                            {/* Date of Birth */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={applicantFields.dateOfBirth.enabled}
-                                  onCheckedChange={() => handleApplicantFieldToggle('dateOfBirth', 'enabled')}
-                                />
-                                <div className="text-sm">Date Of Birth</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={applicantFields.dateOfBirth.required}
-                                  onCheckedChange={() => handleApplicantFieldToggle('dateOfBirth', 'required')}
-                                  disabled={!applicantFields.dateOfBirth.enabled}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* SSN */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={applicantFields.ssn.enabled}
+                                onCheckedChange={() => handleApplicantFieldToggle('ssn', 'enabled')}
+                              />
+                              <div className="text-sm">SSN</div>
                             </div>
-                            
-                            {/* Email */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                                <div className="text-sm">Email</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={applicantFields.ssn.required}
+                                onCheckedChange={() => handleApplicantFieldToggle('ssn', 'required')}
+                                disabled={!applicantFields.ssn.enabled}
+                              />
                             </div>
-                            
-                            {/* Phone Number */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={applicantFields.phoneNumber.enabled}
-                                  onCheckedChange={() => handleApplicantFieldToggle('phoneNumber', 'enabled')}
-                                />
-                                <div className="text-sm">Phone Number</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={applicantFields.phoneNumber.required}
-                                  onCheckedChange={() => handleApplicantFieldToggle('phoneNumber', 'required')}
-                                  disabled={!applicantFields.phoneNumber.enabled}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Date of Birth */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={applicantFields.dateOfBirth.enabled}
+                                onCheckedChange={() => handleApplicantFieldToggle('dateOfBirth', 'enabled')}
+                              />
+                              <div className="text-sm">Date Of Birth</div>
                             </div>
-                            
-                            {/* Gender */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={applicantFields.gender.enabled}
-                                  onCheckedChange={() => handleApplicantFieldToggle('gender', 'enabled')}
-                                />
-                                <div className="text-sm">Gender</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={applicantFields.gender.required}
-                                  onCheckedChange={() => handleApplicantFieldToggle('gender', 'required')}
-                                  disabled={!applicantFields.gender.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={applicantFields.dateOfBirth.required}
+                                onCheckedChange={() => handleApplicantFieldToggle('dateOfBirth', 'required')}
+                                disabled={!applicantFields.dateOfBirth.enabled}
+                              />
                             </div>
-                            
-                            {/* Marital Status */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={applicantFields.maritalStatus.enabled}
-                                  onCheckedChange={() => handleApplicantFieldToggle('maritalStatus', 'enabled')}
-                                />
-                                <div className="text-sm">Marital Status</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={applicantFields.maritalStatus.required}
-                                  onCheckedChange={() => handleApplicantFieldToggle('maritalStatus', 'required')}
-                                  disabled={!applicantFields.maritalStatus.enabled}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Email */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={true}
+                                disabled={true}
+                              />
+                              <div className="text-sm">Email</div>
                             </div>
-                            
-                            {/* Driver License State */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={applicantFields.driverLicenseState.enabled}
-                                  onCheckedChange={() => handleApplicantFieldToggle('driverLicenseState', 'enabled')}
-                                />
-                                <div className="text-sm">Driver License State</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={applicantFields.driverLicenseState.required}
-                                  onCheckedChange={() => handleApplicantFieldToggle('driverLicenseState', 'required')}
-                                  disabled={!applicantFields.driverLicenseState.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={true}
+                                disabled={true}
+                              />
                             </div>
-                            
-                            {/* Driver License Number */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={applicantFields.driverLicenseNumber.enabled}
-                                  onCheckedChange={() => handleApplicantFieldToggle('driverLicenseNumber', 'enabled')}
-                                />
-                                <div className="text-sm">Driver License Number</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={applicantFields.driverLicenseNumber.required}
-                                  onCheckedChange={() => handleApplicantFieldToggle('driverLicenseNumber', 'required')}
-                                  disabled={!applicantFields.driverLicenseNumber.enabled}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Phone Number */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={applicantFields.phoneNumber.enabled}
+                                onCheckedChange={() => handleApplicantFieldToggle('phoneNumber', 'enabled')}
+                              />
+                              <div className="text-sm">Phone Number</div>
                             </div>
-                            
-                            {/* Move-in Date */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={applicantFields.moveInDate.enabled}
-                                  onCheckedChange={() => handleApplicantFieldToggle('moveInDate', 'enabled')}
-                                />
-                                <div className="text-sm">Move-in Date</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={applicantFields.moveInDate.required}
-                                  onCheckedChange={() => handleApplicantFieldToggle('moveInDate', 'required')}
-                                  disabled={!applicantFields.moveInDate.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={applicantFields.phoneNumber.required}
+                                onCheckedChange={() => handleApplicantFieldToggle('phoneNumber', 'required')}
+                                disabled={!applicantFields.phoneNumber.enabled}
+                              />
                             </div>
-                            
-                            {/* Tell us why you're awesome */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={applicantFields.tellUs.enabled}
-                                  onCheckedChange={() => handleApplicantFieldToggle('tellUs', 'enabled')}
-                                />
-                                <div className="text-sm">about you</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={applicantFields.tellUs.required}
-                                  onCheckedChange={() => handleApplicantFieldToggle('tellUs', 'required')}
-                                  disabled={!applicantFields.tellUs.enabled}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Gender */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={applicantFields.gender.enabled}
+                                onCheckedChange={() => handleApplicantFieldToggle('gender', 'enabled')}
+                              />
+                              <div className="text-sm">Gender</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={applicantFields.gender.required}
+                                onCheckedChange={() => handleApplicantFieldToggle('gender', 'required')}
+                                disabled={!applicantFields.gender.enabled}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Marital Status */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={applicantFields.maritalStatus.enabled}
+                                onCheckedChange={() => handleApplicantFieldToggle('maritalStatus', 'enabled')}
+                              />
+                              <div className="text-sm">Marital Status</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={applicantFields.maritalStatus.required}
+                                onCheckedChange={() => handleApplicantFieldToggle('maritalStatus', 'required')}
+                                disabled={!applicantFields.maritalStatus.enabled}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Driver License State */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={applicantFields.driverLicenseState.enabled}
+                                onCheckedChange={() => handleApplicantFieldToggle('driverLicenseState', 'enabled')}
+                              />
+                              <div className="text-sm">Driver License State</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={applicantFields.driverLicenseState.required}
+                                onCheckedChange={() => handleApplicantFieldToggle('driverLicenseState', 'required')}
+                                disabled={!applicantFields.driverLicenseState.enabled}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Driver License Number */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={applicantFields.driverLicenseNumber.enabled}
+                                onCheckedChange={() => handleApplicantFieldToggle('driverLicenseNumber', 'enabled')}
+                              />
+                              <div className="text-sm">Driver License Number</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={applicantFields.driverLicenseNumber.required}
+                                onCheckedChange={() => handleApplicantFieldToggle('driverLicenseNumber', 'required')}
+                                disabled={!applicantFields.driverLicenseNumber.enabled}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Move-in Date */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={applicantFields.moveInDate.enabled}
+                                onCheckedChange={() => handleApplicantFieldToggle('moveInDate', 'enabled')}
+                              />
+                              <div className="text-sm">Move-in Date</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={applicantFields.moveInDate.required}
+                                onCheckedChange={() => handleApplicantFieldToggle('moveInDate', 'required')}
+                                disabled={!applicantFields.moveInDate.enabled}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Tell us why you're awesome */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={applicantFields.tellUs.enabled}
+                                onCheckedChange={() => handleApplicantFieldToggle('tellUs', 'enabled')}
+                              />
+                              <div className="text-sm">about you</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={applicantFields.tellUs.required}
+                                onCheckedChange={() => handleApplicantFieldToggle('tellUs', 'required')}
+                                disabled={!applicantFields.tellUs.enabled}
+                              />
                             </div>
                           </div>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center justify-end gap-2 mt-6">
-                        <Button variant="outline">Cancel</Button>
-                        <Button onClick={handleSave}>Save Changes</Button>
-                      </div>
                     </div>
-                  ) : setting.label === "Residential" ? (
+                  ) : settingItem.label === "Residential" ? (
                     <div className="grid gap-6">
-                      <div className="border rounded-md p-4 bg-background">
-                        <div className="grid gap-4">
-                          <div className="grid grid-cols-2 gap-4 border-b pb-2">
-                            <div className="font-medium text-sm">Field</div>
-                            <div className="font-medium text-sm text-right">Required</div>
+                      <div className="grid gap-4">
+                        <div className="grid grid-cols-2 gap-4 border-b pb-2">
+                          <div className="font-medium text-sm">Field</div>
+                          <div className="font-medium text-sm text-right">Required</div>
+                        </div>
+                        
+                        <div className="space-y-4">
+                          {/* Address */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={true}
+                                disabled={true}
+                              />
+                              <div className="text-sm">Address</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={true}
+                                disabled={true}
+                              />
+                            </div>
                           </div>
                           
-                          <div className="space-y-4">
-                            {/* Address */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                                <div className="text-sm">Address</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                              </div>
+                          {/* Landlord/Company Name */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={residentialFields.landlordName.enabled}
+                                onCheckedChange={() => handleResidentialFieldToggle('landlordName', 'enabled')}
+                              />
+                              <div className="text-sm">Landlord/Company Name</div>
                             </div>
-                            
-                            {/* Landlord/Company Name */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={residentialFields.landlordName.enabled}
-                                  onCheckedChange={() => handleResidentialFieldToggle('landlordName', 'enabled')}
-                                />
-                                <div className="text-sm">Landlord/Company Name</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={residentialFields.landlordName.required}
-                                  onCheckedChange={() => handleResidentialFieldToggle('landlordName', 'required')}
-                                  disabled={!residentialFields.landlordName.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={residentialFields.landlordName.required}
+                                onCheckedChange={() => handleResidentialFieldToggle('landlordName', 'required')}
+                                disabled={!residentialFields.landlordName.enabled}
+                              />
                             </div>
-                            
-                            {/* Landlord Phone */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={residentialFields.landlordPhone.enabled}
-                                  onCheckedChange={() => handleResidentialFieldToggle('landlordPhone', 'enabled')}
-                                />
-                                <div className="text-sm">Landlord Phone</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={residentialFields.landlordPhone.required}
-                                  onCheckedChange={() => handleResidentialFieldToggle('landlordPhone', 'required')}
-                                  disabled={!residentialFields.landlordPhone.enabled}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Landlord Phone */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={residentialFields.landlordPhone.enabled}
+                                onCheckedChange={() => handleResidentialFieldToggle('landlordPhone', 'enabled')}
+                              />
+                              <div className="text-sm">Landlord Phone</div>
                             </div>
-                            
-                            {/* Landlord Email */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={residentialFields.landlordEmail.enabled}
-                                  onCheckedChange={() => handleResidentialFieldToggle('landlordEmail', 'enabled')}
-                                />
-                                <div className="text-sm">Landlord Email</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={residentialFields.landlordEmail.required}
-                                  onCheckedChange={() => handleResidentialFieldToggle('landlordEmail', 'required')}
-                                  disabled={!residentialFields.landlordEmail.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={residentialFields.landlordPhone.required}
+                                onCheckedChange={() => handleResidentialFieldToggle('landlordPhone', 'required')}
+                                disabled={!residentialFields.landlordPhone.enabled}
+                              />
                             </div>
-                            
-                            {/* Length of Stay */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                                <div className="text-sm">Length of Stay</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Landlord Email */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={residentialFields.landlordEmail.enabled}
+                                onCheckedChange={() => handleResidentialFieldToggle('landlordEmail', 'enabled')}
+                              />
+                              <div className="text-sm">Landlord Email</div>
                             </div>
-                            
-                            {/* Monthly Rent */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                                <div className="text-sm">Monthly Rent</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={residentialFields.landlordEmail.required}
+                                onCheckedChange={() => handleResidentialFieldToggle('landlordEmail', 'required')}
+                                disabled={!residentialFields.landlordEmail.enabled}
+                              />
                             </div>
-                            
-                            {/* Residential Status */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                                <div className="text-sm">Residential Status</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={true}
-                                  disabled={true}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Length of Stay */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={true}
+                                disabled={true}
+                              />
+                              <div className="text-sm">Length of Stay</div>
                             </div>
-                            
-                            {/* Reason for Leaving */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={residentialFields.reasonForLeaving.enabled}
-                                  onCheckedChange={() => handleResidentialFieldToggle('reasonForLeaving', 'enabled')}
-                                />
-                                <div className="text-sm">Reason for Leaving</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={residentialFields.reasonForLeaving.required}
-                                  onCheckedChange={() => handleResidentialFieldToggle('reasonForLeaving', 'required')}
-                                  disabled={!residentialFields.reasonForLeaving.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={true}
+                                disabled={true}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Monthly Rent */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={true}
+                                disabled={true}
+                              />
+                              <div className="text-sm">Monthly Rent</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={true}
+                                disabled={true}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Residential Status */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={true}
+                                disabled={true}
+                              />
+                              <div className="text-sm">Residential Status</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={true}
+                                disabled={true}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Reason for Leaving */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={residentialFields.reasonForLeaving.enabled}
+                                onCheckedChange={() => handleResidentialFieldToggle('reasonForLeaving', 'enabled')}
+                              />
+                              <div className="text-sm">Reason for Leaving</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={residentialFields.reasonForLeaving.required}
+                                onCheckedChange={() => handleResidentialFieldToggle('reasonForLeaving', 'required')}
+                                disabled={!residentialFields.reasonForLeaving.enabled}
+                              />
                             </div>
                           </div>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center justify-end gap-2 mt-6">
-                        <Button variant="outline">Cancel</Button>
-                        <Button onClick={handleSave}>Save Changes</Button>
-                      </div>
                     </div>
-                  ) : setting.label === "Employment" ? (
+                  ) : settingItem.label === "Employment" ? (
                     <div className="grid gap-6">
-                      <div className="border rounded-md p-4 bg-background">
-                        <div className="grid gap-4">
-                          <div className="grid grid-cols-2 gap-4 border-b pb-2">
-                            <div className="font-medium text-sm">Field</div>
-                            <div className="font-medium text-sm text-right">Required</div>
+                      <div className="grid gap-4">
+                        <div className="grid grid-cols-2 gap-4 border-b pb-2">
+                          <div className="font-medium text-sm">Field</div>
+                          <div className="font-medium text-sm text-right">Required</div>
+                        </div>
+                        
+                        <div className="space-y-4">
+                          {/* Employer Name */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={employmentFields.employerName.enabled}
+                                onCheckedChange={() => handleEmploymentFieldToggle('employerName', 'enabled')}
+                              />
+                              <div className="text-sm">Employer Name</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={employmentFields.employerName.required}
+                                onCheckedChange={() => handleEmploymentFieldToggle('employerName', 'required')}
+                                disabled={!employmentFields.employerName.enabled}
+                              />
+                            </div>
                           </div>
                           
-                          <div className="space-y-4">
-                            {/* Employer Name */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={employmentFields.employerName.enabled}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('employerName', 'enabled')}
-                                />
-                                <div className="text-sm">Employer Name</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={employmentFields.employerName.required}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('employerName', 'required')}
-                                  disabled={!employmentFields.employerName.enabled}
-                                />
-                              </div>
+                          {/* Job Title */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={employmentFields.jobTitle.enabled}
+                                onCheckedChange={() => handleEmploymentFieldToggle('jobTitle', 'enabled')}
+                              />
+                              <div className="text-sm">Job Title</div>
                             </div>
-                            
-                            {/* Job Title */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={employmentFields.jobTitle.enabled}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('jobTitle', 'enabled')}
-                                />
-                                <div className="text-sm">Job Title</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={employmentFields.jobTitle.required}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('jobTitle', 'required')}
-                                  disabled={!employmentFields.jobTitle.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={employmentFields.jobTitle.required}
+                                onCheckedChange={() => handleEmploymentFieldToggle('jobTitle', 'required')}
+                                disabled={!employmentFields.jobTitle.enabled}
+                              />
                             </div>
-                            
-                            {/* Monthly Income */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={employmentFields.monthlyIncome.enabled}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('monthlyIncome', 'enabled')}
-                                />
-                                <div className="text-sm">Monthly Income</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={employmentFields.monthlyIncome.required}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('monthlyIncome', 'required')}
-                                  disabled={!employmentFields.monthlyIncome.enabled}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Monthly Income */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={employmentFields.monthlyIncome.enabled}
+                                onCheckedChange={() => handleEmploymentFieldToggle('monthlyIncome', 'enabled')}
+                              />
+                              <div className="text-sm">Monthly Income</div>
                             </div>
-                            
-                            {/* Employment Type */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={employmentFields.employmentType.enabled}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('employmentType', 'enabled')}
-                                />
-                                <div className="text-sm">Employment Type</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={employmentFields.employmentType.required}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('employmentType', 'required')}
-                                  disabled={!employmentFields.employmentType.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={employmentFields.monthlyIncome.required}
+                                onCheckedChange={() => handleEmploymentFieldToggle('monthlyIncome', 'required')}
+                                disabled={!employmentFields.monthlyIncome.enabled}
+                              />
                             </div>
-                            
-                            {/* Start Date */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={employmentFields.startDate.enabled}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('startDate', 'enabled')}
-                                />
-                                <div className="text-sm">Start Date</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={employmentFields.startDate.required}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('startDate', 'required')}
-                                  disabled={!employmentFields.startDate.enabled}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Employment Type */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={employmentFields.employmentType.enabled}
+                                onCheckedChange={() => handleEmploymentFieldToggle('employmentType', 'enabled')}
+                              />
+                              <div className="text-sm">Employment Type</div>
                             </div>
-                            
-                            {/* Verify Document */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={employmentFields.verifyDocument.enabled}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('verifyDocument', 'enabled')}
-                                />
-                                <div className="text-sm">Verify Document</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={employmentFields.verifyDocument.required}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('verifyDocument', 'required')}
-                                  disabled={!employmentFields.verifyDocument.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={employmentFields.employmentType.required}
+                                onCheckedChange={() => handleEmploymentFieldToggle('employmentType', 'required')}
+                                disabled={!employmentFields.employmentType.enabled}
+                              />
                             </div>
-                            
-                            {/* Supervisor Name */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={employmentFields.supervisorName.enabled}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('supervisorName', 'enabled')}
-                                />
-                                <div className="text-sm">Supervisor Name</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={employmentFields.supervisorName.required}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('supervisorName', 'required')}
-                                  disabled={!employmentFields.supervisorName.enabled}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Start Date */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={employmentFields.startDate.enabled}
+                                onCheckedChange={() => handleEmploymentFieldToggle('startDate', 'enabled')}
+                              />
+                              <div className="text-sm">Start Date</div>
                             </div>
-                            
-                            {/* Supervisor Phone */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={employmentFields.supervisorPhone.enabled}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('supervisorPhone', 'enabled')}
-                                />
-                                <div className="text-sm">Supervisor Phone</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={employmentFields.supervisorPhone.required}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('supervisorPhone', 'required')}
-                                  disabled={!employmentFields.supervisorPhone.enabled}
-                                />
-                              </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={employmentFields.startDate.required}
+                                onCheckedChange={() => handleEmploymentFieldToggle('startDate', 'required')}
+                                disabled={!employmentFields.startDate.enabled}
+                              />
                             </div>
-                            
-                            {/* Address */}
-                            <div className="grid grid-cols-2 items-center">
-                              <div className="flex items-center gap-3">
-                                <Switch 
-                                  checked={employmentFields.address.enabled}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('address', 'enabled')}
-                                />
-                                <div className="text-sm">Address</div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Checkbox 
-                                  checked={employmentFields.address.required}
-                                  onCheckedChange={() => handleEmploymentFieldToggle('address', 'required')}
-                                  disabled={!employmentFields.address.enabled}
-                                />
-                              </div>
+                          </div>
+                          
+                          {/* Verify Document */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={employmentFields.verifyDocument.enabled}
+                                onCheckedChange={() => handleEmploymentFieldToggle('verifyDocument', 'enabled')}
+                              />
+                              <div className="text-sm">Verify Document</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={employmentFields.verifyDocument.required}
+                                onCheckedChange={() => handleEmploymentFieldToggle('verifyDocument', 'required')}
+                                disabled={!employmentFields.verifyDocument.enabled}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Supervisor Name */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={employmentFields.supervisorName.enabled}
+                                onCheckedChange={() => handleEmploymentFieldToggle('supervisorName', 'enabled')}
+                              />
+                              <div className="text-sm">Supervisor Name</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={employmentFields.supervisorName.required}
+                                onCheckedChange={() => handleEmploymentFieldToggle('supervisorName', 'required')}
+                                disabled={!employmentFields.supervisorName.enabled}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Supervisor Phone */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={employmentFields.supervisorPhone.enabled}
+                                onCheckedChange={() => handleEmploymentFieldToggle('supervisorPhone', 'enabled')}
+                              />
+                              <div className="text-sm">Supervisor Phone</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={employmentFields.supervisorPhone.required}
+                                onCheckedChange={() => handleEmploymentFieldToggle('supervisorPhone', 'required')}
+                                disabled={!employmentFields.supervisorPhone.enabled}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Address */}
+                          <div className="grid grid-cols-2 items-center">
+                            <div className="flex items-center gap-3">
+                              <Switch 
+                                className="rounded-sm [&_span]:rounded"
+                                checked={employmentFields.address.enabled}
+                                onCheckedChange={() => handleEmploymentFieldToggle('address', 'enabled')}
+                              />
+                              <div className="text-sm">Address</div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Checkbox 
+                                checked={employmentFields.address.required}
+                                onCheckedChange={() => handleEmploymentFieldToggle('address', 'required')}
+                                disabled={!employmentFields.address.enabled}
+                              />
                             </div>
                           </div>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center justify-end gap-2 mt-6">
-                        <Button variant="outline">Cancel</Button>
-                        <Button onClick={handleSave}>Save Changes</Button>
-                      </div>
                     </div>
-                  ) : setting.label === "Vehicle" ? (
+                  ) : settingItem.label === "Vehicle" ? (
                     <div className="grid gap-6">
                       <div className="space-y-4 mb-4">
                         
                         <RadioGroup 
                           className="grid grid-cols-1 gap-2 sm:grid-cols-2 max-w-2xl mx-auto"
                           value={vehicleOption}
-                          onValueChange={setVehicleOption}
+                          onValueChange={handleVehicleOptionChange}
                         >
                           <label className="relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-input px-3 py-3 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
                             <RadioGroupItem 
@@ -1025,20 +1599,15 @@ export default function RentalApplicationSettingsPage() {
                           </label>
                         </RadioGroup>
                       </div>
-                      
-                      <div className="flex items-center justify-end gap-2 mt-6">
-                        <Button variant="outline">Cancel</Button>
-                        <Button onClick={handleSave}>Save Changes</Button>
-                      </div>
                     </div>
-                  ) : setting.label === "Dependants" ? (
+                  ) : settingItem.label === "Dependants" ? (
                     <div className="grid gap-6">
                       <div className="space-y-4 mb-4">
                         
                         <RadioGroup 
                           className="grid grid-cols-1 gap-2 sm:grid-cols-2 max-w-2xl mx-auto"
                           value={dependantsOption}
-                          onValueChange={setDependantsOption}
+                          onValueChange={handleDependantsOptionChange}
                         >
                           <label className="relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-input px-3 py-3 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
                             <RadioGroupItem 
@@ -1067,20 +1636,15 @@ export default function RentalApplicationSettingsPage() {
                           </label>
                         </RadioGroup>
                       </div>
-                      
-                      <div className="flex items-center justify-end gap-2 mt-6">
-                        <Button variant="outline">Cancel</Button>
-                        <Button onClick={handleSave}>Save Changes</Button>
-                      </div>
                     </div>
-                  ) : setting.label === "Pets" ? (
+                  ) : settingItem.label === "Pets" ? (
                     <div className="grid gap-6">
                       <div className="space-y-4 mb-4">
                         
                         <RadioGroup 
                           className="grid grid-cols-1 gap-2 sm:grid-cols-2 max-w-2xl mx-auto"
                           value={petsOption}
-                          onValueChange={setPetsOption}
+                          onValueChange={handlePetsOptionChange}
                         >
                           <label className="relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-input px-3 py-3 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
                             <RadioGroupItem 
@@ -1109,19 +1673,14 @@ export default function RentalApplicationSettingsPage() {
                           </label>
                         </RadioGroup>
                       </div>
-                      
-                      <div className="flex items-center justify-end gap-2 mt-6">
-                        <Button variant="outline">Cancel</Button>
-                        <Button onClick={handleSave}>Save Changes</Button>
-                      </div>
                     </div>
-                  ) : setting.label === "Custom Questions" ? (
+                  ) : settingItem.label === "Custom Questions" ? (
                     <div className="grid gap-6">
                       <div className="space-y-4 mb-4">
                         <RadioGroup 
                           className="grid grid-cols-1 gap-2 sm:grid-cols-2 max-w-2xl mx-auto"
                           value={customQuestionsOption}
-                          onValueChange={setCustomQuestionsOption}
+                          onValueChange={handleCustomQuestionsOptionChange}
                         >
                           <label className="relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-input px-3 py-3 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
                             <RadioGroupItem 
@@ -1217,13 +1776,8 @@ export default function RentalApplicationSettingsPage() {
                           </div>
                         </div>
                       )}
-                      
-                      <div className="flex items-center justify-end gap-2 mt-6">
-                        <Button variant="outline">Cancel</Button>
-                        <Button onClick={handleSave}>Save Changes</Button>
-                      </div>
                     </div>
-                  ) : setting.label === "Notifications" ? (
+                  ) : settingItem.label === "Notifications" ? (
                     <div className="grid gap-6">
                       <div className="space-y-6 max-w-4xl mx-auto">
                         <div className="space-y-4">
@@ -1232,7 +1786,7 @@ export default function RentalApplicationSettingsPage() {
                           <RadioGroup 
                             className="grid grid-cols-1 gap-2 sm:grid-cols-2 max-w-lg mx-auto"
                             value={notifyOption}
-                            onValueChange={setNotifyOption}
+                            onValueChange={handleNotifyOptionChange}
                           >
                             <label className="relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-input px-3 py-3 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
                               <RadioGroupItem 
@@ -1264,43 +1818,27 @@ export default function RentalApplicationSettingsPage() {
                         
                         {notifyOption === "yes" && (
                           <div className="space-y-2 max-w-3xl mx-auto pt-4">
-                            <Label>Select company member to notify</Label>
-                            <Select
-                              value={selectedUser}
-                              onValueChange={setSelectedUser}
-                              disabled={isLoading}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder={isLoading ? "Loading members..." : "Select a company member"} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {companyMembers.length > 0 ? (
-                                  companyMembers.map((member) => (
-                                    <SelectItem key={member.id} value={member.id}>
-                                      <div className="flex flex-col">
-                                        <span>{member.first_name} {member.last_name}</span>
-                                        <span className="text-xs text-muted-foreground"></span>
-                                      </div>
-                                    </SelectItem>
-                                  ))
-                                ) : (
-                                  <SelectItem value="no-members" disabled>
-                                    {isLoading ? "Loading..." : "No company members found"}
-                                  </SelectItem>
-                                )}
-                              </SelectContent>
-                            </Select>
-                        
+                            <Label>Select company members to notify</Label>
+                            {isLoading ? (
+                              <div className="text-center py-4">Loading company members...</div>
+                            ) : companyMembers.length > 0 ? (
+                              <CustomMultiSelect
+                                options={companyMembers.map(member => ({
+                                  label: `${member.first_name} ${member.last_name}${member.role ? ` (${member.role})` : ''}`,
+                                  value: member.id
+                                }))}
+                                selected={notifiedUsers}
+                                onChange={handleNotifiedUsersChange}
+                                placeholder="Select company members to notify"
+                              />
+                            ) : (
+                              <div className="text-center py-4">No company members found</div>
+                            )}
                           </div>
                         )}
                       </div>
-                      
-                      <div className="flex items-center justify-end gap-2 mt-6">
-                        <Button variant="outline">Cancel</Button>
-                        <Button onClick={handleSave}>Save Changes</Button>
-                      </div>
                     </div>
-                  ) : setting.label === "Terms and Conditions" ? (
+                  ) : settingItem.label === "Terms and Conditions" ? (
                     <div className="grid gap-6">
                       <div className="space-y-6 max-w-4xl mx-auto">
                         <div className="space-y-4">
@@ -1309,7 +1847,7 @@ export default function RentalApplicationSettingsPage() {
                           <RadioGroup 
                             className="grid grid-cols-1 gap-2 sm:grid-cols-2 max-w-lg mx-auto"
                             value={termsOption}
-                            onValueChange={setTermsOption}
+                            onValueChange={handleTermsOptionChange}
                           >
                             <label className="relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-input px-3 py-3 text-center shadow-sm shadow-black/5 outline-offset-2 transition-colors has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring/70">
                               <RadioGroupItem 
@@ -1351,15 +1889,10 @@ export default function RentalApplicationSettingsPage() {
                           </div>
                         )}
                       </div>
-                      
-                      <div className="flex items-center justify-end gap-2 mt-6">
-                        <Button variant="outline">Cancel</Button>
-                        <Button onClick={handleSave}>Save Changes</Button>
-                      </div>
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
-                      Configuration options for {setting.label} will go here...
+                      Configuration options for {settingItem.label} will go here...
                     </div>
                   )}
                 </div>
@@ -1368,6 +1901,16 @@ export default function RentalApplicationSettingsPage() {
           </div>
         </div>
       </Card>
+
+      {/* Floating Save/Cancel Button Group */}
+      {hasUnsavedChanges && (
+        <div className="fixed bottom-24 right-24 flex items-center gap-2 p-4 bg-background/80 backdrop-blur-sm border rounded-lg shadow-lg z-50">
+          <Button variant="outline" onClick={handleCancel} disabled={isSaving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 } 

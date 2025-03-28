@@ -218,6 +218,13 @@ interface DependentForm {
   age: string;
 }
 
+interface CustomQuestionAnswer {
+  id: number;
+  question: string;
+  answer: string | boolean | null;
+  answerType: string;
+}
+
 interface EmploymentForm {
   employerName: string;
   jobTitle: string;
@@ -353,9 +360,26 @@ const defaultResidence = {
   landlordEmail: '',
 };
 
+// Add a type for the rental application response
+interface RentalApplicationResponse {
+  rental_application?: {
+    customQuestions?: {
+      enabled: boolean;
+      questions: Array<{
+        id: number;
+        question: string;
+        answerType: string;
+      }>;
+    };
+    pets?: { enabled: boolean };
+    vehicle?: { enabled: boolean };
+    dependants?: { enabled: boolean };
+  };
+}
+
 export default function AddProspectPage() {
   const router = useRouter();
-  const [step, setStep] = useState<'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'summary'>('intro');
+  const [step, setStep] = useState<'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'custom_questions' | 'summary'>('intro');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
   const [selectedListingId, setSelectedListingId] = useState<string>('');
@@ -429,13 +453,29 @@ export default function AddProspectPage() {
     },
     documents: []
   }]);
+  const [customQuestions, setCustomQuestions] = useState<CustomQuestionAnswer[]>([]);
 
   const [emailError, setEmailError] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSkipAlert, setShowSkipAlert] = useState(false);
   const [companyMembers, setCompanyMembers] = useState<Array<{ id: string; first_name: string; last_name: string }>>([]);
   // Add new state for company settings
-  const [companySettings, setCompanySettings] = useState<{ leadsource?: string[] }>({});
+  const [companySettings, setCompanySettings] = useState<{
+    leadsource?: string[];
+    rental_application?: {
+      customQuestions?: {
+        enabled: boolean;
+        questions: Array<{
+          id: number;
+          question: string;
+          answerType: string;
+        }>;
+      };
+      pets?: { enabled: boolean };
+      vehicle?: { enabled: boolean };
+      dependants?: { enabled: boolean };
+    };
+  }>({});
   const [showNewSourceDialog, setShowNewSourceDialog] = useState(false);
   const [newSourceValue, setNewSourceValue] = useState('');
   const [haveVehicles, setHaveVehicles] = useState(false);
@@ -445,9 +485,81 @@ export default function AddProspectPage() {
   const [showSSN, setShowSSN] = useState(false);
   const [licenseError, setLicenseError] = useState<string>('');
 
-  // Helper function to check if a step is accessible
+  // Add useEffect to fetch company settings
+  useEffect(() => {
+    const fetchCompanySettings = async () => {
+      try {
+        // Fetch both general settings and rental application specific settings
+        const [generalResponse, rentalAppResponse] = await Promise.all([
+          fetch('/api/company/settings'),
+          fetch('/api/company/settings/rental-application')
+        ]);
+
+        if (!generalResponse.ok) {
+          throw new Error('Failed to fetch company settings');
+        }
+
+        if (!rentalAppResponse.ok) {
+          console.warn('Failed to fetch rental application settings, using general settings only');
+        }
+
+        const generalData = await generalResponse.json();
+        let rentalAppData: RentalApplicationResponse = {};
+        
+        try {
+          rentalAppData = await rentalAppResponse.json();
+          console.log("Rental application settings:", rentalAppData);
+        } catch (e) {
+          console.warn('Error parsing rental application settings:', e);
+        }
+
+        // Set the combined settings
+        const combinedSettings = {
+          ...generalData,
+          // Take rental_application from the specific endpoint if available
+          rental_application: rentalAppData.rental_application || generalData.rental_application
+        };
+
+        console.log("Combined settings:", combinedSettings);
+        setCompanySettings(combinedSettings);
+      } catch (error) {
+        console.error('Error fetching company settings:', error);
+      }
+    };
+
+    fetchCompanySettings();
+  }, []);
+
+  // Update isStepAccessible to correctly handle conditional steps
   const isStepAccessible = (targetStep: string) => {
-    const stepOrder = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment', 'pets', 'vehicles', 'dependents', 'summary'];
+    // Get base steps that are always present
+    const baseSteps = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment'];
+    
+    // Build conditional steps based on settings
+    const stepOrder = [...baseSteps];
+    
+    // Add conditional steps if enabled in settings
+    if (companySettings?.rental_application?.pets?.enabled) {
+      stepOrder.push('pets');
+    }
+    
+    if (companySettings?.rental_application?.vehicle?.enabled) {
+      stepOrder.push('vehicles');
+    }
+    
+    if (companySettings?.rental_application?.dependants?.enabled) {
+      stepOrder.push('dependents');
+    }
+    
+    if (companySettings?.rental_application?.customQuestions?.enabled) {
+      stepOrder.push('custom_questions');
+    }
+    
+    // Add the final summary step
+    stepOrder.push('summary');
+    
+    console.log("Current step order:", stepOrder);
+    
     const currentStepIndex = stepOrder.indexOf(step);
     const targetStepIndex = stepOrder.indexOf(targetStep);
     
@@ -455,7 +567,8 @@ export default function AddProspectPage() {
     if (targetStepIndex < currentStepIndex) return true;
     
     // Can only go forward if previous step is completed
-    return completedSteps.has(stepOrder[targetStepIndex - 1]);
+    const previousStep = stepOrder[targetStepIndex - 1];
+    return completedSteps.has(previousStep);
   };
 
   // Helper function to mark step as completed
@@ -463,27 +576,43 @@ export default function AddProspectPage() {
     setCompletedSteps(prev => new Set([...prev, completedStep]));
   };
 
+  // Update handleBack to use dynamic step order
   const handleBack = () => {
-    if (step === 'intro') {
+    // Get base steps that are always present
+    const baseSteps = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment'];
+    
+    // Build conditional steps based on settings
+    const stepOrder = [...baseSteps];
+    
+    // Add conditional steps if enabled in settings
+    if (companySettings?.rental_application?.pets?.enabled) {
+      stepOrder.push('pets');
+    }
+    
+    if (companySettings?.rental_application?.vehicle?.enabled) {
+      stepOrder.push('vehicles');
+    }
+    
+    if (companySettings?.rental_application?.dependants?.enabled) {
+      stepOrder.push('dependents');
+    }
+    
+    if (companySettings?.rental_application?.customQuestions?.enabled) {
+      stepOrder.push('custom_questions');
+    }
+    
+    // Add the final summary step
+    stepOrder.push('summary');
+    
+    // Find current step index
+    const currentIndex = stepOrder.indexOf(step);
+    
+    if (currentIndex <= 0) {
+      // If at first step or step not found, go back to people page
       router.push('/people');
-    } else if (step === 'properties') {
-      setStep('intro');
-    } else if (step === 'lead_status') {
-      setStep('properties');
-    } else if (step === 'personal') {
-      setStep('lead_status');
-    } else if (step === 'residence') {
-      setStep('personal');
-    } else if (step === 'employment') {
-      setStep('residence');
-    } else if (step === 'pets') {
-      setStep('employment');
-    } else if (step === 'vehicles') {
-      setStep('pets');
-    } else if (step === 'dependents') {
-      setStep('vehicles');
-    } else if (step === 'summary') {
-      setStep('dependents');
+    } else {
+      // Otherwise, go to previous step
+      setStep(stepOrder[currentIndex - 1] as 'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'custom_questions' | 'summary');
     }
   };
 
@@ -493,20 +622,43 @@ export default function AddProspectPage() {
     setStep('lead_status');
   };
 
+  // Update handleNext to use dynamic step order
   const handleNext = () => {
-    if (step === 'intro') {
-      markStepCompleted('intro');
-      setStep('properties');
-    } else if (step === 'properties') {
+    // Get base steps that are always present
+    const baseSteps = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment'];
+    
+    // Build conditional steps based on settings
+    const stepOrder = [...baseSteps];
+    
+    // Add conditional steps if enabled in settings
+    if (companySettings?.rental_application?.pets?.enabled) {
+      stepOrder.push('pets');
+    }
+    
+    if (companySettings?.rental_application?.vehicle?.enabled) {
+      stepOrder.push('vehicles');
+    }
+    
+    if (companySettings?.rental_application?.dependants?.enabled) {
+      stepOrder.push('dependents');
+    }
+    
+    if (companySettings?.rental_application?.customQuestions?.enabled) {
+      stepOrder.push('custom_questions');
+    }
+    
+    // Add the final summary step
+    stepOrder.push('summary');
+    
+    // Find current step index
+    const currentIndex = stepOrder.indexOf(step);
+    
+    // Handle validation for specific steps
+    if (step === 'properties') {
       if (!selectedUnitId) {
         setShowSkipAlert(true);
-      } else {
-        markStepCompleted('properties');
-        setStep('lead_status');
+        return;
       }
-    } else if (step === 'lead_status') {
-      markStepCompleted('lead_status');
-      setStep('personal');
     } else if (step === 'personal') {
       if (!contact.firstName || !contact.lastName || !contact.email || emailError) {
         toast.error('Missing Information', {
@@ -521,9 +673,6 @@ export default function AddProspectPage() {
         });
         return;
       }
-
-      markStepCompleted('personal');
-      setStep('residence');
     } else if (step === 'residence') {
       if (residence.noPastResidence === null) {
         toast.error('Missing Information', {
@@ -537,10 +686,7 @@ export default function AddProspectPage() {
         });
         return;
       }
-      markStepCompleted('residence');
-      setStep('employment');
     } else if (step === 'employment') {
-      // Check if documents are provided for current jobs
       const missingDocuments = employment.some(job => 
         job.isCurrentJob && (!job.documents || job.documents.length === 0)
       );
@@ -551,18 +697,6 @@ export default function AddProspectPage() {
         });
         return;
       }
-      
-      markStepCompleted('employment');
-      setStep('pets');
-    } else if (step === 'pets') {
-      markStepCompleted('pets');
-      setStep('vehicles');
-    } else if (step === 'vehicles') {
-      markStepCompleted('vehicles');
-      setStep('dependents');
-    } else if (step === 'dependents') {
-      markStepCompleted('dependents');
-      setStep('summary');
     } else if (step === 'summary') {
       // Log the final property and unit IDs before submission
       console.log('Final data before submission:', {
@@ -572,6 +706,15 @@ export default function AddProspectPage() {
       });
       
       handleSubmit();
+      return;
+    }
+    
+    // Mark current step as completed
+    markStepCompleted(step);
+    
+    // If there's a next step, go to it
+    if (currentIndex < stepOrder.length - 1) {
+      setStep(stepOrder[currentIndex + 1] as 'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'custom_questions' | 'summary');
     }
   };
 
@@ -588,6 +731,10 @@ export default function AddProspectPage() {
         vehicles,
         dependents,
         employment,
+        // Add custom questions to payload if enabled
+        ...(companySettings?.rental_application?.customQuestions?.enabled && {
+          customQuestions
+        }),
         role: 'prospect',
         unit_id: selectedUnitId || '',
         property_id: selectedPropertyId || '',
@@ -688,23 +835,21 @@ export default function AddProspectPage() {
     fetchCompanyMembers();
   }, []);
 
-  // Add useEffect to fetch company settings
+  // Add useEffect to initialize custom questions when company settings are loaded
   useEffect(() => {
-    const fetchCompanySettings = async () => {
-      try {
-        const response = await fetch('/api/company/settings');
-        if (!response.ok) {
-          throw new Error('Failed to fetch company settings');
-        }
-        const data = await response.json();
-        setCompanySettings(data);
-      } catch (error) {
-        console.error('Error fetching company settings:', error);
-      }
-    };
-
-    fetchCompanySettings();
-  }, []);
+    // Add proper null checking
+    if (companySettings?.rental_application?.customQuestions?.questions && 
+        companySettings.rental_application.customQuestions.questions.length > 0) {
+      // Initialize custom questions with empty answers
+      const initialQuestions = companySettings.rental_application.customQuestions.questions.map(q => ({
+        id: q.id,
+        question: q.question,
+        answer: null,
+        answerType: q.answerType
+      }));
+      setCustomQuestions(initialQuestions);
+    }
+  }, [companySettings?.rental_application?.customQuestions?.questions]);
 
   // Add debugging when rendering a listing
   const renderListing = (listing: UnitListing) => {
@@ -828,189 +973,147 @@ export default function AddProspectPage() {
     );
   };
 
-  const renderContactForm = () => {
+  const handleFileUpload = (files: FileList | null, jobIndex: number) => {
+    if (!files) return;
+    
+    const newEmployment = [...employment];
+    const fileArray = Array.from(files);
+    
+    newEmployment[jobIndex] = { 
+      ...newEmployment[jobIndex], 
+      documents: [...(newEmployment[jobIndex].documents || []), ...fileArray]
+    };
+    
+    setEmployment(newEmployment);
+    toast.success(`${fileArray.length} ${fileArray.length === 1 ? 'file' : 'files'} uploaded`);
+  };
+  
+  const handleRemoveFile = (jobIndex: number, fileIndex: number) => {
+    const newEmployment = [...employment];
+    if (newEmployment[jobIndex].documents) {
+      newEmployment[jobIndex].documents = newEmployment[jobIndex].documents?.filter((_, idx) => idx !== fileIndex);
+      setEmployment(newEmployment);
+    }
+  };
+
+  // Add function to render custom questions form
+  const renderCustomQuestionsForm = () => {
+    if (!companySettings?.rental_application?.customQuestions?.questions?.length) {
+      return (
+        <div className="flex flex-col items-center justify-center py-8">
+          <p className="text-gray-500">No custom questions have been configured.</p>
+        </div>
+      );
+    }
+
     return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="firstName">First Name <span className="text-red-500">*</span></Label>
-            <Input 
-              id="firstName" 
-              placeholder="Enter first name" 
-              value={contact.firstName}
-              onChange={(e) => setContact({...contact, firstName: e.target.value})}
-              className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-              required
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="middleName">Middle Name</Label>
-            <Input 
-              id="middleName" 
-              placeholder="Enter middle name"
-              value={contact.middleName}
-              onChange={(e) => setContact({...contact, middleName: e.target.value})}
-              className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="lastName">Last Name <span className="text-red-500">*</span></Label>
-            <Input 
-              id="lastName" 
-              placeholder="Enter last name"
-              value={contact.lastName}
-              onChange={(e) => setContact({...contact, lastName: e.target.value})}
-              className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-              required
-            />
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
-            <div className="relative">
-              <Input 
-                id="email" 
-                type="email"
-                className={cn(
-                  "h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20",
-                  { "border-red-500 focus-visible:ring-red-500": emailError.length > 0 }
-                )}
-                placeholder="Enter email address"
-                value={emails[0]}
-                onChange={(e) => {
-                  const email = e.target.value;
-                  setEmails([email]);
-                  setContact({...contact, email: email});
-                  
-                  // Email validation
-                  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                  if (!email) {
-                    setEmailError('Email is required');
-                  } else if (!emailRegex.test(email)) {
-                    setEmailError('Please enter a valid email address');
-                  } else {
-                    setEmailError('');
-                  }
-                }}
-                required
-              />
-              <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
-                <Mail size={16} strokeWidth={2} aria-hidden="true" />
-              </div>
-            </div>
-            {emailError && (
-              <p className="text-sm text-red-500 mt-1">{emailError}</p>
-            )}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="phone">Phone Number</Label>
-            <RPNInput.default
-              className="flex rounded-lg shadow-sm shadow-black/5 bg-background hover:bg-background focus-within:border-ring focus-within:outline-[3px] focus-within:outline-ring/20"
-              international
-              flagComponent={FlagComponent}
-              countrySelectComponent={CountrySelect}
-              inputComponent={PhoneInput}
-              id="phone"
-              placeholder="Enter phone number"
-              value={phones[0]}
-              onChange={(newValue) => {
-                setPhones([newValue ?? ""]);
-                setContact({...contact, phone: newValue ?? ""});
-              }}
-            />
-          </div>
+      <div className="flex flex-col">
+        <div className="space-y-4">
+          <h2 className="text-2xl font-semibold">Custom Questions</h2>
+          <p className="text-gray-600">
+            Please answer the following questions required by the property manager.
+          </p>
         </div>
 
-        <Separator />
-
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Identification</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="ssn">SSN</Label>
-              <div className="relative">
-                <Input 
-                  id="ssn"
-                  type={showSSN ? "text" : "password"}
-                  placeholder="Enter SSN"
-                  value={contact.ssn}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9]/g, '');
-                    if (value.length <= 9) {
-                      setContact({...contact, ssn: value});
-                      // Only validate if there is a value
-                      if (value && value.length > 0 && value.length !== 9) {
-                        toast.error('Invalid SSN', {
-                          description: 'SSN must be exactly 9 digits'
-                        });
-                      }
-                    }
-                  }}
-                  maxLength={9}
-                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20 pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowSSN(!showSSN)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
-                >
-                  {showSSN ? (
-                    <EyeOffIcon className="h-4 w-4" />
+        <div className="max-w-4xl mx-auto w-full mt-6">
+          <div className="space-y-6 divide-y">
+            {customQuestions.map((question, index) => (
+              <div key={question.id} className="grid grid-cols-12 gap-4 items-center py-4">
+                <div className="col-span-5 font-medium">
+                  {question.question || `Question ${index + 1}`}
+                </div>
+                
+                <div className="col-span-7">
+                  {question.answerType === 'Yes/No' ? (
+                    <RadioGroup 
+                      className="flex gap-4"
+                      value={question.answer === true ? 'yes' : question.answer === false ? 'no' : undefined}
+                      onValueChange={(value: string) => {
+                        const newQuestions = [...customQuestions];
+                        newQuestions[index] = {
+                          ...newQuestions[index], 
+                          answer: value === 'yes' ? true : value === 'no' ? false : null
+                        };
+                        setCustomQuestions(newQuestions);
+                      }}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="yes" id={`q${question.id}-yes`} />
+                        <Label htmlFor={`q${question.id}-yes`}>Yes</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="no" id={`q${question.id}-no`} />
+                        <Label htmlFor={`q${question.id}-no`}>No</Label>
+                      </div>
+                    </RadioGroup>
+                  ) : question.answerType === 'Text' ? (
+                    <Input
+                      placeholder="Enter your answer"
+                      className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                      value={question.answer as string || ''}
+                      onChange={(e) => {
+                        const newQuestions = [...customQuestions];
+                        newQuestions[index] = {
+                          ...newQuestions[index], 
+                          answer: e.target.value
+                        };
+                        setCustomQuestions(newQuestions);
+                      }}
+                    />
+                  ) : question.answerType === 'Number' ? (
+                    <Input
+                      type="number"
+                      placeholder="Enter a number"
+                      className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                      value={question.answer as string || ''}
+                      onChange={(e) => {
+                        const newQuestions = [...customQuestions];
+                        newQuestions[index] = {
+                          ...newQuestions[index], 
+                          answer: e.target.value
+                        };
+                        setCustomQuestions(newQuestions);
+                      }}
+                    />
+                  ) : question.answerType === 'Date' ? (
+                    <CalendarInput
+                      placeholder="Select date"
+                      value={question.answer ? new Date(question.answer as string) : undefined}
+                      onChange={(date) => {
+                        const newQuestions = [...customQuestions];
+                        newQuestions[index] = {
+                          ...newQuestions[index], 
+                          answer: date ? format(date, 'yyyy-MM-dd') : null
+                        };
+                        setCustomQuestions(newQuestions);
+                      }}
+                      className="w-full"
+                    />
                   ) : (
-                    <EyeIcon className="h-4 w-4" />
+                    <textarea
+                      className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2"
+                      placeholder="Enter your answer"
+                      value={question.answer as string || ''}
+                      onChange={(e) => {
+                        const newQuestions = [...customQuestions];
+                        newQuestions[index] = {
+                          ...newQuestions[index], 
+                          answer: e.target.value
+                        };
+                        setCustomQuestions(newQuestions);
+                      }}
+                    />
                   )}
-                </button>
+                </div>
               </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="driversLicenseState">Driver License Province</Label>
-              <Select
-                value={contact.driversLicenseState}
-                onValueChange={(value) => {
-                  setContact({...contact, driversLicenseState: value, driversLicenseNumber: ''});
-                  setLicenseError('');
-                }}
-              >
-                <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
-                  <SelectValue placeholder="Select Province" />
-                </SelectTrigger>
-                <SelectContent>
-                  {provinces.map((province) => (
-                    <SelectItem key={province.value} value={province.value}>
-                      {province.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="driversLicenseNumber">Driver&apos;s License Number</Label>
-              <div className="relative">
-                <Input 
-                  id="driversLicenseNumber"
-                  placeholder={contact.driversLicenseState ? `Format: ${driverLicenseFormats[contact.driversLicenseState as keyof typeof driverLicenseFormats]?.format}` : "Select province first"}
-                  value={contact.driversLicenseNumber}
-                  onChange={(e) => {
-                    const formattedValue = formatLicenseNumber(e.target.value, contact.driversLicenseState);
-                    setContact({...contact, driversLicenseNumber: formattedValue});
-                    validateLicenseNumber(formattedValue, contact.driversLicenseState);
-                  }}
-                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
-                  disabled={!contact.driversLicenseState}
-                />
-              </div>
-              {licenseError && (
-                <p className="text-sm text-red-500">{licenseError}</p>
-              )}
-            </div>
+            ))}
           </div>
         </div>
       </div>
     );
   };
 
+  // Before handleFileUpload function, add back the missing functions
   // Helper function to format license number based on province pattern
   const formatLicenseNumber = (value: string, province: string) => {
     if (!province || !driverLicenseFormats[province as keyof typeof driverLicenseFormats]) {
@@ -1059,29 +1162,6 @@ export default function AddProspectPage() {
     return true;
   };
 
-  const handleFileUpload = (files: FileList | null, jobIndex: number) => {
-    if (!files) return;
-    
-    const newEmployment = [...employment];
-    const fileArray = Array.from(files);
-    
-    newEmployment[jobIndex] = { 
-      ...newEmployment[jobIndex], 
-      documents: [...(newEmployment[jobIndex].documents || []), ...fileArray]
-    };
-    
-    setEmployment(newEmployment);
-    toast.success(`${fileArray.length} ${fileArray.length === 1 ? 'file' : 'files'} uploaded`);
-  };
-  
-  const handleRemoveFile = (jobIndex: number, fileIndex: number) => {
-    const newEmployment = [...employment];
-    if (newEmployment[jobIndex].documents) {
-      newEmployment[jobIndex].documents = newEmployment[jobIndex].documents?.filter((_, idx) => idx !== fileIndex);
-      setEmployment(newEmployment);
-    }
-  };
-
   return (
     <div className="mx-auto p-6">
       <Card className="bg-card rounded-xl p-6 h-[calc(100vh-3rem)] flex flex-col shadow-sm border relative">
@@ -1094,9 +1174,33 @@ export default function AddProspectPage() {
           <div className="w-72 shrink-0 border-r pr-6 overflow-y-auto">
             <div className="space-y-2">
               {(() => {
-                const stepOrder = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment', 'pets', 'vehicles', 'dependents', 'summary'];
+                // Define step order with conditional custom questions step
+                const baseStepOrder = ['intro', 'properties', 'lead_status', 'personal', 'residence', 'employment'];
+                
+                // Add conditional steps based on company settings
+                const conditionalSteps = [];
+                
+                if (companySettings?.rental_application?.pets?.enabled) {
+                  conditionalSteps.push('pets');
+                }
+                
+                if (companySettings?.rental_application?.vehicle?.enabled) {
+                  conditionalSteps.push('vehicles');
+                }
+                
+                if (companySettings?.rental_application?.dependants?.enabled) {
+                  conditionalSteps.push('dependents');
+                }
+                
+                if (companySettings?.rental_application?.customQuestions?.enabled) {
+                  conditionalSteps.push('custom_questions');
+                }
+                
+                // Complete the step order
+                const fullStepOrder = [...baseStepOrder, ...conditionalSteps, 'summary'];
+                
                 return (
-                  <Stepper value={stepOrder.indexOf(step) + 1} orientation="vertical">
+                  <Stepper value={fullStepOrder.indexOf(step) + 1} orientation="vertical">
                     {[
                       { step: 'intro', title: 'Intro' },
                       { step: 'properties', title: 'Properties' },
@@ -1104,9 +1208,10 @@ export default function AddProspectPage() {
                       { step: 'personal', title: 'Personal Info' },
                       { step: 'residence', title: 'Residence' },
                       { step: 'employment', title: 'Employment' },
-                      { step: 'pets', title: 'Pets' },
-                      { step: 'vehicles', title: 'Vehicles' },
-                      { step: 'dependents', title: 'Dependents' },
+                      ...(companySettings?.rental_application?.pets?.enabled ? [{ step: 'pets', title: 'Pets' }] : []),
+                      ...(companySettings?.rental_application?.vehicle?.enabled ? [{ step: 'vehicles', title: 'Vehicles' }] : []),
+                      ...(companySettings?.rental_application?.dependants?.enabled ? [{ step: 'dependents', title: 'Dependents' }] : []),
+                      ...(companySettings?.rental_application?.customQuestions?.enabled ? [{ step: 'custom_questions', title: 'Custom Questions' }] : []),
                       { step: 'summary', title: 'Summary' }
                     ].map(({ step: stepName, title }, index) => {
                       const isAccessible = isStepAccessible(stepName);
@@ -1127,7 +1232,7 @@ export default function AddProspectPage() {
                             className="items-start pb-12 last:pb-0 w-full"
                             onClick={() => {
                               if (isAccessible) {
-                                setStep(stepName as 'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'summary');
+                                setStep(stepName as 'intro' | 'properties' | 'lead_status' | 'personal' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'custom_questions' | 'summary');
                               }
                             }}
                             disabled={!isAccessible}
@@ -1317,7 +1422,7 @@ export default function AddProspectPage() {
                                 </div>
                                 <button
                                   onClick={() => setSearchQuery('')}
-                                  className={`absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center text-muted-foreground/80 outline-offset-2 transition-colors hover:text-foreground focus:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70 ${!searchQuery && 'hidden'}`}
+                                  className={`absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center text-muted-foreground/80 outline-offset-2 transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70 ${!searchQuery && 'hidden'}`}
                                   aria-label="Clear search"
                                   type="button"
                                 >
@@ -1520,101 +1625,293 @@ export default function AddProspectPage() {
                   </div>
                 ) : step === 'personal' ? (
                   <div className="flex flex-col">
-                <div className="space-y-4">
+                    <div>
                       <h2 className="text-2xl font-semibold">Personal Information</h2>
-                  <p className="text-gray-600">
+                      <p className="text-gray-600">
                         Enter the prospect&apos;s basic contact and personal information.
-                  </p>
-                </div>
-
-                    <div className="max-w-4xl mx-auto w-full mt-6">
-                      <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4">Contact Information</h3>
-                    <div className="grid gap-4">
-                      {renderContactForm()}
+                      </p>
                     </div>
-                  </div>
 
-                  <Separator />
+                    <div className="max-w-4xl w-full mt-6">
+                      <div className="border rounded-lg p-6 bg-white shadow-sm">
+                        <div className="space-y-6">
+                          <div>
+                            <h3 className="text-lg font-semibold mb-4">Contact Information</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="grid gap-2">
+                                <Label htmlFor="firstName">First Name <span className="text-red-500">*</span></Label>
+                                <Input 
+                                  id="firstName" 
+                                  placeholder="Enter first name" 
+                                  value={contact.firstName}
+                                  onChange={(e) => setContact({...contact, firstName: e.target.value})}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                  required
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="middleName">Middle Name</Label>
+                                <Input 
+                                  id="middleName" 
+                                  placeholder="Enter middle name"
+                                  value={contact.middleName}
+                                  onChange={(e) => setContact({...contact, middleName: e.target.value})}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="lastName">Last Name <span className="text-red-500">*</span></Label>
+                                <Input 
+                                  id="lastName" 
+                                  placeholder="Enter last name"
+                                  value={contact.lastName}
+                                  onChange={(e) => setContact({...contact, lastName: e.target.value})}
+                                  className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                  required
+                                />
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                              <div className="grid gap-2">
+                                <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
+                                <div className="relative">
+                                  <Input 
+                                    id="email" 
+                                    type="email"
+                                    className={cn(
+                                      "h-[42px] peer ps-9 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20",
+                                      { "border-red-500 focus-visible:ring-red-500": emailError.length > 0 }
+                                    )}
+                                    placeholder="Enter email address"
+                                    value={emails[0]}
+                                    onChange={(e) => {
+                                      const email = e.target.value;
+                                      setEmails([email]);
+                                      setContact({...contact, email: email});
+                                      
+                                      // Email validation
+                                      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                                      if (!email) {
+                                        setEmailError('Email is required');
+                                      } else if (!emailRegex.test(email)) {
+                                        setEmailError('Please enter a valid email address');
+                                      } else {
+                                        setEmailError('');
+                                      }
+                                    }}
+                                    required
+                                  />
+                                  <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-muted-foreground/80 peer-disabled:opacity-50">
+                                    <Mail size={16} strokeWidth={2} aria-hidden="true" />
+                                  </div>
+                                </div>
+                                {emailError && (
+                                  <p className="text-sm text-red-500 mt-1">{emailError}</p>
+                                )}
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="phone">Phone Number</Label>
+                                <RPNInput.default
+                                  className="flex rounded-lg shadow-sm shadow-black/5 bg-background hover:bg-background focus-within:border-ring focus-within:outline-[3px] focus-within:outline-ring/20"
+                                  international
+                                  flagComponent={FlagComponent}
+                                  countrySelectComponent={CountrySelect}
+                                  inputComponent={PhoneInput}
+                                  id="phone"
+                                  placeholder="Enter phone number"
+                                  value={phones[0]}
+                                  onChange={(newValue) => {
+                                    setPhones([newValue ?? ""]);
+                                    setContact({...contact, phone: newValue ?? ""});
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
 
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4">Additional Information</h3>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="grid gap-2">
-                          <Label htmlFor="expected_move_in_date">Expected Move-in Date <span className="text-red-500">*</span></Label>
-                          <CalendarInput
-                            value={contact.expected_move_in_date}
-                            onChange={(date) => setContact({...contact, expected_move_in_date: date})}
-                            placeholder="Select move-in date"
-                            minDate={new Date()}
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                          <CalendarInput
-                            value={contact.dateOfBirth}
-                            onChange={(date) => setContact({...contact, dateOfBirth: date})}
-                            placeholder="Select date of birth"
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="gender">Gender</Label>
-                          <Select
-                            value={contact.gender}
-                            onValueChange={(value) => setContact({...contact, gender: value})}
-                          >
-                            <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
-                              <SelectValue placeholder="Select Gender" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="male">Male</SelectItem>
-                              <SelectItem value="female">Female</SelectItem>
-                              <SelectItem value="other">Other</SelectItem>
-                              <SelectItem value="prefer-not-to-say">Prefer not to say</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="maritalStatus">Marital Status</Label>
-                          <Select
-                            value={contact.maritalStatus}
-                            onValueChange={(value) => setContact({...contact, maritalStatus: value})}
-                          >
-                            <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
-                              <SelectValue placeholder="Select Status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="single">Single</SelectItem>
-                              <SelectItem value="married">Married</SelectItem>
-                              <SelectItem value="divorced">Divorced</SelectItem>
-                              <SelectItem value="widowed">Widowed</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <div className="pt-4">
+                            <h3 className="text-lg font-semibold mb-4">Identification</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="grid gap-2">
+                                <Label htmlFor="ssn">SSN</Label>
+                                <div className="relative">
+                                  <Input 
+                                    id="ssn"
+                                    type={showSSN ? "text" : "password"}
+                                    placeholder="Enter SSN"
+                                    value={contact.ssn}
+                                    onChange={(e) => {
+                                      const value = e.target.value.replace(/[^0-9]/g, '');
+                                      if (value.length <= 9) {
+                                        setContact({...contact, ssn: value});
+                                        // Only validate if there is a value
+                                        if (value && value.length > 0 && value.length !== 9) {
+                                          toast.error('Invalid SSN', {
+                                            description: 'SSN must be exactly 9 digits'
+                                          });
+                                        }
+                                      }
+                                    }}
+                                    maxLength={9}
+                                    className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20 pr-10"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowSSN(!showSSN)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
+                                  >
+                                    {showSSN ? (
+                                      <EyeOffIcon className="h-4 w-4" />
+                                    ) : (
+                                      <EyeIcon className="h-4 w-4" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="driversLicenseState">Driver License Province</Label>
+                                <Select
+                                  value={contact.driversLicenseState}
+                                  onValueChange={(value) => {
+                                    setContact({...contact, driversLicenseState: value, driversLicenseNumber: ''});
+                                    setLicenseError('');
+                                  }}
+                                >
+                                  <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                    <SelectValue placeholder="Select Province" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {provinces.map((province) => (
+                                      <SelectItem key={province.value} value={province.value}>
+                                        {province.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="driversLicenseNumber">Driver&apos;s License Number</Label>
+                                <div className="relative">
+                                  <Input 
+                                    id="driversLicenseNumber"
+                                    placeholder={contact.driversLicenseState ? `Format: ${driverLicenseFormats[contact.driversLicenseState as keyof typeof driverLicenseFormats]?.format}` : "Select province first"}
+                                    value={contact.driversLicenseNumber}
+                                    onChange={(e) => {
+                                      const formattedValue = formatLicenseNumber(e.target.value, contact.driversLicenseState);
+                                      setContact({...contact, driversLicenseNumber: formattedValue});
+                                      validateLicenseNumber(formattedValue, contact.driversLicenseState);
+                                    }}
+                                    className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                    disabled={!contact.driversLicenseState}
+                                  />
+                                </div>
+                                {licenseError && (
+                                  <p className="text-sm text-red-500">{licenseError}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="pt-4">
+                            <h3 className="text-lg font-semibold mb-4">Additional Information</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="grid gap-2">
+                                <Label htmlFor="expected_move_in_date">Expected Move-In Date <span className="text-red-500">*</span></Label>
+                                <CalendarInput
+                                  value={contact.expected_move_in_date}
+                                  onChange={(date) => setContact({ ...contact, expected_move_in_date: date })}
+                                  placeholder="Select move-in date"
+                                  minDate={new Date()}
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                                <CalendarInput
+                                  value={contact.dateOfBirth}
+                                  onChange={(date) => setContact({ ...contact, dateOfBirth: date })}
+                                  placeholder="Select date of birth"
+                                  className="bg-background hover:bg-background"
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="gender">Gender</Label>
+                                <Select
+                                  value={contact.gender}
+                                  onValueChange={(value) => setContact({ ...contact, gender: value })}
+                                >
+                                  <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                    <SelectValue placeholder="Select Gender" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="male">Male</SelectItem>
+                                    <SelectItem value="female">Female</SelectItem>
+                                    <SelectItem value="other">Other</SelectItem>
+                                    <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-1 gap-4 mt-4">
+                              <div className="grid gap-2">
+                                <Label htmlFor="maritalStatus">Marital Status</Label>
+                                <Select
+                                  value={contact.maritalStatus}
+                                  onValueChange={(value) => setContact({ ...contact, maritalStatus: value })}
+                                >
+                                  <SelectTrigger className="h-[42px] bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20">
+                                    <SelectValue placeholder="Select Status" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="single">Single</SelectItem>
+                                    <SelectItem value="married">Married</SelectItem>
+                                    <SelectItem value="divorced">Divorced</SelectItem>
+                                    <SelectItem value="widowed">Widowed</SelectItem>
+                                    <SelectItem value="separated">Separated</SelectItem>
+                                    <SelectItem value="domestic_partnership">Domestic Partnership</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 gap-4 mt-4">
+                              <div className="grid gap-2">
+                                <Label htmlFor="aboutYou">Tell us why you&apos;re Great!</Label>
+                                <textarea
+                                  id="aboutYou"
+                                  rows={4}
+                                  placeholder="Share a bit about yourself..."
+                                  value={contact.aboutYou}
+                                  onChange={(e) => setContact({ ...contact, aboutYou: e.target.value })}
+                                  className="min-h-[80px] rounded-md border border-input px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-background hover:bg-background focus-visible:border-ring focus-visible:outline-[3px] focus-visible:outline-ring/20"
+                                />
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      
-                      <div className="grid gap-2">
-                        <Label htmlFor="aboutYou">Tell us why you&apos;re Great!</Label>
-                        <textarea
-                          id="aboutYou"
-                          className="flex min-h-[150px] w-full rounded-md border border-input bg-background px-3 py-2"
-                          placeholder="Share a bit about yourself..."
-                          value={contact.aboutYou}
-                          onChange={(e) => setContact({...contact, aboutYou: e.target.value})}
-                          maxLength={1000}
-                        />
-                        <div className="text-sm text-muted-foreground text-right">
-                          {contact.aboutYou.length}/1000 characters
-                        </div>
-                      </div>
+                    </div>
+                    
+                    <div className="mt-6 flex justify-between items-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleBack}
+                        className="px-4 py-2"
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleNext}
+                        className="px-4 py-2"
+                      >
+                        Next
+                      </Button>
                     </div>
                   </div>
-                </div>
-                    </div>
-              </div>
-            ) : step === 'residence' ? (
+                ) : step === 'residence' ? (
                   <div className="flex flex-col">
                     <div className="space-y-4">
                       <h2 className="text-2xl font-semibold">Current Residence</h2>
@@ -1683,7 +1980,11 @@ export default function AddProspectPage() {
                               <h3 className="text-lg font-semibold mb-4">Address Information</h3>
                               {residence.addresses.map((addressInfo, index) => (
                                 <div key={index} className="mb-8">
-                                  {index > 0 && (
+                                  {index === 0 ? (
+                                    <div className="mb-4">
+                                      <h4 className="text-md font-medium">Current Address</h4>
+                                    </div>
+                                  ) : (
                                     <div className="flex justify-between items-center mb-4">
                                       <h4 className="text-md font-medium">Previous Address</h4>
                                       <Button
@@ -2992,6 +3293,8 @@ export default function AddProspectPage() {
                   </div>
                 </div>
               </div>
+            ) : step === 'custom_questions' ? (
+              renderCustomQuestionsForm()
             ) : step === 'summary' ? (
                   <div className="flex flex-col">
                     <div className="space-y-2 mb-6">
@@ -3273,6 +3576,33 @@ export default function AddProspectPage() {
                                 <p className="text-gray-500">No</p>
                               ) : (
                                 <p>{dependents.length} {dependents.length === 1 ? 'dependent' : 'dependents'}</p>
+                              )}
+                            </div>
+                          </div>
+                          {/* Custom Questions */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground text-sm">Custom Questions</Label>
+                              <Button
+                                variant="link"
+                                className="h-auto p-0 text-primary hover:text-primary/90"
+                                onClick={() => setStep('custom_questions')}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                            <div className="mt-1">
+                              {customQuestions.length > 0 ? (
+                                <div className="space-y-4">
+                                  {customQuestions.map((question, index) => (
+                                    <div key={question.id}>
+                                      <h3 className="text-lg font-semibold mb-2">{question.question || `Question ${index + 1}`}</h3>
+                                      <p>{question.answer === true ? 'Yes' : question.answer === false ? 'No' : question.answer}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-gray-500">No custom questions answered</p>
                               )}
                             </div>
                           </div>

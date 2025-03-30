@@ -5,6 +5,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CarFront, ChevronDown, ChevronUp, Minus, Plus } from "lucide-react"
+import { toast } from "sonner"
 
 // Define vehicle form interface
 interface VehicleForm {
@@ -26,6 +27,16 @@ interface VehiclesDetailsPageProps {
   onPrevious: () => void
 }
 
+// Validation function for a single vehicle
+const validateVehicle = (form: VehicleForm): string[] => {
+  const missingFields: string[] = [];
+  if (!form.make) missingFields.push("Make");
+  if (!form.model) missingFields.push("Model");
+  if (!form.year) missingFields.push("Year");
+  if (!form.licensePlate) missingFields.push("License Plate");
+  return missingFields;
+}
+
 export default function VehiclesDetailsPage({
   vehicleForms,
   onVehicleFormChange,
@@ -35,6 +46,45 @@ export default function VehiclesDetailsPage({
   onNext,
   onPrevious,
 }: VehiclesDetailsPageProps) {
+
+  // Handler for adding a new vehicle with validation
+  const handleAddVehicleClick = () => {
+    if (vehicleForms.length > 0) {
+      const lastVehicle = vehicleForms[vehicleForms.length - 1];
+      const missingFields = validateVehicle(lastVehicle);
+      if (missingFields.length > 0) {
+        toast.error("Missing Vehicle Information", {
+          description: `Please fill out the following fields for the current vehicle before adding another: ${missingFields.join(", ")}.`
+        });
+        return; // Stop if validation fails
+      }
+    }
+    onAddVehicleForm(); // Proceed if validation passes
+  };
+
+  // Handler for the Next button with validation
+  const handleNextClick = () => {
+    if (vehicleForms.length > 0) {
+      const lastVehicle = vehicleForms[vehicleForms.length - 1];
+      const missingFields = validateVehicle(lastVehicle);
+      if (missingFields.length > 0) {
+        toast.error("Missing Vehicle Information", {
+          description: `Please fill out the following fields for the last vehicle before proceeding: ${missingFields.join(", ")}.`
+        });
+        return; // Stop if validation fails
+      }
+    }
+    // Also check if there are *any* vehicles if the step is supposed to have them
+    if (vehicleForms.length === 0) {
+       toast.error("Missing Vehicle Information", {
+         description: "Please add at least one vehicle or go back to indicate you have no vehicles."
+       });
+       return; // Stop if no vehicles are added
+    }
+
+    onNext(); // Proceed if validation passes
+  };
+
   // Render a single vehicle form
   const renderVehicleForm = (form: VehicleForm, index: number) => {
     if (!form.isExpanded) {
@@ -180,10 +230,18 @@ export default function VehiclesDetailsPage({
       <p className="mb-6 text-muted-foreground">Enter information about your vehicles.</p>
 
       <Card className="overflow-hidden border shadow-sm border-border bg-background/5">
-        <CardContent className="p-0">{vehicleForms.map((form, index) => renderVehicleForm(form, index))}</CardContent>
+        <CardContent className="p-6">
+          {vehicleForms.length > 0 ? (
+            vehicleForms.map((form, index) => renderVehicleForm(form, index))
+          ) : (
+            <div className="text-center text-muted-foreground py-8">
+              No vehicles added yet.
+            </div>
+          )}
+        </CardContent>
         <CardFooter className="flex justify-between border-t bg-muted/20 px-6 py-4">
           <div className="flex items-center gap-2">
-            <Button variant="outline" className="gap-1" type="button" onClick={onAddVehicleForm}>
+            <Button variant="outline" className="gap-1" type="button" onClick={handleAddVehicleClick}>
               <Plus className="h-4 w-4" />
               Add Vehicle
             </Button>
@@ -192,7 +250,7 @@ export default function VehiclesDetailsPage({
             <Button variant="outline" onClick={onPrevious}>
               Previous
             </Button>
-            <Button onClick={onNext}>Next</Button>
+            <Button onClick={handleNextClick}>Next</Button>
           </div>
         </CardFooter>
       </Card>

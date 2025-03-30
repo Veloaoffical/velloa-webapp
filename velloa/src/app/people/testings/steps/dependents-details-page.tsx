@@ -10,6 +10,7 @@ import type { DependentType } from "./dependent-type-selection-page"
 import * as RPNInput from "react-phone-number-input"
 import flags from "react-phone-number-input/flags"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 // Define dependent form interface
 interface DependentForm {
@@ -22,7 +23,6 @@ interface DependentForm {
   email: string
   phone: string
   shareOfRent: string
-  name: string // For dependents
   isExpanded: boolean
 }
 
@@ -70,7 +70,7 @@ const CountrySelect = ({
   }
 
   return (
-    <div className="border-input bg-background text-muted-foreground focus-within:border-ring focus-within:ring-ring/50 hover:bg-accent hover:text-foreground has-aria-invalid:border-destructive/60 has-aria-invalid:ring-destructive/20 dark:has-aria-invalid:ring-destructive/40 relative inline-flex items-center self-stretch rounded-l-md border py-2 ps-3 pe-2 transition-[color,box-shadow] outline-none focus-within:z-10 focus-within:ring-[3px] has-disabled:pointer-events-none has-disabled:opacity-50">
+    <div className="border-input  text-muted-foreground focus-within:border-ring focus-within:ring-ring/50 hover:bg-accent hover:text-foreground has-aria-invalid:border-destructive/60 has-aria-invalid:ring-destructive/20 dark:has-aria-invalid:ring-destructive/40 relative inline-flex items-center self-stretch rounded-l-md border py-2 ps-3 pe-2 transition-[color,box-shadow] outline-none focus-within:z-10 focus-within:ring-[3px] has-disabled:pointer-events-none has-disabled:opacity-50">
       <div className="inline-flex items-center gap-1" aria-hidden="true">
         <FlagComponent country={value} countryName={value} aria-hidden="true" />
         <span className="text-muted-foreground/80">
@@ -115,6 +115,29 @@ const FlagComponent = ({ country, countryName }: RPNInput.FlagProps) => {
   )
 }
 
+// Validation function for a single dependent - ADJUSTED
+const validateDependent = (form: DependentForm): string[] => {
+  const missingFields: string[] = [];
+  // Common required fields
+  if (!form.firstName) missingFields.push("First Name");
+  if (!form.lastName) missingFields.push("Last Name");
+  if (!form.relationship) missingFields.push("Relationship");
+
+  // Adult specific required fields - ADJUSTED
+  if (form.type === 'adult') {
+    if (!form.shareOfRent) missingFields.push("Share of Rent");
+    // Require EITHER email OR phone
+    if (!form.email && !form.phone) {
+      missingFields.push("Email or Phone");
+    }
+  }
+  
+  // Child specific required fields (currently only common)
+  // if (form.type === 'child') { ... }
+  
+  return missingFields;
+}
+
 export default function DependentsDetailsPage({
   dependentForms,
   onDependentFormChange,
@@ -124,6 +147,24 @@ export default function DependentsDetailsPage({
   onNext,
   onPrevious,
 }: DependentsDetailsPageProps) {
+
+  // Handler for the "Add Another Occupant" button
+  const handleAddAnotherClick = () => {
+    if (dependentForms.length > 0) {
+      const lastDependent = dependentForms[dependentForms.length - 1];
+      const missingFields = validateDependent(lastDependent);
+      
+      if (missingFields.length > 0) {
+        toast.error("Missing Dependent Information", {
+          description: `Please fill out the following fields for the current dependent before adding another: ${missingFields.join(", ")}.`
+        });
+        return; // Stop if validation fails
+      }
+    }
+    // If validation passes or no dependents yet, call the parent function
+    onAddDependentForm();
+  };
+
   // Render a single dependent form
   const renderDependentForm = (form: DependentForm) => {
     if (!form.isExpanded) {
@@ -141,9 +182,7 @@ export default function DependentsDetailsPage({
                 <UserRound className="h-4 w-4 text-muted-foreground" />
               )}
               <span className="font-medium">
-                {form.type === "adult"
-                  ? `${form.firstName || "Adult"} ${form.lastName || ""} (${form.relationship || "Occupant"})`
-                  : `${form.name || "Dependent"} (${form.relationship || "Dependent"})`}
+                {`${form.firstName || (form.type === 'adult' ? 'Adult' : 'Dependent')} ${form.lastName || ''} (${form.relationship || (form.type === 'adult' ? 'Occupant' : 'Dependent')})`}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -203,11 +242,11 @@ export default function DependentsDetailsPage({
         {form.type === "adult" ? (
           <div className="rounded-b-lg border-x border-b border-border bg-muted/5 p-6">
             <div className="flex flex-col space-y-8">
-              {/* Row 1: First Name, Middle Name, Last Name */}
+              {/* Row 1: First Name *, Middle Name, Last Name * */}
               <div className="grid grid-cols-3 gap-8">
                 <div>
                   <Label htmlFor={`firstName-${form.id}`} className="mb-2 block">
-                    First Name <span className="text-destructive">*</span>
+                    First Name <span className="text-destructive ml-1">*</span>
                   </Label>
                   <Input
                     id={`firstName-${form.id}`}
@@ -231,7 +270,7 @@ export default function DependentsDetailsPage({
                 </div>
                 <div>
                   <Label htmlFor={`lastName-${form.id}`} className="mb-2 block">
-                    Last Name <span className="text-destructive">*</span>
+                    Last Name <span className="text-destructive ml-1">*</span>
                   </Label>
                   <Input
                     id={`lastName-${form.id}`}
@@ -243,11 +282,11 @@ export default function DependentsDetailsPage({
                 </div>
               </div>
 
-              {/* Row 2: Relationship, Email, Phone */}
+              {/* Row 2: Relationship *, Email, Phone */}
               <div className="grid grid-cols-3 gap-8">
                 <div>
                   <Label htmlFor={`relationship-${form.id}`} className="mb-2 block">
-                    Relationship <span className="text-destructive">*</span>
+                    Relationship <span className="text-destructive ml-1">*</span>
                   </Label>
                   <Select
                     value={form.relationship}
@@ -284,7 +323,7 @@ export default function DependentsDetailsPage({
                 </div>
                 <div>
                   <Label htmlFor={`phone-${form.id}`} className="mb-2 block">
-                    Phone Number
+                    Phone
                   </Label>
                   <RPNInput.default
                     className="flex rounded-md shadow-xs bg-background/10"
@@ -300,22 +339,20 @@ export default function DependentsDetailsPage({
                 </div>
               </div>
 
-              {/* Row 3: Share of Rent */}
+              {/* Row 3: Share of Rent * */}
               <div>
-                <div className="w-1/3">
-                  <Label htmlFor={`shareOfRent-${form.id}`} className="mb-2 block">
-                    Share of Rent
-                  </Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                    <Input
-                      id={`shareOfRent-${form.id}`}
-                      placeholder="Enter amount"
-                      value={form.shareOfRent}
-                      onChange={(e) => onDependentFormChange(form.id, "shareOfRent", e.target.value)}
-                      className="bg-background/10 border-border pl-7"
-                    />
-                  </div>
+                <Label htmlFor={`shareOfRent-${form.id}`} className="mb-2 block">
+                  Share of Rent ($) <span className="text-destructive ml-1">*</span>
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <Input
+                    id={`shareOfRent-${form.id}`}
+                    placeholder="Enter amount"
+                    value={form.shareOfRent}
+                    onChange={(e) => onDependentFormChange(form.id, "shareOfRent", e.target.value)}
+                    className="bg-background/10 border-border pl-7"
+                  />
                 </div>
               </div>
             </div>
@@ -323,52 +360,76 @@ export default function DependentsDetailsPage({
         ) : (
           // Dependent Information Section
           <div className="rounded-b-lg border-x border-b border-border bg-muted/5 p-6">
-            <div className="grid grid-cols-2 gap-8">
-              <div>
-                <Label htmlFor={`name-${form.id}`} className="mb-2 block">
-                  Name <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id={`name-${form.id}`}
-                  placeholder="Enter dependent's name"
-                  value={form.name}
-                  onChange={(e) => onDependentFormChange(form.id, "name", e.target.value)}
-                  className="bg-background/10 border-border"
-                />
+            <div className="flex flex-col space-y-8">
+              {/* Row 1: First Name *, Middle Name, Last Name * */}
+              <div className="grid grid-cols-3 gap-8">
+                <div>
+                  <Label htmlFor={`dependent-first-name-${form.id}`}>First Name <span className="text-destructive">*</span></Label>
+                  <Input
+                    id={`dependent-first-name-${form.id}`}
+                    placeholder="Enter first name"
+                    value={form.firstName}
+                    onChange={(e) => onDependentFormChange(form.id, "firstName", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`dependent-middle-name-${form.id}`}>Middle Name</Label>
+                  <Input
+                    id={`dependent-middle-name-${form.id}`}
+                    placeholder="Enter middle name"
+                    value={form.middleName}
+                    onChange={(e) => onDependentFormChange(form.id, "middleName", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`dependent-last-name-${form.id}`}>Last Name <span className="text-destructive">*</span></Label>
+                  <Input
+                    id={`dependent-last-name-${form.id}`}
+                    placeholder="Enter last name"
+                    value={form.lastName}
+                    onChange={(e) => onDependentFormChange(form.id, "lastName", e.target.value)}
+                  />
+                </div>
               </div>
-              <div>
-                <Label htmlFor={`relationship-${form.id}`} className="mb-2 block">
-                  Relationship <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={form.relationship}
-                  onValueChange={(value) => onDependentFormChange(form.id, "relationship", value)}
-                >
-                  <SelectTrigger id={`relationship-${form.id}`} className="bg-background/10 border-border">
-                    <SelectValue placeholder="Select relationship" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="child">Child</SelectItem>
-                    <SelectItem value="minor">Minor</SelectItem>
-                    <SelectItem value="senior">Senior</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor={`phone-${form.id}`} className="mb-2 block">
-                  Phone Number
-                </Label>
-                <RPNInput.default
-                  className="flex rounded-md shadow-xs bg-background/10"
-                  international
-                  flagComponent={FlagComponent}
-                  countrySelectComponent={CountrySelect}
-                  inputComponent={PhoneInput}
-                  id={`phone-${form.id}`}
-                  placeholder="Enter phone number"
-                  value={form.phone}
-                  onChange={(value) => onDependentFormChange(form.id, "phone", value || "")}
-                />
+
+              {/* Row 2: Relationship *, Phone Number */}
+              <div className="grid grid-cols-2 gap-8">
+                <div>
+                  <Label htmlFor={`dependent-relationship-${form.id}`}>Relationship <span className="text-destructive">*</span></Label>
+                  <Select
+                    value={form.relationship}
+                    onValueChange={(value) => onDependentFormChange(form.id, "relationship", value)}
+                  >
+                    <SelectTrigger id={`dependent-relationship-${form.id}`}>
+                      <SelectValue placeholder="Select relationship" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="child">Child</SelectItem>
+                      <SelectItem value="spouse">Spouse</SelectItem>
+                      <SelectItem value="parent">Parent</SelectItem>
+                      <SelectItem value="sibling">Sibling</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor={`dependent-phone-${form.id}`}>Phone Number</Label>
+                  <RPNInput.default
+                    id={`dependent-phone-${form.id}`}
+                    placeholder="Enter phone number"
+                    value={form.phone}
+                    onChange={(value) => onDependentFormChange(form.id, "phone", value || "")}
+                    inputComponent={PhoneInput}
+                    countrySelectComponent={CountrySelect}
+                    flagComponent={FlagComponent}
+                    defaultCountry="CA"
+                    international
+                    withCountryCallingCode
+                    className="flex w-full"
+                    aria-invalid={!form.phone ? undefined : !RPNInput.isValidPhoneNumber(form.phone)}
+                    data-testid="phone-input-group"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -378,30 +439,30 @@ export default function DependentsDetailsPage({
   }
 
   return (
-    <div>
-      <h1 className="mb-6 text-2xl font-bold">Occupant Details</h1>
-      <p className="mb-6 text-muted-foreground">Enter information about the people who will be living with you.</p>
-
-      <Card className="overflow-hidden border shadow-sm border-border bg-background/5">
-        <CardContent className="p-0">
-          {dependentForms.map((form) => renderDependentForm(form))}
-        </CardContent>
-        <CardFooter className="flex justify-between border-t bg-muted/20 px-6 py-4">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" className="gap-1" type="button" onClick={onAddDependentForm}>
-              <Plus className="h-4 w-4" />
-              Add Occupant
-            </Button>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onPrevious}>
-              Previous
-            </Button>
-            <Button onClick={onNext}>Next</Button>
-          </div>
-        </CardFooter>
-      </Card>
-    </div>
+    <Card className="overflow-hidden border shadow-sm border-border bg-background/5">
+      <CardContent className="p-6">
+        <div className="flex flex-col space-y-4">
+          {dependentForms.length > 0 ? (
+            dependentForms.map(renderDependentForm)
+          ) : (
+            <div className="text-center text-muted-foreground py-8">
+              No dependents added yet.
+            </div>
+          )}
+        </div>
+      </CardContent>
+      <CardFooter className="flex justify-between border-t bg-muted/20 px-6 py-4">
+        <Button variant="outline" onClick={handleAddAnotherClick}>
+          <Plus className="mr-2 h-4 w-4" /> Add Another Occupant
+        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onPrevious}>
+            Previous
+          </Button>
+          <Button onClick={onNext}>Next</Button>
+        </div>
+      </CardFooter>
+    </Card>
   )
 }
 

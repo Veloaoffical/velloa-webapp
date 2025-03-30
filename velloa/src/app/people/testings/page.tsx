@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
-import { Check } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Check, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 // Import page components
 import IntroPage from "./steps/intro-page"
@@ -19,7 +20,9 @@ import VehiclesDetailsPage from "./steps/vehicles-details-page"
 import DependentsQuestionPage from "./steps/dependents-question-page"
 import DependentTypeSelectionPage, { type DependentType } from "./steps/dependent-type-selection-page"
 import DependentsDetailsPage from "./steps/dependents-details-page"
+import CustomQuestionsPage from "./steps/custom-questions-page"
 import SummaryPage from "./steps/summary-page"
+
 
 // Define address form interface
 interface AddressForm {
@@ -86,12 +89,87 @@ interface DependentForm {
   email: string
   phone: string
   shareOfRent: string
-  name: string // For dependents
   isExpanded: boolean
 }
 
+// Define custom question answer interface
+interface CustomQuestionAnswer {
+  id: number; // Matches the question ID
+  question: string; // The question text (for reference)
+  answer: string | boolean | number | Date | null; // Store the actual answer
+  answerType: string; // Type like 'Text', 'Yes/No', 'Number', 'Date'
+}
+
+// Define interface for a single custom question (needed for ApplicationSettings)
+interface CustomQuestion {
+  id: number;
+  question: string;
+  answerType: string; // e.g., 'Yes/No', 'Text', 'Number', 'Date'
+}
+
+// --- Define interface for application settings ---
+interface ApplicationSettings {
+  pets: { enabled: boolean };
+  vehicle: { enabled: boolean };
+  dependants: { enabled: boolean }; // Renamed from dependents to match add-prospect/API
+  customQuestions: { enabled: boolean; questions?: CustomQuestion[] }; // Updated to include optional questions array
+  // Add other settings sections if needed later
+}
+// ------------------------------------------------
+
+type StepType = 'intro' | 'properties' | 'lead_status' | 'personal_info' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'custom_questions' | 'summary'
+
 export default function ProspectManagement() {
-  const [currentStep, setCurrentStep] = useState(2) // Set to Properties step
+  const [step, setStep] = useState<StepType>('properties') // Start at Properties step
+  const [completedSteps, setCompletedSteps] = useState<Set<StepType>>(new Set(['intro' as StepType]))
+  
+  // --- Settings state: Initialize as null, will be fetched --- 
+  const [applicationSettings, setApplicationSettings] = useState<ApplicationSettings | null>(null);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  // ------------------------------------------------
+
+  // --- Fetch application settings on mount ---
+  useEffect(() => {
+    const fetchSettings = async () => {
+      setIsLoadingSettings(true);
+      try {
+        const response = await fetch('/api/company/settings/rental-application');
+        if (!response.ok) {
+          // Use default settings if API fails or returns error
+          console.error('Failed to fetch rental application settings, using default values.');
+          setApplicationSettings({
+            pets: { enabled: true }, 
+            vehicle: { enabled: true },
+            dependants: { enabled: true },
+            customQuestions: { enabled: true },
+          });
+        } else {
+          const data = await response.json();
+          // Assuming the API returns { rental_application: { pets: ..., vehicle: ... } }
+          // Or handle if it returns the settings directly
+          const settings = data.rental_application || data; // Adjust based on actual API response
+          setApplicationSettings(settings);
+          console.log("Fetched application settings:", settings);
+        }
+      } catch (error) {
+        console.error('Error fetching application settings:', error);
+        // Fallback to default settings on error
+        setApplicationSettings({
+          pets: { enabled: true },
+          vehicle: { enabled: true },
+          dependants: { enabled: true },
+          customQuestions: { enabled: true },
+        });
+      } finally {
+        setIsLoadingSettings(false);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+  // -------------------------------------------
+
+  // Sub-steps state
   const [hasRentalHistory, setHasRentalHistory] = useState<boolean | null>(null)
   const [hasPets, setHasPets] = useState<boolean | null>(null)
   const [hasVehicles, setHasVehicles] = useState<boolean | null>(null)
@@ -103,6 +181,7 @@ export default function ProspectManagement() {
   const [vehiclesSubStep, setVehiclesSubStep] = useState(1) // 1 for vehicles question, 2 for vehicle details
   const [dependentsSubStep, setDependentsSubStep] = useState(1) // 1 for dependents question, 2 for type selection, 3 for details
 
+  // Form states
   const [addressForms, setAddressForms] = useState<AddressForm[]>([
     {
       id: 1,
@@ -163,61 +242,113 @@ export default function ProspectManagement() {
 
   const [dependentForms, setDependentForms] = useState<DependentForm[]>([])
 
-  const steps = [
-    { id: 1, name: "Intro", completed: true, skipped: false },
-    { id: 2, name: "Properties", completed: true, skipped: false },
-    { id: 3, name: "Lead Status", completed: true, skipped: false },
-    { id: 4, name: "Personal Info", completed: true, skipped: false },
-    { id: 5, name: "Residence", completed: true, skipped: false },
-    { id: 6, name: "Employment", completed: true, skipped: false },
-    { id: 7, name: "Pets", completed: true, skipped: hasPets === false },
-    { id: 8, name: "Vehicles", completed: true, skipped: hasVehicles === false },
-    { id: 9, name: "Dependents", completed: true, skipped: hasDependents === false },
-    { id: 10, name: "Custom Questions", completed: false, skipped: false },
-    { id: 11, name: "Summary", completed: false, skipped: false },
-  ]
+  // State for custom question answers
+  const [customAnswers, setCustomAnswers] = useState<CustomQuestionAnswer[]>([]);
+
+  // Define the step order dynamically based on settings
+  const getStepOrder = (): StepType[] => {
+    const baseSteps: StepType[] = ['intro', 'properties', 'lead_status', 'personal_info', 'residence', 'employment'];
+    const conditionalSteps: StepType[] = [];
+
+    // Return base steps if settings haven't loaded yet
+    if (isLoadingSettings || !applicationSettings) {
+        // Optionally return just base steps or an empty array during loading
+        return baseSteps;
+    }
+
+    // --- Conditionally add steps based on fetched settings object ---
+    if (applicationSettings?.pets?.enabled) {
+      conditionalSteps.push('pets');
+    }
+    if (applicationSettings?.vehicle?.enabled) {
+      conditionalSteps.push('vehicles');
+    }
+    // Use 'dependants' key here to match the interface and expected API response
+    if (applicationSettings?.dependants?.enabled) {
+      conditionalSteps.push('dependents'); // Keep StepType as 'dependents'
+    }
+    if (applicationSettings?.customQuestions?.enabled) {
+      conditionalSteps.push('custom_questions');
+    }
+    // -----------------------------------------------------
+
+    // Add the final summary step
+    return [...baseSteps, ...conditionalSteps, 'summary'];
+  }
+
+  // Helper function to mark step as completed
+  const markStepCompleted = (completedStep: StepType) => {
+    setCompletedSteps(prev => new Set([...prev, completedStep]));
+  }
+
+  // Check if a step can be accessed
+  const isStepAccessible = (targetStep: StepType) => {
+    const stepOrder = getStepOrder();
+    const currentStepIndex = stepOrder.indexOf(step);
+    const targetStepIndex = stepOrder.indexOf(targetStep);
+    
+    // Can always go back
+    if (targetStepIndex < currentStepIndex) return true;
+    
+    // Can only go forward if previous step is completed
+    const previousStep = stepOrder[targetStepIndex - 1];
+    return completedSteps.has(previousStep);
+  }
 
   const handleNext = () => {
-    if (currentStep === 5 && residenceSubStep === 1 && hasRentalHistory !== null) {
-      setResidenceSubStep(2)
-      return
+    const stepOrder = getStepOrder();
+    const currentIndex = stepOrder.indexOf(step);
+    
+    // Handle sub-steps first
+    if (step === 'residence' && residenceSubStep === 1 && hasRentalHistory !== null) {
+      setResidenceSubStep(2);
+      return;
     }
 
-    if (currentStep === 7 && petsSubStep === 1) {
+    if (step === 'pets' && petsSubStep === 1) {
       if (hasPets === true) {
-        setPetsSubStep(2)
-        return
+        setPetsSubStep(2);
+        return;
       } else if (hasPets === false) {
-        // If they have no pets, move to the next step
-        setCurrentStep(currentStep + 1)
-        return
+        // Skip pets details and mark as completed
+        markStepCompleted('pets' as StepType);
+        if (currentIndex < stepOrder.length - 1) {
+          setStep(stepOrder[currentIndex + 1]);
+        }
+        return;
       }
     }
 
-    if (currentStep === 8 && vehiclesSubStep === 1) {
+    if (step === 'vehicles' && vehiclesSubStep === 1) {
       if (hasVehicles === true) {
-        setVehiclesSubStep(2)
-        return
+        setVehiclesSubStep(2);
+        return;
       } else if (hasVehicles === false) {
-        // If they have no vehicles, move to the next step
-        setCurrentStep(currentStep + 1)
-        return
+        // Skip vehicles details and mark as completed
+        markStepCompleted('vehicles' as StepType);
+        if (currentIndex < stepOrder.length - 1) {
+          setStep(stepOrder[currentIndex + 1]);
+        }
+        return;
       }
     }
 
-    if (currentStep === 9) {
+    if (step === 'dependents') {
       if (dependentsSubStep === 1) {
         if (hasDependents === true) {
-          setDependentsSubStep(2)
-          return
+          setDependentsSubStep(2);
+          return;
         } else if (hasDependents === false) {
-          // If they have no dependents, move to the next step
-          setCurrentStep(currentStep + 1)
-          return
+          // Skip dependents details and mark as completed
+          markStepCompleted('dependents' as StepType);
+          if (currentIndex < stepOrder.length - 1) {
+            setStep(stepOrder[currentIndex + 1]);
+          }
+          return;
         }
       } else if (dependentsSubStep === 2 && selectedDependentType !== null) {
         // Add a new dependent form based on the selected type
-        const newId = dependentForms.length > 0 ? Math.max(...dependentForms.map((form) => form.id)) + 1 : 1
+        const newId = dependentForms.length > 0 ? Math.max(...dependentForms.map((form) => form.id)) + 1 : 1;
 
         // Create a new form with the selected type
         setDependentForms([
@@ -232,88 +363,153 @@ export default function ProspectManagement() {
             email: "",
             phone: "",
             shareOfRent: "",
-            name: "",
             isExpanded: true,
           },
-        ])
+        ]);
 
-        setDependentsSubStep(3)
-        return
+        setDependentsSubStep(3);
+        return;
       }
     }
 
-    if (currentStep < steps.length) {
-      setCurrentStep(currentStep + 1)
-      setResidenceSubStep(1)
-      setPetsSubStep(1)
-      setVehiclesSubStep(1)
-      setDependentsSubStep(1)
+    // Mark current step as completed
+    markStepCompleted(step);
+    
+    // === Validation for Dependents Details ===
+    if (step === 'dependents' && dependentsSubStep === 3 && dependentForms.length > 0) {
+      const lastDependent = dependentForms[dependentForms.length - 1];
+      const missingFields: string[] = [];
+
+      // Common required fields
+      if (!lastDependent.firstName) missingFields.push("First Name");
+      if (!lastDependent.lastName) missingFields.push("Last Name");
+      if (!lastDependent.relationship) missingFields.push("Relationship");
+
+      // Adult specific required fields - Adjusted
+      if (lastDependent.type === 'adult') {
+        if (!lastDependent.shareOfRent) missingFields.push("Share of Rent");
+        // Require EITHER email OR phone
+        if (!lastDependent.email && !lastDependent.phone) {
+          missingFields.push("Email or Phone");
+        }
+      }
+      
+      // Child specific required fields (currently none beyond common)
+      // if (lastDependent.type === 'child') { ... }
+
+      if (missingFields.length > 0) {
+        toast.error("Missing Dependent Information", {
+          description: `Please fill out the following fields for the last dependent: ${missingFields.join(", ")}.`
+        });
+        // Prevent moving to the next step & un-complete
+        setCompletedSteps(prev => {
+          const newSet = new Set(prev);
+          newSet.delete('dependents'); 
+          return newSet;
+        });
+        return; // Stop execution
+      }
+    }
+    // ==========================================
+
+    // === Validation for Custom Questions ===
+    if (step === 'custom_questions') {
+      const requiredQuestions = applicationSettings?.customQuestions?.questions || [];
+      const answeredQuestionsCount = customAnswers.filter(a => a.answer !== null && a.answer !== '').length;
+
+      if (answeredQuestionsCount < requiredQuestions.length) {
+        toast.error("Missing Information", {
+          description: "Please answer all custom questions before proceeding."
+        });
+        // Prevent moving to the next step
+        setCompletedSteps(prev => {
+          const newSet = new Set(prev);
+          newSet.delete('custom_questions');
+          return newSet;
+        });
+        return; 
+      }
+    }
+    // ========================================
+
+    // Move to next step if available
+    if (currentIndex < stepOrder.length - 1) {
+      setStep(stepOrder[currentIndex + 1]);
+      // Reset sub-steps when moving to next main step
+      setResidenceSubStep(1);
+      setPetsSubStep(1);
+      setVehiclesSubStep(1);
+      setDependentsSubStep(1);
     }
   }
 
   const handlePrevious = () => {
-    if (currentStep === 5 && residenceSubStep === 2) {
-      setResidenceSubStep(1)
-      return
+    const stepOrder = getStepOrder();
+    const currentIndex = stepOrder.indexOf(step);
+    
+    // Handle sub-steps first
+    if (step === 'residence' && residenceSubStep === 2) {
+      setResidenceSubStep(1);
+      return;
     }
 
-    if (currentStep === 7 && petsSubStep === 2) {
-      setPetsSubStep(1)
-      return
+    if (step === 'pets' && petsSubStep === 2) {
+      setPetsSubStep(1);
+      return;
     }
 
-    if (currentStep === 8 && vehiclesSubStep === 2) {
-      setVehiclesSubStep(1)
-      return
+    if (step === 'vehicles' && vehiclesSubStep === 2) {
+      setVehiclesSubStep(1);
+      return;
     }
 
-    if (currentStep === 9) {
+    if (step === 'dependents') {
       if (dependentsSubStep === 3) {
-        // If we're on the details page and there are no dependents (user clicked "Previous" after clicking "Add Occupant")
-        // or if we're adding a new dependent (user clicked "Add Occupant" then "Previous")
+        // If we're on the details page and there are no dependents or if we're adding a new dependent
         if (dependentForms.length === 0 || dependentForms[dependentForms.length - 1].firstName === "") {
-          setDependentsSubStep(2)
-          return
+          setDependentsSubStep(2);
+          return;
         }
-        // Otherwise, stay on the details page
       } else if (dependentsSubStep === 2) {
-        setDependentsSubStep(1)
-        return
+        setDependentsSubStep(1);
+        return;
       }
     }
 
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1)
+    // Go to previous step if not at first step
+    if (currentIndex > 0) {
+      setStep(stepOrder[currentIndex - 1]);
     }
   }
 
   const handleSubmit = () => {
     // Handle form submission logic here
-    console.log("Application submitted!")
-    // You could redirect to a success page or show a success message
-    alert("Application submitted successfully!")
+    console.log("Application submitted!");
+    alert("Application submitted successfully!");
   }
 
+  // Event handlers
   const handleRentalHistorySelection = (hasHistory: boolean) => {
-    setHasRentalHistory(hasHistory)
+    setHasRentalHistory(hasHistory);
   }
 
   const handlePetsSelection = (hasPetsValue: boolean) => {
-    setHasPets(hasPetsValue)
+    setHasPets(hasPetsValue);
   }
 
   const handleVehiclesSelection = (hasVehiclesValue: boolean) => {
-    setHasVehicles(hasVehiclesValue)
+    setHasVehicles(hasVehiclesValue);
   }
 
   const handleDependentsSelection = (hasDependentsValue: boolean) => {
-    setHasDependents(hasDependentsValue)
+    setHasDependents(hasDependentsValue);
   }
 
   const handleDependentTypeSelection = (type: DependentType) => {
-    setSelectedDependentType(type)
+    setSelectedDependentType(type);
   }
 
+  // Form handlers
   const addAddressForm = () => {
     // Collapse all existing forms
     const collapsedForms = addressForms.map((form) => ({
@@ -400,7 +596,7 @@ export default function ProspectManagement() {
     )
   }
 
-  const updateEmploymentForm = (id: number, field: string, value: any) => {
+  const updateEmploymentForm = (id: number, field: string, value: unknown) => {
     setEmploymentForms(employmentForms.map((form) => (form.id === id ? { ...form, [field]: value } : form)))
   }
 
@@ -438,7 +634,7 @@ export default function ProspectManagement() {
     setPetForms(petForms.map((form) => (form.id === id ? { ...form, isExpanded: !form.isExpanded } : form)))
   }
 
-  const updatePetForm = (id: number, field: string, value: any) => {
+  const updatePetForm = (id: number, field: string, value: unknown) => {
     setPetForms(petForms.map((form) => (form.id === id ? { ...form, [field]: value } : form)))
   }
 
@@ -473,7 +669,7 @@ export default function ProspectManagement() {
     setVehicleForms(vehicleForms.map((form) => (form.id === id ? { ...form, isExpanded: !form.isExpanded } : form)))
   }
 
-  const updateVehicleForm = (id: number, field: string, value: any) => {
+  const updateVehicleForm = (id: number, field: string, value: unknown) => {
     setVehicleForms(vehicleForms.map((form) => (form.id === id ? { ...form, [field]: value } : form)))
   }
 
@@ -496,22 +692,38 @@ export default function ProspectManagement() {
     setDependentForms(dependentForms.map((form) => (form.id === id ? { ...form, isExpanded: !form.isExpanded } : form)))
   }
 
-  const updateDependentForm = (id: number, field: string, value: any) => {
+  const updateDependentForm = (id: number, field: string, value: string | number | boolean) => {
     setDependentForms(dependentForms.map((form) => (form.id === id ? { ...form, [field]: value } : form)))
   }
 
-  // Render the appropriate step content based on currentStep
+  // Handler for updating custom question answers
+  const handleCustomAnswerChange = (id: number, question: string, answerType: string, answer: string | boolean | number | Date | null) => {
+    setCustomAnswers(prevAnswers => {
+      const existingAnswerIndex = prevAnswers.findIndex(a => a.id === id);
+      if (existingAnswerIndex > -1) {
+        // Update existing answer
+        const updatedAnswers = [...prevAnswers];
+        updatedAnswers[existingAnswerIndex] = { id, question, answerType, answer };
+        return updatedAnswers;
+      } else {
+        // Add new answer
+        return [...prevAnswers, { id, question, answerType, answer }];
+      }
+    });
+  };
+
+  // Render the appropriate step content based on step
   const renderStepContent = () => {
-    switch (currentStep) {
-      case 1:
+    switch (step) {
+      case 'intro':
         return <IntroPage onNext={handleNext} />
-      case 2:
+      case 'properties':
         return <PropertiesPage onNext={handleNext} onPrevious={handlePrevious} />
-      case 3:
+      case 'lead_status':
         return <LeadStatusPage onNext={handleNext} onPrevious={handlePrevious} />
-      case 4:
+      case 'personal_info':
         return <PersonalInfoPage onNext={handleNext} onPrevious={handlePrevious} />
-      case 5:
+      case 'residence':
         if (residenceSubStep === 1) {
           return (
             <ResidenceQuestionPage
@@ -534,7 +746,7 @@ export default function ProspectManagement() {
             />
           )
         }
-      case 6:
+      case 'employment':
         return (
           <EmploymentPage
             employmentForms={employmentForms}
@@ -546,7 +758,7 @@ export default function ProspectManagement() {
             onPrevious={handlePrevious}
           />
         )
-      case 7:
+      case 'pets':
         if (petsSubStep === 1) {
           return (
             <PetsQuestionPage
@@ -569,7 +781,7 @@ export default function ProspectManagement() {
             />
           )
         }
-      case 8:
+      case 'vehicles':
         if (vehiclesSubStep === 1) {
           return (
             <VehiclesQuestionPage
@@ -592,7 +804,7 @@ export default function ProspectManagement() {
             />
           )
         }
-      case 9:
+      case 'dependents':
         if (dependentsSubStep === 1) {
           return (
             <DependentsQuestionPage
@@ -624,15 +836,54 @@ export default function ProspectManagement() {
             />
           )
         }
-      case 11:
+      case 'custom_questions':
+        // Extract questions from settings, provide empty array if not loaded or missing
+        const questions = applicationSettings?.customQuestions?.questions || [];
+        return (
+          <CustomQuestionsPage 
+            questions={questions} 
+            answers={customAnswers} 
+            onAnswerChange={handleCustomAnswerChange} 
+            onNext={handleNext} 
+            onPrevious={handlePrevious} 
+          />
+        )
+      case 'summary':
+        // Get the dynamically generated step order
+        const currentStepOrder = getStepOrder();
+        const steps = currentStepOrder.map((stepName, index) => {
+          // Check if skipped ONLY if the step is supposed to be shown based on settings
+          const isSkipped =
+            ((stepName === 'pets' && applicationSettings?.pets?.enabled && hasPets === false) ||
+            (stepName === 'vehicles' && applicationSettings?.vehicle?.enabled && hasVehicles === false) ||
+            (stepName === 'dependents' && applicationSettings?.dependants?.enabled && hasDependents === false)) ?? false; // Default to false if settings are null/undefined
+
+          return {
+            id: index + 1, // ID based on the actual order
+            name: stepName.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+            completed: completedSteps.has(stepName as StepType),
+            skipped: isSkipped
+          };
+        });
+
         return <SummaryPage steps={steps} onPrevious={handlePrevious} onSubmit={handleSubmit} />
       default:
         return (
           <div className="flex h-[400px] items-center justify-center">
-            <p className="text-muted-foreground">Step {currentStep} content</p>
+            <p className="text-muted-foreground">Step {step} content</p>
           </div>
         )
     }
+  }
+
+  // Render loading state if settings are being fetched
+  if (isLoadingSettings) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p>Loading application settings...</p> 
+        {/* You can replace this with a spinner component */}
+      </div>
+    );
   }
 
   return (
@@ -641,41 +892,59 @@ export default function ProspectManagement() {
       <div className="w-72 border-r bg-muted/10 p-6 overflow-y-auto">
         <h2 className="mb-6 text-xl font-semibold tracking-tight">Add a Prospect</h2>
         <div className="relative ml-3">
-          {steps.map((step) => (
-            <div key={step.id} className="relative mb-8">
-              {/* Vertical line connecting steps */}
-              {step.id < steps.length && (
-                <div className="absolute left-[14px] top-[28px] h-[calc(100%+4px)] w-0.5 bg-border" />
-              )}
+          {getStepOrder().map((stepName, index) => {
+            const isAccessible = isStepAccessible(stepName as StepType);
+            const isActive = step === stepName;
+            const isCompleted = completedSteps.has(stepName as StepType);
+            
+            // Handle display name formatting
+            const displayName = stepName.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            
+            return (
+              <div key={stepName} className="relative mb-8">
+                {/* Vertical line connecting steps */}
+                {index < getStepOrder().length - 1 && (
+                  <div className={cn(
+                    "absolute left-[14px] top-[28px] h-[calc(100%+4px)] w-0.5 bg-border",
+                    isCompleted ? "bg-primary" : ""
+                  )} />
+                )}
 
-              <button onClick={() => setCurrentStep(step.id)} className="group flex items-center gap-3">
-                <div
-                  className={cn(
-                    "relative z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium",
-                    currentStep === step.id
-                      ? "bg-primary text-primary-foreground"
-                      : step.completed
-                        ? "bg-primary/80 text-primary-foreground"
-                        : "border border-border bg-background text-muted-foreground",
-                  )}
+                <button 
+                  onClick={() => isAccessible && setStep(stepName as StepType)} 
+                  className="group flex items-center gap-3"
+                  disabled={!isAccessible}
                 >
-                  {step.completed ? <Check className="h-4 w-4" /> : step.id}
-                </div>
-                <span
-                  className={cn(
-                    "text-sm font-medium",
-                    currentStep === step.id
-                      ? "text-primary"
-                      : step.completed
-                        ? "text-foreground"
-                        : "text-muted-foreground",
-                  )}
-                >
-                  {step.name}
-                </span>
-              </button>
-            </div>
-          ))}
+                  <div
+                    className={cn(
+                      "relative z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium",
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : isCompleted
+                          ? "bg-primary/80 text-primary-foreground"
+                          : "border border-border bg-background text-muted-foreground",
+                      !isAccessible ? "opacity-50" : ""
+                    )}
+                  >
+                    {isCompleted ? <Check className="h-4 w-4" /> : !isAccessible ? <Lock className="h-3 w-3" /> : index + 1}
+                  </div>
+                  <span
+                    className={cn(
+                      "text-sm font-medium",
+                      isActive
+                        ? "text-primary"
+                        : isCompleted
+                          ? "text-foreground"
+                          : "text-muted-foreground",
+                      !isAccessible ? "opacity-50" : ""
+                    )}
+                  >
+                    {displayName}
+                  </span>
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
 

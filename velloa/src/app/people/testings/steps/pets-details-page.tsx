@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ChevronDown, ChevronUp, Dog, Minus, Plus, Upload } from "lucide-react"
+import { toast } from "sonner"
 
 // Define pet form interface
 interface PetForm {
@@ -30,6 +31,18 @@ interface PetsDetailsPageProps {
   onPrevious: () => void
 }
 
+// Validation function for a single pet
+const validatePet = (form: PetForm): string[] => {
+  const missingFields: string[] = [];
+  if (!form.type) missingFields.push("Type");
+  if (!form.breed) missingFields.push("Breed");
+  if (!form.weight) missingFields.push("Weight");
+  if (!form.sex) missingFields.push("Sex");
+  if (!form.age) missingFields.push("Age");
+  if (!form.photo) missingFields.push("Pet Photo");
+  return missingFields;
+};
+
 export default function PetsDetailsPage({
   petForms,
   onPetFormChange,
@@ -39,6 +52,43 @@ export default function PetsDetailsPage({
   onNext,
   onPrevious,
 }: PetsDetailsPageProps) {
+
+  // Handler for adding a new pet with validation
+  const handleAddPetClick = () => {
+    if (petForms.length > 0) {
+      const lastPet = petForms[petForms.length - 1];
+      const missingFields = validatePet(lastPet);
+      if (missingFields.length > 0) {
+        toast.error("Missing Pet Information", {
+          description: `Please fill out the following fields for the current pet before adding another: ${missingFields.join(", ")}.`
+        });
+        return; // Stop if validation fails
+      }
+    }
+    onAddPetForm(); // Proceed if validation passes
+  };
+
+  // Handler for the Next button with validation
+  const handleNextClick = () => {
+    if (petForms.length === 0) {
+      toast.error("Missing Pet Information", {
+        description: "Please add at least one pet or go back to indicate you have no pets."
+      });
+      return; // Stop if no pets are added
+    }
+
+    const lastPet = petForms[petForms.length - 1];
+    const missingFields = validatePet(lastPet);
+    if (missingFields.length > 0) {
+      toast.error("Missing Pet Information", {
+        description: `Please fill out the following fields for the last pet before proceeding: ${missingFields.join(", ")}.`
+      });
+      return; // Stop if validation fails
+    }
+
+    onNext(); // Proceed if validation passes
+  };
+
   // Render a single pet form
   const renderPetForm = (form: PetForm, index: number) => {
     if (!form.isExpanded) {
@@ -243,10 +293,18 @@ export default function PetsDetailsPage({
       <p className="mb-6 text-muted-foreground">Enter information about your pets.</p>
 
       <Card className="overflow-hidden border shadow-sm border-border bg-background/5">
-        <CardContent className="p-0">{petForms.map((form, index) => renderPetForm(form, index))}</CardContent>
+        <CardContent className="p-6">
+          {petForms.length > 0 ? (
+             petForms.map((form, index) => renderPetForm(form, index))
+          ) : (
+            <div className="text-center text-muted-foreground py-8">
+              No pets added yet.
+            </div>
+          )}
+        </CardContent>
         <CardFooter className="flex justify-between border-t bg-muted/20 px-6 py-4">
           <div className="flex items-center gap-2">
-            <Button variant="outline" className="gap-1" type="button" onClick={onAddPetForm}>
+            <Button variant="outline" className="gap-1" type="button" onClick={handleAddPetClick}>
               <Plus className="h-4 w-4" />
               Add Pet
             </Button>
@@ -255,7 +313,7 @@ export default function PetsDetailsPage({
             <Button variant="outline" onClick={onPrevious}>
               Previous
             </Button>
-            <Button onClick={onNext}>Next</Button>
+            <Button onClick={handleNextClick}>Next</Button>
           </div>
         </CardFooter>
       </Card>

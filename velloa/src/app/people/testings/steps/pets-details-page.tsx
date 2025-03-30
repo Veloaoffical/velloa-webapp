@@ -5,7 +5,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDown, ChevronUp, Dog, Minus, Plus, Upload } from "lucide-react"
+import { ChevronDown, ChevronUp, Dog, Minus, Plus, Trash, Upload } from "lucide-react"
 import { toast } from "sonner"
 
 // Define pet form interface
@@ -249,21 +249,7 @@ export default function PetsDetailsPage({
                         onPetFormChange(form.id, "photo", null)
                       }}
                     >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="h-4 w-4"
-                      >
-                        <path d="M18 6 6 18" />
-                        <path d="m6 6 12 12" />
-                      </svg>
+                      <Trash className="h-4 w-4" />
                       <span className="sr-only">Remove</span>
                     </Button>
                   </div>

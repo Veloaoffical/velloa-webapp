@@ -34,14 +34,20 @@ import { Input } from "@/components/ui/input"
 interface LeadStatusPageProps {
   onNext: () => void
   onPrevious: () => void
+  initialData?: {
+    leadStatus?: string;
+    leadSource?: string;
+    leadMedium?: string;
+    assigneeId?: string;
+  }
 }
 
-export default function LeadStatusPage({ onNext, onPrevious }: LeadStatusPageProps) {
+export default function LeadStatusPage({ onNext, onPrevious, initialData = {} }: LeadStatusPageProps) {
   const [contact, setContact] = useState({
-    leadStatus: '',
-    leadSource: '',
-    leadMedium: '',
-    assigneeId: '',
+    leadStatus: initialData.leadStatus || '',
+    leadSource: initialData.leadSource || '',
+    leadMedium: initialData.leadMedium || '',
+    assigneeId: initialData.assigneeId || '',
   })
   
   const [companyMembers, setCompanyMembers] = useState<Array<{ id: string; first_name: string; last_name: string }>>([])
@@ -88,6 +94,22 @@ export default function LeadStatusPage({ onNext, onPrevious }: LeadStatusPagePro
     fetchCompanySettings()
   }, [])
 
+  // Load saved lead status data on component mount
+  useEffect(() => {
+    const savedLeadStatus = localStorage.getItem('prospectLeadStatus');
+    if (savedLeadStatus) {
+      try {
+        const parsedData = JSON.parse(savedLeadStatus);
+        setContact(prev => ({
+          ...prev,
+          ...parsedData
+        }));
+      } catch (error) {
+        console.error('Error parsing saved lead status:', error);
+      }
+    }
+  }, []);
+
   // Handle adding a new lead source
   const handleAddNewSource = async () => {
     if (!newSourceValue.trim()) return
@@ -116,6 +138,12 @@ export default function LeadStatusPage({ onNext, onPrevious }: LeadStatusPagePro
     } catch (error) {
       console.error('Error adding new lead source:', error)
     }
+  }
+
+  // Save lead status data when navigating away
+  const handleNext = () => {
+    localStorage.setItem('prospectLeadStatus', JSON.stringify(contact));
+    onNext();
   }
 
   return (
@@ -292,7 +320,7 @@ export default function LeadStatusPage({ onNext, onPrevious }: LeadStatusPagePro
           <Button variant="outline" onClick={onPrevious}>
             Previous
           </Button>
-          <Button onClick={onNext}>Next</Button>
+          <Button onClick={handleNext}>Next</Button>
         </CardFooter>
       </Card>
 

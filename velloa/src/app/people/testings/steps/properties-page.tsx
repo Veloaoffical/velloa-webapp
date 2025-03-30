@@ -82,11 +82,12 @@ interface UnitListing {
 interface PropertiesPageProps {
   onNext: () => void
   onPrevious: () => void
+  initialSelectedProperties?: string[] // Add optional prop for initial state
 }
 
-export default function PropertiesPage({ onNext, onPrevious }: PropertiesPageProps) {
+export default function PropertiesPage({ onNext, onPrevious, initialSelectedProperties = [] }: PropertiesPageProps) {
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedProperties, setSelectedProperties] = useState<string[]>([])
+  const [selectedProperties, setSelectedProperties] = useState<string[]>(initialSelectedProperties)
   const [listings, setListings] = useState<UnitListing[]>([])
   const [isLoadingListings, setIsLoadingListings] = useState(true)
   const [listingsError, setListingsError] = useState<string | null>(null)
@@ -242,18 +243,36 @@ export default function PropertiesPage({ onNext, onPrevious }: PropertiesPagePro
     if (selectedProperties.length === 0) {
       setShowSkipConfirmation(true)
     } else {
+      // Store selected properties in localStorage to persist state
+      localStorage.setItem('prospectSelectedProperties', JSON.stringify(selectedProperties));
       onNext()
     }
   }
 
   const handleSkip = () => {
     setShowSkipConfirmation(false)
+    // Clear selected properties and store empty array
+    setSelectedProperties([]);
+    localStorage.setItem('prospectSelectedProperties', JSON.stringify([]));
     onNext()
   }
 
   const cancelSkip = () => {
     setShowSkipConfirmation(false)
   }
+
+  // Load saved properties on component mount
+  useEffect(() => {
+    const savedProperties = localStorage.getItem('prospectSelectedProperties');
+    if (savedProperties) {
+      try {
+        const parsedProperties = JSON.parse(savedProperties);
+        setSelectedProperties(parsedProperties);
+      } catch (error) {
+        console.error('Error parsing saved properties:', error);
+      }
+    }
+  }, []);
 
   return (
     <div className="dark">

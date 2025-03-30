@@ -15,6 +15,7 @@ interface PhoneNumberInputProps extends Omit<RPNInput.Props<typeof RPNInput.defa
   onChange: (value: RPNInput.Value | undefined) => void;
   label?: string;
   id?: string;
+  placeholder?: string;
 }
 
 // Main component that wraps react-phone-number-input
@@ -22,7 +23,7 @@ const PhoneNumberInput = React.forwardRef<
   HTMLInputElement,
   PhoneNumberInputProps
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
->(({ className, label, id: propId, value, onChange, ...props }, _ref) => {
+>(({ className, label, id: propId, value, onChange, placeholder, ...props }, _ref) => {
   const internalId = useId()
   const id = propId || internalId
 
@@ -36,7 +37,7 @@ const PhoneNumberInput = React.forwardRef<
         countrySelectComponent={CountrySelect}
         inputComponent={PhoneInput}
         id={id}
-        placeholder="Enter phone number"
+        placeholder={placeholder}
         value={value}
         onChange={onChange}
         {...props}

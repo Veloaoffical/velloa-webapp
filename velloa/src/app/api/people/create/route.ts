@@ -179,7 +179,7 @@ export async function POST(request: Request) {
     // Add residence information only if it exists and noPastResidence is false
     if (residence && !residence.noPastResidence) {
       Object.assign(insertData, {
-        residences: residence.addresses.map((addr: ResidenceAddress) => ({
+        residence: residence.addresses.map((addr: ResidenceAddress) => ({
           address: {
             street: addr.address.street,
             city: addr.address.city,
@@ -198,7 +198,7 @@ export async function POST(request: Request) {
     } else {
       // Store empty residence object if no past residence
       Object.assign(insertData, {
-        residences: [{
+        residence: [{
           address: {
             city: "",
             street: "",
@@ -249,27 +249,7 @@ export async function POST(request: Request) {
       console.error('Error fetching company name:', companyNameError);
     }
 
-    // Generate a sign-in link for the prospect using OTP instead of admin.generateLink
-    const { error: magicLinkError } = await supabase.auth.signInWithOtp({
-      email: contact.email,
-      options: {
-        emailRedirectTo: `http://localhost:3001/update-prospect?id=${prospectData.id}&application_id=${applicationId}&token=${applicationToken}`,
-        data: {
-          prospect_id: prospectData.id,
-          company_id: companyMember.company_id,
-          role: 'prospect',
-          application_id: applicationId,
-          application_token: applicationToken
-        }
-      }
-    });
-
-    if (magicLinkError) {
-      console.error('Error generating sign-in link:', magicLinkError);
-      // Continue with email sending even if link generation fails
-    }
-
-    // Send welcome email with magic link
+    // Send welcome email with application info
     try {
       await resend.emails.send({
         from: 'Velloa <onboarding@velloa.ca>',

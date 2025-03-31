@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 // Import phone number value type
 import { type Value as PhoneNumberValue } from "react-phone-number-input"
+import { useRouter } from "next/navigation"
 
 // Import page components
 import IntroPage from "./steps/intro-page"
@@ -37,7 +38,8 @@ interface AddressForm {
   isExpanded: boolean
   monthlyRent?: string
   landlordName?: string
-  lengthOfStay?: string
+  lengthOfStayYears?: number
+  lengthOfStayMonths?: number
   landlordEmail?: string
   landlordPhone?: PhoneNumberValue
   reasonForLeaving?: string
@@ -139,7 +141,8 @@ interface ResidentialFieldsSettings {
   address?: ResidentialFieldSetting;
   monthlyRent?: ResidentialFieldSetting;
   landlordName?: ResidentialFieldSetting;
-  lengthOfStay?: ResidentialFieldSetting;
+  lengthOfStayYears?: ResidentialFieldSetting;
+  lengthOfStayMonths?: ResidentialFieldSetting;
   landlordEmail?: ResidentialFieldSetting;
   landlordPhone?: ResidentialFieldSetting;
   reasonForLeaving?: ResidentialFieldSetting;
@@ -199,8 +202,10 @@ export interface PersonalInfoData {
 type StepType = 'intro' | 'properties' | 'lead_status' | 'personal_info' | 'residence' | 'employment' | 'pets' | 'vehicles' | 'dependents' | 'custom_questions' | 'summary'
 
 export default function ProspectManagement() {
+  const router = useRouter();
   const [step, setStep] = useState<StepType>('intro') // Reset to first step
   const [completedSteps, setCompletedSteps] = useState<Set<StepType>>(new Set()) // Empty set of completed steps
+  const [canAddAddress, setCanAddAddress] = useState(true); // Add state for add address button
   
   // --- Settings state: Use the extended interface --- 
   const [applicationSettings, setApplicationSettings] = useState<FullApplicationSettings | null>(null);
@@ -619,24 +624,26 @@ export default function ProspectManagement() {
 
   // --- Helper Function to Validate a Single Address Form ---
   const isAddressFormValid = (form: AddressForm, settings: ResidentialFieldsSettings | undefined): boolean => {
-    if (!settings) return true; // If no settings, assume valid
+    if (!settings) return true; // If no settings, assume valid (or handle differently)
 
     const missingFields: string[] = [];
 
-    // Check each required field based on settings
     if (settings.address?.enabled && settings.address.required) {
       if (!form.streetAddress) missingFields.push("Street Address");
       if (!form.city) missingFields.push("City");
-      if (!form.province) missingFields.push("Province/State");
-      if (!form.postalCode) missingFields.push("Postal/Zip Code");
+      if (!form.province) missingFields.push("Province");
+      if (!form.postalCode) missingFields.push("Postal Code");
     }
+    if (settings.residentialStatus?.enabled && settings.residentialStatus.required && !form.residentialStatus) missingFields.push("Residential Status");
+    // Update validation logic for lengthOfStay
+    if (settings.lengthOfStayYears?.enabled && settings.lengthOfStayYears.required && (form.lengthOfStayYears === undefined || form.lengthOfStayYears < 0)) missingFields.push("Length of Stay (Years)");
+    if (settings.lengthOfStayMonths?.enabled && settings.lengthOfStayMonths.required && (form.lengthOfStayMonths === undefined || form.lengthOfStayMonths < 0)) missingFields.push("Length of Stay (Months)");
     if (settings.monthlyRent?.enabled && settings.monthlyRent.required && !form.monthlyRent) missingFields.push("Monthly Rent");
     if (settings.landlordName?.enabled && settings.landlordName.required && !form.landlordName) missingFields.push("Landlord Name");
-    if (settings.lengthOfStay?.enabled && settings.lengthOfStay.required && !form.lengthOfStay) missingFields.push("Length of Stay"); // Note: This check needs adjustment if state changes for DateRangePicker
     if (settings.landlordEmail?.enabled && settings.landlordEmail.required && !form.landlordEmail) missingFields.push("Landlord Email");
     if (settings.landlordPhone?.enabled && settings.landlordPhone.required && !form.landlordPhone) missingFields.push("Landlord Phone");
     if (settings.reasonForLeaving?.enabled && settings.reasonForLeaving.required && !form.reasonForLeaving) missingFields.push("Reason for Leaving");
-    if (settings.residentialStatus?.enabled && settings.residentialStatus.required && !form.residentialStatus) missingFields.push("Residential Status");
+
 
     return missingFields.length === 0;
   };
@@ -696,16 +703,18 @@ export default function ProspectManagement() {
             if (settings.address?.enabled && settings.address.required) {
               if (!invalidForm.streetAddress) missingFields.push("Street Address");
               if (!invalidForm.city) missingFields.push("City");
-              if (!invalidForm.province) missingFields.push("Province/State");
-              if (!invalidForm.postalCode) missingFields.push("Postal/Zip Code");
+              if (!invalidForm.province) missingFields.push("Province");
+              if (!invalidForm.postalCode) missingFields.push("Postal Code");
             }
+            if (settings.residentialStatus?.enabled && settings.residentialStatus.required && !invalidForm.residentialStatus) missingFields.push("Residential Status");
+            // Update validation logic for lengthOfStay
+            if (settings.lengthOfStayYears?.enabled && settings.lengthOfStayYears.required && (invalidForm.lengthOfStayYears === undefined || invalidForm.lengthOfStayYears < 0)) missingFields.push("Length of Stay (Years)");
+            if (settings.lengthOfStayMonths?.enabled && settings.lengthOfStayMonths.required && (invalidForm.lengthOfStayMonths === undefined || invalidForm.lengthOfStayMonths < 0)) missingFields.push("Length of Stay (Months)");
             if (settings.monthlyRent?.enabled && settings.monthlyRent.required && !invalidForm.monthlyRent) missingFields.push("Monthly Rent");
             if (settings.landlordName?.enabled && settings.landlordName.required && !invalidForm.landlordName) missingFields.push("Landlord Name");
-            if (settings.lengthOfStay?.enabled && settings.lengthOfStay.required && !invalidForm.lengthOfStay) missingFields.push("Length of Stay");
             if (settings.landlordEmail?.enabled && settings.landlordEmail.required && !invalidForm.landlordEmail) missingFields.push("Landlord Email");
             if (settings.landlordPhone?.enabled && settings.landlordPhone.required && !invalidForm.landlordPhone) missingFields.push("Landlord Phone");
             if (settings.reasonForLeaving?.enabled && settings.reasonForLeaving.required && !invalidForm.reasonForLeaving) missingFields.push("Reason for Leaving");
-            if (settings.residentialStatus?.enabled && settings.residentialStatus.required && !invalidForm.residentialStatus) missingFields.push("Residential Status");
 
             toast.error(`Missing Residence Information (Address ${invalidForm.id})`, {
               description: `Please fill out the following required fields: ${missingFields.join(', ')}.`,
@@ -1002,10 +1011,154 @@ export default function ProspectManagement() {
     }
   }
 
-  const handleSubmit = () => {
-    // Handle form submission logic here
-    console.log("Application submitted!");
-    alert("Application submitted successfully!");
+  const handleSubmit = async () => {
+    try {
+      // Prepare data for submission
+      // First, create a contact object from personalInfoData
+      const contact = {
+        firstName: personalInfoData.firstName,
+        middleName: personalInfoData.middleName,
+        lastName: personalInfoData.lastName,
+        email: personalInfoData.email,
+        phone: personalInfoData.phoneNumber,
+        ssn: personalInfoData.ssn,
+        driversLicenseState: personalInfoData.driverLicenseState,
+        driversLicenseNumber: personalInfoData.driverLicenseNumber,
+        dateOfBirth: personalInfoData.dateOfBirth,
+        gender: personalInfoData.gender,
+        maritalStatus: personalInfoData.maritalStatus,
+        aboutYou: personalInfoData.about,
+        leadStatus: leadStatusData.status,
+        leadSource: leadStatusData.source,
+        expected_move_in_date: personalInfoData.moveInDate,
+      };
+
+      // Create residence object
+      const residence = {
+        addresses: addressForms.map(form => ({
+          address: {
+            street: form.streetAddress,
+            city: form.city,
+            province: form.province,
+            postalCode: form.postalCode
+          },
+          monthlyRent: form.monthlyRent,
+          residentialStatus: form.residentialStatus,
+          reasonForLeaving: form.reasonForLeaving,
+          landlordName: form.landlordName,
+          landlordPhone: form.landlordPhone,
+          landlordEmail: form.landlordEmail,
+          lengthOfStayYears: form.lengthOfStayYears,
+          lengthOfStayMonths: form.lengthOfStayMonths
+        })),
+        noPastResidence: !hasRentalHistory
+      };
+
+      // Create employment array
+      const employment = employmentForms.map(form => ({
+        employerName: form.employerName,
+        jobTitle: form.jobTitle,
+        monthlyIncome: form.monthlyIncome,
+        employmentType: form.employmentType,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        isCurrentJob: form.isCurrentJob,
+        supervisorName: form.supervisorName,
+        supervisorPhone: form.supervisorPhone,
+        address: {
+          street: form.employerStreetAddress,
+          city: form.employerCity,
+          province: form.employerProvince,
+          postalCode: form.employerPostalCode
+        }
+      }));
+
+      // Create the pets array if applicable
+      const petsData = hasPets ? petForms.map(form => ({
+        type: form.type,
+        breed: form.breed,
+        weight: form.weight,
+        gender: form.sex,
+        age: form.age
+        // Photo handling would need additional logic for file upload
+      })) : [];
+
+      // Create the vehicles array if applicable
+      const vehiclesData = hasVehicles ? vehicleForms.map(form => ({
+        make: form.make,
+        model: form.model,
+        year: form.year,
+        licensePlate: form.licensePlate
+      })) : [];
+
+      // Create the dependents array if applicable
+      const dependentsData = hasDependents ? dependentForms.map(form => ({
+        firstName: form.firstName,
+        middleName: form.middleName,
+        lastName: form.lastName,
+        relationship: form.relationship,
+        email: form.email,
+        phone: form.phone,
+        shareOfRent: form.shareOfRent,
+        type: form.type
+      })) : [];
+
+      // Create request payload
+      const payload = {
+        contact: contact,
+        rental_history: residence,
+        pets: petsData,
+        vehicles: vehiclesData,
+        dependents: dependentsData,
+        employment: employment,
+        customQuestions: customAnswers,
+        role: 'prospect',
+        property_id: propertiesData.selectedProperties[0] || '', 
+        income: {
+          employmentIncome: employment[0]?.monthlyIncome || null,
+          governmentAssistance: null,
+          investments: null,
+          retirement: null
+        }
+      };
+      
+      toast.info("Submitting application...");
+      console.log('Full request payload:', JSON.stringify(payload));
+      
+      // Send the data to the server
+      const response = await fetch('/api/people/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Failed to create prospect:', errorData);
+        toast.error("Submission Failed", {
+          description: errorData.error || 'Failed to create prospect'
+        });
+        throw new Error(errorData.error || 'Failed to create prospect');
+      }
+
+      const responseData = await response.json();
+      console.log('Response from API:', responseData);
+      
+      // Show success message
+      toast.success("Application Submitted", {
+        description: "Your application has been successfully submitted!"
+      });
+      
+      // Optionally, redirect to another page
+      router.push('/people');
+    } catch (error) {
+      console.error('Error creating prospect:', error);
+      toast.error("Submission Error", {
+        description: error instanceof Error ? error.message : "An unknown error occurred"
+      });
+    }
   }
 
   // Event handlers
@@ -1041,39 +1194,37 @@ export default function ProspectManagement() {
 
   // Form handlers
   const addAddressForm = () => {
-    // Collapse all existing forms
-    const collapsedForms = addressForms.map((form) => ({
-      ...form,
-      isExpanded: false,
-    }))
+    // Check if max addresses reached (e.g., 5 including the primary)
+    if (addressForms.length >= 5) { 
+      toast.warning("You can add a maximum of 4 previous addresses.");
+      setCanAddAddress(false); // Disable button after showing warning
+      return; 
+    }
 
-    const newId = addressForms.length > 0 ? Math.max(...addressForms.map((form) => form.id)) + 1 : 1
-
-    // Add new expanded form
-    const updatedForms = [
-      ...collapsedForms,
-      {
-        id: newId,
-        isPrimary: false,
-        streetAddress: "",
-        city: "",
-        province: "",
-        postalCode: "",
-        isExpanded: true,
-        monthlyRent: "",
-        landlordName: "",
-        lengthOfStay: "",
-        landlordEmail: "",
-        landlordPhone: undefined,
-        reasonForLeaving: "",
-        residentialStatus: "",
-      },
-    ];
-    
-    setAddressForms(updatedForms);
-    // Save to localStorage
-    localStorage.setItem('prospectAddresses', JSON.stringify(updatedForms));
-  }
+    const newId = addressForms.length > 0 ? Math.max(...addressForms.map(form => form.id)) + 1 : 1;
+    const newForm: AddressForm = {
+      id: newId,
+      isPrimary: false,
+      streetAddress: "",
+      city: "",
+      province: "",
+      postalCode: "",
+      isExpanded: true, // Expand new forms by default
+      monthlyRent: "",
+      landlordName: "",
+      lengthOfStayYears: undefined, // Initialize new fields
+      lengthOfStayMonths: undefined, // Initialize new fields
+      landlordEmail: "",
+      landlordPhone: undefined,
+      reasonForLeaving: "",
+      residentialStatus: "",
+    };
+    setAddressForms(prevForms => [...prevForms, newForm]);
+    // Re-evaluate if the button should be enabled after adding
+    if (addressForms.length + 1 >= 5) {
+        setCanAddAddress(false);
+    }
+  };
 
   const removeAddressForm = (id: number) => {
     // Don't allow removing the primary address
@@ -1367,18 +1518,19 @@ export default function ProspectManagement() {
             />
           )
         } else {
-          // Determine if the current expanded form is valid before passing prop
-          const expandedForm = addressForms.find(form => form.isExpanded);
-          const canAddAddress = expandedForm ? isAddressFormValid(expandedForm, applicationSettings?.residentialFields) : true; // Allow adding if no form is expanded (shouldn't happen)
-
+          // Ensure settings are loaded before rendering details page
+          if (!applicationSettings?.residentialFields) {
+            // Optionally show a loading state or return null
+            return <div>Loading residence settings...</div>; 
+          }
           return (
             <ResidenceDetailsPage
               addressForms={addressForms}
-              residentialFields={applicationSettings?.residentialFields ?? {}}
-              canAddAddress={canAddAddress}
+              residentialFields={applicationSettings.residentialFields} // Pass settings (no longer needs || {} due to check above)
+              canAddAddress={canAddAddress} // Pass canAddAddress state here
               onAddressFormChange={updateAddressForm}
-              onLandlordPhoneChange={handleLandlordPhoneChange}
-              onInvalidAddAttempt={notifyIncompleteAddress}
+              onLandlordPhoneChange={handleLandlordPhoneChange} // Pass phone handler
+              onInvalidAddAttempt={notifyIncompleteAddress} // Pass toast handler
               onToggleAddressForm={toggleAddressForm}
               onRemoveAddressForm={removeAddressForm}
               onAddAddressForm={addAddressForm}

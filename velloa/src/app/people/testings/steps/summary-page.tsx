@@ -17,12 +17,30 @@ interface SummaryPageProps {
   }[]
   onPrevious: () => void
   onSubmit: () => void
+  company_settings?: {
+    rental_application?: {
+      terms?: {
+        text: string
+        option: string
+      }
+    }
+  }
 }
 
-export default function SummaryPage({ steps, onPrevious, onSubmit }: SummaryPageProps) {
-  const [agreePayment, setAgreePayment] = useState(false)
+export default function SummaryPage({ steps, onPrevious, onSubmit, company_settings }: SummaryPageProps) {
+  const [agreeTermsAndCondition, setAgreeTermsAndCondition] = useState(false)
   const [agreeTerms, setAgreeTerms] = useState(false)
   const [agreeAccuracy, setAgreeAccuracy] = useState(false)
+
+  const terms = company_settings?.rental_application?.terms
+  const showTermsAndCondition = terms?.option === "yes"
+
+  const allAgreementsChecked = () => {
+    if (showTermsAndCondition) {
+      return agreeTermsAndCondition && agreeTerms && agreeAccuracy
+    }
+    return agreeTerms && agreeAccuracy
+  }
 
   return (
     <div className="dark">
@@ -58,22 +76,24 @@ export default function SummaryPage({ steps, onPrevious, onSubmit }: SummaryPage
         <CardContent className="p-6">
           <h2 className="text-lg font-medium mb-4">Agreements</h2>
           <div className="space-y-4">
-            <div className="flex items-start space-x-3">
-              <Checkbox
-                id="payment-agreement"
-                checked={agreePayment}
-                onCheckedChange={(checked) => setAgreePayment(checked === true)}
-                className="mt-1"
-              />
-              <div>
-                <Label htmlFor="payment-agreement" className="font-medium">
-                  Payment Agreement
-                </Label>
-                <p className="text-sm text-muted-foreground mt-1">
-                  I agree to pay the rent and fees as outlined in the lease agreement.
-                </p>
+            {showTermsAndCondition && (
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id="terms-condition-agreement"
+                  checked={agreeTermsAndCondition}
+                  onCheckedChange={(checked) => setAgreeTermsAndCondition(checked === true)}
+                  className="mt-1"
+                />
+                <div>
+                  <Label htmlFor="terms-condition-agreement" className="font-medium">
+                    Terms and Conditions
+                  </Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {terms?.text || "I agree to the terms and conditions of this rental application."}
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="flex items-start space-x-3">
               <Checkbox
@@ -87,7 +107,7 @@ export default function SummaryPage({ steps, onPrevious, onSubmit }: SummaryPage
                   Terms of Service
                 </Label>
                 <p className="text-sm text-muted-foreground mt-1">
-                  I agree to Velloa's terms of service and privacy policy.
+                  I agree to Velloa&apos;s terms of service and privacy policy.
                 </p>
               </div>
             </div>
@@ -116,7 +136,7 @@ export default function SummaryPage({ steps, onPrevious, onSubmit }: SummaryPage
         <Button variant="outline" onClick={onPrevious}>
           Previous
         </Button>
-        <Button onClick={onSubmit} disabled={!agreePayment || !agreeTerms || !agreeAccuracy}>
+        <Button onClick={onSubmit} disabled={!allAgreementsChecked()}>
           Submit Application
         </Button>
       </div>

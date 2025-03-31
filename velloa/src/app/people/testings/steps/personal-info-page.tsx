@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Calendar, Eye, Mail, EyeOffIcon } from "lucide-react"
+import { Eye, Mail, EyeOffIcon } from "lucide-react"
 import { PhoneNumberInput } from "@/components/ui/phone-input"
+import CalendarInput from "@/components/calendarwithmonthsinput"
+import { format, parse, isValid } from "date-fns"
 import { type ApplicantFieldsSettings, type PersonalInfoData } from "../page"
 import { type Value as PhoneNumberValue } from "react-phone-number-input"
 
@@ -69,8 +71,8 @@ export default function PersonalInfoPage({
     if (!value) return ""
     const digits = value.replace(/\D/g, "").slice(0, 9)
     if (digits.length <= 3) return digits
-    if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`
-    return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5, 9)}`
+    if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 9)}`
   }
 
   const handleToggleSsnVisibility = () => {
@@ -281,16 +283,11 @@ export default function PersonalInfoPage({
                     <Label htmlFor="moveInDate">
                       Expected Move-in Date {applicantFields.moveInDate.required && <span className="text-destructive">*</span>}
                     </Label>
-                    <div className="relative">
-                      <Input 
-                        id="moveInDate" 
-                        placeholder="Select move-in date" 
-                        value={formData.moveInDate}
-                        onChange={(e) => onChange('moveInDate', e.target.value)}
-                        required={applicantFields.moveInDate.required}
-                      />
-                      <Calendar className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    </div>
+                    <CalendarInput
+                      value={formData.moveInDate && isValid(parse(formData.moveInDate, 'yyyy-MM-dd', new Date())) ? parse(formData.moveInDate, 'yyyy-MM-dd', new Date()) : undefined}
+                      onChange={(date) => onChange('moveInDate', date ? format(date, 'yyyy-MM-dd') : '')}
+                      placeholder="Select move-in date"
+                    />
                   </div>
                 )}
                 {applicantFields?.dateOfBirth?.enabled && (
@@ -298,16 +295,11 @@ export default function PersonalInfoPage({
                     <Label htmlFor="birthDate">
                       Date of Birth {applicantFields.dateOfBirth.required && <span className="text-destructive">*</span>}
                     </Label>
-                    <div className="relative">
-                      <Input 
-                        id="birthDate" 
-                        placeholder="Select date of birth" 
-                        value={formData.dateOfBirth}
-                        onChange={(e) => onChange('dateOfBirth', e.target.value)}
-                        required={applicantFields.dateOfBirth.required}
-                      />
-                      <Calendar className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    </div>
+                    <CalendarInput
+                      value={formData.dateOfBirth && isValid(parse(formData.dateOfBirth, 'yyyy-MM-dd', new Date())) ? parse(formData.dateOfBirth, 'yyyy-MM-dd', new Date()) : undefined}
+                      onChange={(date) => onChange('dateOfBirth', date ? format(date, 'yyyy-MM-dd') : '')}
+                      placeholder="Select date of birth"
+                    />
                   </div>
                 )}
                 {applicantFields?.gender?.enabled && (

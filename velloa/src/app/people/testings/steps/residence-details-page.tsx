@@ -5,19 +5,12 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDown, ChevronUp, Home, Mail, Minus, Plus, CalendarIcon, DollarSignIcon } from "lucide-react"
+import { ChevronDown, ChevronUp, Home, Mail, Minus, Plus, DollarSignIcon } from "lucide-react"
 import {
-  DateRangePicker, 
-  Dialog,
-  Group,
-  Popover,
-  Button as AriaButton
+  // Removed DateRangePicker, Dialog, Group, Popover, AriaButton
 } from "react-aria-components"
 import React from "react"
 
-import { cn } from "@/lib/utils"
-import { RangeCalendar } from "@/components/ui/calendar-rac"
-import { DateInput, dateInputStyle } from "@/components/ui/datefield-rac"
 import { PhoneNumberInput } from "@/components/ui/phone-input"
 import { type Value as PhoneNumberValue } from "react-phone-number-input"
 
@@ -33,7 +26,8 @@ interface AddressForm {
   // Added fields from page.tsx
   monthlyRent?: string
   landlordName?: string
-  lengthOfStay?: string
+  lengthOfStayYears?: number
+  lengthOfStayMonths?: number
   landlordEmail?: string
   landlordPhone?: PhoneNumberValue
   reasonForLeaving?: string
@@ -263,33 +257,43 @@ export default function ResidenceDetailsPage({
               </div>
             )}
             
-            {/* Length of Stay - TODO: Needs state/handler update for DateRangePicker value and onChange */}
+            {/* Length of Stay */}
             {residentialFields?.lengthOfStay?.enabled && (
-              <div className="space-y-2">
-                <Label htmlFor={`lengthOfStay-${form.id}`}>
+              <div className="space-y-2 col-span-2 md:col-span-1">
+                <Label>
                   Length of Stay {residentialFields.lengthOfStay.required && <span className="text-destructive">*</span>}
                 </Label>
-                {/* DateRangePicker - Requires state management update in page.tsx for start/end dates */}
-                <DateRangePicker
-                  /* value={...} onChange={...} - Needs props from page.tsx */
-                  /* required={residentialFields.lengthOfStay.required} - Apply required if possible */
-                >
-                  <div className="flex">
-                    <Group className={cn(dateInputStyle, "pe-9")}>
-                      <DateInput slot="start" unstyled />
-                      <span aria-hidden="true" className="text-muted-foreground/70 px-2">-</span>
-                      <DateInput slot="end" unstyled />
-                    </Group>
-                    <AriaButton className="text-muted-foreground/80 hover:text-foreground data-focus-visible:border-ring data-focus-visible:ring-ring/50 z-10 -ms-9 -me-px flex w-9 items-center justify-center rounded-e-md transition-[color,box-shadow] outline-none data-focus-visible:ring-[3px]">
-                      <CalendarIcon size={16} />
-                    </AriaButton>
+                <div className="flex gap-4">
+                  <div className="flex-1 space-y-1">
+                    <Input
+                      id={`lengthOfStayYears-${form.id}`}
+                      type="number"
+                      placeholder="Years"
+                      value={form.lengthOfStayYears ?? ""}
+                      onChange={(e) =>
+                        onAddressFormChange(form.id, "lengthOfStayYears", e.target.value ? parseInt(e.target.value, 10) : 0)
+                      }
+                      min="0"
+                      required={residentialFields.lengthOfStay.required}
+                    />
+                     <p className="text-xs text-muted-foreground">Years</p>
                   </div>
-                  <Popover /* ... Popover props ... */ >
-                    <Dialog className="max-h-[inherit] overflow-auto p-2 bg-card border-border border rounded-md">
-                      <RangeCalendar />
-                    </Dialog>
-                  </Popover>
-                </DateRangePicker>
+                  <div className="flex-1 space-y-1">
+                    <Input
+                      id={`lengthOfStayMonths-${form.id}`}
+                      type="number"
+                      placeholder="Months"
+                      value={form.lengthOfStayMonths ?? ""}
+                      onChange={(e) =>
+                        onAddressFormChange(form.id, "lengthOfStayMonths", e.target.value ? parseInt(e.target.value, 10) : 0)
+                      }
+                      min="0"
+                      max="11"
+                      required={residentialFields.lengthOfStay.required}
+                    />
+                    <p className="text-xs text-muted-foreground">Months</p>
+                  </div>
+                </div>
               </div>
             )}
 

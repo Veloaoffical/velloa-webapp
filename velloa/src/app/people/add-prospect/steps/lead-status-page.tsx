@@ -142,9 +142,30 @@ export default function LeadStatusPage({ onNext, onPrevious, initialData = {} }:
 
   // Save lead status data when navigating away
   const handleNext = () => {
+    console.log('[LeadStatusPage] Saving to localStorage:', contact);
     localStorage.setItem('prospectLeadStatus', JSON.stringify(contact));
+    
+    // Verify that data was saved correctly
+    const savedData = localStorage.getItem('prospectLeadStatus');
+    console.log('[LeadStatusPage] Verification - Data saved to localStorage:', savedData);
+    
+    // Mark the step as completed
     onNext();
   }
+
+  // Check if form has changed since initial data
+  useEffect(() => {
+    const hasChanged = 
+      contact.leadStatus !== initialData.leadStatus ||
+      contact.leadSource !== initialData.leadSource ||
+      contact.leadMedium !== initialData.leadMedium ||
+      contact.assigneeId !== initialData.assigneeId;
+    
+    if (hasChanged) {
+      console.log('[LeadStatusPage] Form data changed, updating localStorage');
+      localStorage.setItem('prospectLeadStatus', JSON.stringify(contact));
+    }
+  }, [contact, initialData]);
 
   return (
     <>

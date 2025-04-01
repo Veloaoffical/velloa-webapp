@@ -1,6 +1,7 @@
 'use client';
 
 import Lottie from 'lottie-react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useState, useEffect } from 'react';
@@ -220,58 +221,100 @@ export function PersonRentalApplication() {
 
   if (personDetails.status === 'sent') {
     return (
-      <div className="h-[calc(100vh-16rem)]">
-        <Card className="h-full">
-          <CardContent className="h-full p-6">
-            <div className="flex flex-col items-center justify-center h-full space-y-6">
-              <div className="relative w-[300px] h-[300px]">
-                {!isLoaded && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-muted rounded-lg animate-pulse">
-                    <div className="w-full h-full" />
+      <div className="min-h-[calc(100vh-16rem)] relative">
+        <div className="grid grid-cols-4 gap-6">
+          {/* Left Column: Property Details */}
+          <div className="col-span-1 sticky top-6 self-start h-fit">
+            <Card className="shadow-sm">
+              <CardContent className="p-6">
+                <div className="space-y-4">
+                  <h2 className="font-semibold text-lg">Property Details</h2>
+                  <div className="flex flex-col space-y-4">
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Address:</span>
+                        <span className="font-medium text-right">{personDetails?.property_address || 'Unknown'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Unit:</span>
+                        <span className="font-medium">{personDetails?.unit_number || 'Unknown'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Rent:</span>
+                        <span className="font-medium">
+                          <span className="inline-flex items-center">
+                            <DollarSign className="h-3 w-3 mr-0.5 text-muted-foreground" />
+                            {personDetails?.monthly_rent?.toLocaleString() || 'Unknown'}/month
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Move-in:</span>
+                        <span className="font-medium">{personDetails?.property_availability_date ? new Date(personDetails.property_availability_date).toLocaleDateString() : 'Unknown'}</span>
+                      </div>
+                    </div>
+                    {/* Removed Accept/Decline and Download PDF buttons for 'sent' status */}
                   </div>
-                )}
-                
-                {animationData && (
-                  <Lottie
-                    animationData={animationData}
-                    loop={false}
-                    autoplay={true}
-                    className="w-full h-full"
-                    onComplete={() => setIsLoaded(true)}
-                    rendererSettings={{
-                      preserveAspectRatio: 'xMidYMid slice',
-                      progressiveLoad: false,
-                    }}
-                  />
-                )}
-              </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Application Sent
-              </h1>
-              
-              <div className="flex flex-col items-center space-y-2">
-                <p className="text-muted-foreground">
-                  The prospect has received a rental application, we&apos;re waiting for the application to be filled out.
-                </p>
-              </div>
+          {/* Right Column: Application Sent Message */}
+          <div className="col-span-3 space-y-6 overflow-auto">
+            <Card className="h-[calc(100vh-16rem)] shadow-sm"> {/* Adjusted height */}
+              <CardContent className="h-full p-6">
+                <div className="flex flex-col items-center justify-center h-full space-y-6">
+                  <div className="relative w-[300px] h-[300px]">
+                    {!isLoaded && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-muted rounded-lg animate-pulse">
+                        <div className="w-full h-full" />
+                      </div>
+                    )}
+                    
+                    {animationData && (
+                      <Lottie
+                        animationData={animationData}
+                        loop={false}
+                        autoplay={true}
+                        className="w-full h-full"
+                        onComplete={() => setIsLoaded(true)}
+                        rendererSettings={{
+                          preserveAspectRatio: 'xMidYMid slice',
+                          progressiveLoad: false,
+                        }}
+                      />
+                    )}
+                  </div>
 
-              <Button 
-                className="w-[200px] bg-primary hover:bg-primary/90"
-                onClick={handleResend}
-                disabled={isResending}
-              >
-                <Send className="w-4 h-4 mr-2" />
-                {isResending ? 'Resending...' : 'Resend Application'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+                  <h1 className="text-2xl font-semibold tracking-tight">
+                    Application Sent
+                  </h1>
+                  
+                  <div className="flex flex-col items-center space-y-2 text-center"> {/* Added text-center */}
+                    <p className="text-muted-foreground max-w-md"> {/* Added max-width */}
+                      The prospect has received a rental application, we&apos;re waiting for the application to be filled out.
+                    </p>
+                  </div>
+
+                  <Button 
+                    className="w-[200px] bg-primary hover:bg-primary/90"
+                    onClick={handleResend}
+                    disabled={isResending}
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    {isResending ? 'Resending...' : 'Resend Application'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     );
   }
 
-  // New two-column layout
+  // New two-column layout for completed/other statuses
   return (
     <div className="min-h-[calc(100vh-16rem)] relative">
       <div className="grid grid-cols-4 gap-6">
@@ -1844,9 +1887,11 @@ export function PersonRentalApplication() {
                 <div className="flex flex-col md:flex-row gap-4 mb-6">
                   <div className="flex-1">
                     <div className=" rounded-md overflow-hidden">
-                      <img 
+                      <Image 
                         src="/assets/driver-license/front-driver.png" 
                         alt="Driver's License Front" 
+                        width={240}
+                        height={150}
                         className="object-contain w-full h-full max-h-[150px] mx-auto"
                       />
                     </div>
@@ -1854,9 +1899,11 @@ export function PersonRentalApplication() {
                   </div>
                   <div className="flex-1">
                     <div className="rounded-md overflow-hidden">
-                      <img 
+                      <Image 
                         src="/assets/driver-license/back-driver.png" 
                         alt="Driver's License Back" 
+                        width={240}
+                        height={150}
                         className="object-contain w-full h-full max-h-[150px] mx-auto"
                       />
                     </div>
@@ -1864,9 +1911,11 @@ export function PersonRentalApplication() {
                   </div>
                   <div className="flex-1">
                     <div className="rounded-md overflow-hidden">
-                      <img 
+                      <Image 
                         src="/assets/driver-license/ID-selfie.png" 
                         alt="ID Selfie" 
+                        width={240}
+                        height={150}
                         className="object-contain w-full h-full max-h-[150px] mx-auto"
                       />
                     </div>

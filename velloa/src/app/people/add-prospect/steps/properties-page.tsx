@@ -107,22 +107,6 @@ export default function PropertiesPage({ onNext, onPrevious, initialSelectedProp
         }
         
         const data = await response.json()
-        console.log('Full API Response:', data)
-        
-        // Detailed logging for the first listing
-        if (data.length > 0) {
-          const firstListing = data[0]
-          console.log('First Listing Details:', {
-            listingId: firstListing.listingid,
-            unitId: firstListing.unitid,
-            propertyId: firstListing.propertyid,
-            hasUnits: Boolean(firstListing.units),
-            unitsObject: firstListing.units,
-            unitImages: firstListing.units?.unit_images,
-            unitIdFromUnits: firstListing.units?.unit_id,
-            rawListing: firstListing
-          })
-        }
         
         setListings(data)
       } catch (error) {
@@ -145,15 +129,40 @@ export default function PropertiesPage({ onNext, onPrevious, initialSelectedProp
   }, [])
 
   const togglePropertySelection = (propertyId: string) => {
+    console.log('[togglePropertySelection] Toggling property ID:', propertyId);
+    console.log('[togglePropertySelection] State BEFORE:', selectedProperties); // Log state before update
+
+    let newSelectedProperties;
     if (selectedProperties.includes(propertyId)) {
-      setSelectedProperties(selectedProperties.filter((id) => id !== propertyId))
+      newSelectedProperties = selectedProperties.filter((id) => id !== propertyId);
+      console.log('[togglePropertySelection] Removing ID. New state will be:', newSelectedProperties);
     } else {
-      setSelectedProperties([...selectedProperties, propertyId])
+      newSelectedProperties = [...selectedProperties, propertyId];
+      console.log('[togglePropertySelection] Adding ID. New state will be:', newSelectedProperties);
     }
+    setSelectedProperties(newSelectedProperties);
+    
+    // Also update localStorage immediately with each selection change
+    const saveData = { listing: true, listing_id: newSelectedProperties };
+    console.log('[togglePropertySelection] Saving to localStorage with listing_id:', saveData.listing_id);
+    localStorage.setItem('prospectSelectedProperties', JSON.stringify(saveData));
+    
+    // Manual verification to confirm data is correctly stored
+    const verifyData = localStorage.getItem('prospectSelectedProperties');
+    console.log('[togglePropertySelection] Verification - localStorage contains:', verifyData);
   }
 
+  // Add a useEffect to monitor changes to selectedProperties
+  useEffect(() => {
+    console.log('[useEffect selectedProperties] Current state:', selectedProperties);
+  }, [selectedProperties]);
+
   const clearSelection = () => {
-    setSelectedProperties([])
+    setSelectedProperties([]);
+    // Update localStorage when clearing
+    const saveData = { listing: true, listing_id: [] };
+    console.log('[clearSelection] Clearing selection in localStorage');
+    localStorage.setItem('prospectSelectedProperties', JSON.stringify(saveData));
   }
 
   const filteredListings = listings.filter(
@@ -197,6 +206,8 @@ export default function PropertiesPage({ onNext, onPrevious, initialSelectedProp
     }
     
     const listingId = listing.listingid
+    console.log(`[renderListing] Preparing card. Listing ID used: ${listingId}`);
+
     const availability = listing.available_date
       ? `Available ${new Date(listing.available_date).toLocaleDateString()}`
       : "Available Soon"
@@ -207,7 +218,10 @@ export default function PropertiesPage({ onNext, onPrevious, initialSelectedProp
         className={`relative cursor-pointer rounded-lg border border-border bg-background/5 overflow-hidden transition-all ${
           selectedProperties.includes(listingId) ? "ring-2 ring-primary" : ""
         }`}
-        onClick={() => togglePropertySelection(listingId)}
+        onClick={() => {
+          console.log(`[onClick] Card clicked! Passing listingId to toggle: ${listingId}`);
+          togglePropertySelection(listingId);
+        }}
       >
         {selectedProperties.includes(listingId) && (
           <div className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-primary">
@@ -240,22 +254,33 @@ export default function PropertiesPage({ onNext, onPrevious, initialSelectedProp
   }
 
   const handleNext = () => {
+    console.log('[handleNext] Current selectedProperties:', selectedProperties);
     if (selectedProperties.length === 0) {
-      setShowSkipConfirmation(true)
+      setShowSkipConfirmation(true);
     } else {
-      // Store selected properties in localStorage to persist state
-      localStorage.setItem('prospectSelectedProperties', JSON.stringify(selectedProperties));
-      onNext()
+      // Store selected properties in localStorage in the new format
+      const saveData = { listing: true, listing_id: selectedProperties };
+      console.log('[PropertiesPage] Saving to localStorage:', saveData);
+      console.log('[PropertiesPage] Save data listing_id values:', saveData.listing_id);
+      localStorage.setItem('prospectSelectedProperties', JSON.stringify(saveData));
+      
+      // Verify data is correctly saved
+      const verifyData = localStorage.getItem('prospectSelectedProperties');
+      console.log('[PropertiesPage] Verification - localStorage now contains:', verifyData);
+      
+      onNext();
     }
-  }
+  };
 
   const handleSkip = () => {
-    setShowSkipConfirmation(false)
-    // Clear selected properties and store empty array
+    setShowSkipConfirmation(false);
+    // Clear selected properties and store { listing: false }
     setSelectedProperties([]);
-    localStorage.setItem('prospectSelectedProperties', JSON.stringify([]));
-    onNext()
-  }
+    const saveData = { listing: false };
+    console.log('[PropertiesPage] Saving skipped state to localStorage:', saveData);
+    localStorage.setItem('prospectSelectedProperties', JSON.stringify(saveData));
+    onNext();
+  };
 
   const cancelSkip = () => {
     setShowSkipConfirmation(false)
@@ -263,16 +288,34 @@ export default function PropertiesPage({ onNext, onPrevious, initialSelectedProp
 
   // Load saved properties on component mount
   useEffect(() => {
-    const savedProperties = localStorage.getItem('prospectSelectedProperties');
-    if (savedProperties) {
+    const savedDataString = localStorage.getItem('prospectSelectedProperties');
+    if (savedDataString) {
       try {
-        const parsedProperties = JSON.parse(savedProperties);
-        setSelectedProperties(parsedProperties);
+        const savedData = JSON.parse(savedDataString);
+        console.log('[useEffect Load] Loaded data from localStorage:', savedData);
+        if (savedData && savedData.listing === true && Array.isArray(savedData.listing_id)) {
+          console.log('[useEffect Load] Setting selected properties from loaded data:', savedData.listing_id);
+          setSelectedProperties(savedData.listing_id);
+        } else if (savedData && savedData.listing === false) {
+          console.log('[useEffect Load] Setting selected properties to empty array (skipped state).');
+          setSelectedProperties([]);
+        } else {
+          console.warn('[useEffect Load] Unexpected data format in localStorage, defaulting to empty selection.');
+          setSelectedProperties([]);
+        }
       } catch (error) {
-        console.error('Error parsing saved properties:', error);
+        console.error('Error parsing saved properties from localStorage:', error);
+        setSelectedProperties([]); // Default to empty on error
       }
+    } else {
+      console.log('[useEffect Load] No data found in localStorage for prospectSelectedProperties, using initial props.');
+      // Initialize with initialSelectedProperties prop if no local storage data
+      setSelectedProperties(initialSelectedProperties);
     }
-  }, []);
+    // Dependency array: Run only once on mount unless initialSelectedProperties changes
+    // Note: If initialSelectedProperties could change *after* mount and should override localStorage,
+    // this logic might need adjustment. Typically, localStorage should persist over initial props.
+  }, [initialSelectedProperties]);
 
   return (
     <div className="dark">

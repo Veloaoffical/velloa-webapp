@@ -1,65 +1,16 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Building } from "lucide-react";
 
-interface UnitDetails {
-  id: string;
-  unit_name: string;
-  beds: number;
-  baths: number;
-  market_rent: number;
-  size: number;
-  status: string;
-  property_id: string;
-  created_at: string;
-  property?: {
-    name: string;
-    address_line_1: string;
-    city: string;
-    state: string;
-    zip: string;
-  };
-  unit_images?: {
-    id: string;
-    fileUrl: string;
-    fileName: string;
-    createdAt: string;
-    favorite: boolean;
-    isFavorite: boolean;
-  }[];
-}
+import type { UnitDetails } from '../../page';
 
 interface PersonInterestsProps {
   unitDetails: UnitDetails | null;
-  isLoading?: boolean;
 }
 
-export function PersonInterests({ unitDetails, isLoading = false }: PersonInterestsProps) {
+export function PersonInterests({ unitDetails }: PersonInterestsProps) {
   const router = useRouter();
-
-  if (isLoading || (!unitDetails && unitDetails !== null)) {
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <Skeleton className="h-6 w-32 mb-4" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="rounded-lg border overflow-hidden">
-                <Skeleton className="w-full h-28" />
-                <div className="p-2">
-                  <Skeleton className="h-4 w-full mb-2" />
-                  <Skeleton className="h-3 w-4/5 mb-1" />
-                  <Skeleton className="h-3 w-3/5" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <Card>

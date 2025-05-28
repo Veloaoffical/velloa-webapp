@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+
+
+@layer base {
+  :root {
+    --background: 220, 33%, 98%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 142.1 76.2% 36.3%;
+    --primary-foreground: 355.7 100% 97.3%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 142.1 76.2% 36.3%;
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 240 10% 3.9%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 240 5.9% 90%;
+    --sidebar-ring: 240 5.9% 90%;
+    /* colors for the chart */
+    --color-not-started: hsl(217, 91%, 60%);
+    --color-in-progress: hsl(271, 91%, 65%)
+    --color-completed: hsl(142, 76%, 36%);
+    --color-overdue: hsl(142, 76%, 36%);
+    
+    --chart-1: 139 65% 20%;
+    --chart-2: 140 74% 44%;
+    --chart-3: 142 88% 28%;
+    --chart-4: 137 55% 15%;
+    --chart-5: 141 40% 9%;
+
+
+    /* New success/info variables for light mode */
+    --success-light: 142 70% 85%;
+    --success-light-foreground: 142 84% 36%;
+    --success-light-border: 142 70% 70%;
+    /* New error variables for light mode */
+    --error: 0 84% 60%;
+    --error-light: 0 76% 97%;
+    --error-light-foreground: 0 76% 24%;
+    --error-light-border: 0 76% 84%;
+
+    
+    /* New medium priority variables for light mode */
+    --medium-light: 25 95% 97%;
+    --medium-light-foreground: 25 95% 35%;
+    --medium-light-border: 25 95% 85%;
+    /* New low priority variables for light mode */
+    --low-light: 142 95% 97%;
+    --low-light-foreground: 142 95% 35%;
+    --low-light-border: 142 95% 85%;
+    /* New high priority variables for light mode */
+    --high-light: 3 100% 97%;
+    --high-light-foreground: 3 100% 35%;
+    --high-light-border: 3 100% 85%;
+  }
+
+  .dark {
+    --background: 20 14.3% 4.1%;
+    --foreground: 0 0% 95%;
+    --card: 24 9.8% 10%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 9%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 142.1 70.6% 45.3%;
+    --primary-foreground: 144.9 80.4% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 12 6.5% 15.1%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 85.7% 97.3%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 142.4 71.8% 29.2%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 24 9.8% 10%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 240 5.9% 10%;
+    --sidebar-accent: 12 6.5% 15.1%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 240 3.7% 15.9%;
+    /* New success/info variables for dark mode */
+    --success-light: 142 30% 15%;
+    --success-light-foreground: 142 70% 55%;
+    --success-light-border: 142 30% 25%;
+    /* New error variables for dark mode */
+    --error: 0 84% 60%;
+    --error-light: 0 84% 95%;
+    --error-light-foreground: 142 70% 24%;
+    --error-light-border: 142 70% 84%;
+    /* New high priority variables for dark mode */
+    --high-light: 3 70% 15%;
+    --high-light-foreground: 3 100% 65%;
+    --high-light-border: 3 70% 25%;
+    /* New medium priority variables for dark mode */
+    --medium-light: 25 70% 15%;
+    --medium-light-foreground: 25 95% 65%;
+    --medium-light-border: 25 70% 25%;
+    /* New low priority variables for dark mode */
+    --low-light: 142 70% 15%;
+    --low-light-foreground: 142 95% 65%;
+    --low-light-border: 142 70% 25%;
+  }
+}
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+
+
+
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

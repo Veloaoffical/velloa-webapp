@@ -145,7 +145,7 @@ async function fetchLeases(): Promise<Lease[]> {
       start_date,
       end_date,
       rent_amount,
-      lease_term,
+      lease_type,
       deposit_amount
     `)
     .eq('company_id', company_id);

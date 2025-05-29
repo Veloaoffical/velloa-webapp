@@ -16,9 +16,6 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-
-
-
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { motion, AnimatePresence } from "framer-motion";
@@ -65,71 +62,13 @@ import {
 } from "@/components/ui/accordion";
 import { APIProvider } from '@vis.gl/react-google-maps';
 
-const tenantSchema = z.object({
-  firstName: z.string().min(1, 'First name is required'),
-  middleName: z.string().optional(),
-  lastName: z.string().min(1, 'Last name is required'),
-  company: z.string().min(1, 'Company is required'),
-  notes: z.string().optional(),
-  email: z.string().email('Invalid email address'),
-  phone: z.string().optional(),
-  primaryAddress: z.string().min(1, 'Primary address is required'),
-  primaryAddress2: z.string().optional(),
-  secondaryAddress: z.string().optional(),
-  secondaryAddress2: z.string().optional(),
-  city: z.string().min(1, 'City is required'),
-  state: z.string().min(1, 'State is required'),
-  postalCode: z.string().min(1, 'Postal code is required'),
-  country: z.string().min(1, 'Country is required'),
-  category: z.string().min(1, 'Category is required'),
-  priority: z.string().optional(),
-  assignedTo: z.string().optional(),
-  notify: z.boolean().optional(),
-  permissionToEnter: z.boolean().optional(),
-  notify_assignee: z.enum(["none", "sms", "email", "both"]).optional(),
-  secondaryCity: z.string().optional(),
-  secondaryState: z.string().optional(),
-  secondaryPostalCode: z.string().optional(),
-  secondaryCountry: z.string().optional(),
-  insuranceProvider: z.string().optional(),
-  policyNumber: z.string().optional(),
-  coverage: z.string().optional(),
-  insuranceStart: z.string().optional(),
-  insuranceEnd: z.string().optional(),
-}).superRefine((data, ctx) => {
-  if (data.insuranceProvider && data.insuranceProvider.trim() !== "") {
-    if (!data.policyNumber || data.policyNumber.trim() === "") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Policy number is required when insurance provider is specified.",
-        path: ["policyNumber"],
-      });
-    }
-    if (!data.coverage || data.coverage.trim() === "") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Coverage details are required when insurance provider is specified.",
-        path: ["coverage"],
-      });
-    }
-    if (!data.insuranceStart || data.insuranceStart.trim() === "") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Insurance start date is required when insurance provider is specified.",
-        path: ["insuranceStart"],
-      });
-    }
-    if (!data.insuranceEnd || data.insuranceEnd.trim() === "") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Insurance end date is required when insurance provider is specified.",
-        path: ["insuranceEnd"],
-      });
-    }
-  }
+// Remove the existing tenantSchema and replace with a minimal schema
+const leaseSchema = z.object({
+  // We don't need tenant form fields since we're selecting existing tenants
+  dummy: z.string().optional(), // Just a placeholder to keep the form working
 });
 
-type TenantFormType = z.infer<typeof tenantSchema>;
+type LeaseFormType = z.infer<typeof leaseSchema>;
 
 // Interface for Property (matching add-lease)
 interface Property {
@@ -186,6 +125,7 @@ type RentIncreaseData = {
   date?: Date;
   type: 'dollar' | 'percentage';
   amount: string;
+  frequency: 'monthly' | 'quarterly' | 'bi-annual' | 'annually';
 };
 
 interface Account {
@@ -215,34 +155,10 @@ export default function AddTenantPage() {
   const [showInsuranceAlert, setShowInsuranceAlert] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const form = useForm<TenantFormType>({
-    resolver: zodResolver(tenantSchema),
+  const form = useForm<LeaseFormType>({
+    resolver: zodResolver(leaseSchema),
     defaultValues: {
-      firstName: '',
-      middleName: '',
-      lastName: '',
-      company: '',
-      notes: '',
-      email: '',
-      phone: '',
-      primaryAddress: '',
-      primaryAddress2: '',
-      secondaryAddress: '',
-      secondaryAddress2: '',
-      city: '',
-      state: '',
-      postalCode: '',
-      country: '',
-      category: '',
-      secondaryCity: '',
-      secondaryState: '',
-      secondaryPostalCode: '',
-      secondaryCountry: '',
-      insuranceProvider: '',
-      policyNumber: '',
-      coverage: '',
-      insuranceStart: '',
-      insuranceEnd: '',
+      dummy: '',
     },
   });
   
@@ -340,71 +256,131 @@ export default function AddTenantPage() {
 
 
 
-  const handleSubmit = async (data: TenantFormType) => {
+  const handleSubmit = async (data: LeaseFormType) => {
     console.log("Submit button clicked, form data:", data);
     setSubmitting(true);
     try {
-      // Map form data to backend schema
-      const payload = {
-        first_name: data.firstName,
-        last_name: data.lastName,
-        middle_name: data.middleName,
-        company: data.company,
-        email: data.email,
-        phone: data.phone,
-        about_you: data.notes,
-        services: {
-          categories: [data.category], // or multiple if your UI allows
-          classifications: []
+      // Prepare the complete lease payload
+      const leasePayload = {
+        // Basic lease information
+        property_id: selectedPropertyId || '',
+        unit_id: selectedUnitId || '',
+        tenant_ids: selectedTenants,
+        
+        // Lease details
+        lease_type: lease.lease_type,
+        start_date: lease.start_date?.toISOString(),
+        end_date: lease.end_date?.toISOString(),
+        rollover_to_month_to_month: lease.rollover_to_month_to_month,
+        
+        // Tenant portal settings
+        tenant_portal_enabled: tenantPortalEnabled,
+        renters_insurance_required: rentersInsuranceRequired,
+        
+        // Rent and charges
+        rent_charges: {
+          start_date: rentChargesLease.start_date?.toISOString(),
+          first_rent_due_day: rentChargesLease.first_rent_due_day,
+          payment_frequency: rentChargesLease.payment_frequency,
+          rent_amount: rentChargesLease.rent_amount,
+          additional_charges: rentChargesLease.additional_charges,
         },
-        address_info: {
-          primary: {
-            street: data.primaryAddress,
-            city: data.city,
-            province: data.state,
-            postalCode: data.postalCode,
-            country: data.country
-          },
-          secondary: false ? {
-            street: data.secondaryAddress,
-            city: data.secondaryCity,
-            province: data.secondaryState,
-            postalCode: data.secondaryPostalCode,
-            country: data.secondaryCountry
-          } : null
+        
+        // Rent increase
+        rent_increase: rentIncrease.date ? {
+          date: rentIncrease.date.toISOString(),
+          type: rentIncrease.type,
+          amount: rentIncrease.amount,
+          frequency: rentIncrease.frequency,
+        } : undefined,
+        
+        // Deposits and discounts
+        deposits: {
+          show_security_deposit: depositsState.showSecurityDeposit,
+          security_deposit_amount: depositsState.securityDepositAmount,
+          show_key_deposit: depositsState.showKeyDeposit,
+          key_deposit_amount: depositsState.keyDepositAmount,
+          key_deposit_description: depositsState.keyDepositDescription,
+          show_rent_discount: depositsState.showRentDiscount,
+          rent_discount_type: depositsState.rentDiscountType,
+          rent_discount_amount: depositsState.rentDiscountAmount,
+          rent_discount_description: depositsState.rentDiscountDescription,
         },
-        properties_access: {
-          type: "specific",
-          property_ids: selectedPropertyId ? [selectedPropertyId] : []
+        
+        // Late fees
+        late_fees: {
+          show_late_fees: lateFeesState.showLateFees,
+          late_fees: lateFeesState.lateFees.map(fee => ({
+            id: fee.id,
+            when_to_charge: fee.whenToCharge,
+            frequency: fee.frequency,
+            calculation_type: fee.calculationType,
+            amount: fee.amount,
+            revenue_account: fee.revenueAccount,
+            description: fee.description,
+            show_advanced_options: fee.showAdvancedOptions,
+          })),
         },
-        insurance: data.insuranceProvider
-          ? {
-              provider: data.insuranceProvider,
-              policy_number: data.policyNumber,
-              coverage: data.coverage,
-              effective_date: data.insuranceStart,
-              expiration_date: data.insuranceEnd
-            }
-          : {}
+        
+        // Utilities and features
+        utilities: {
+          utilities: utilitiesState.utilities,
+          unit_features: utilitiesState.unitFeatures,
+        },
+        
+        // Amenities
+        amenities: amenityFeatures.map(amenity => ({
+          name: amenity.name,
+          is_included: amenity.isIncluded,
+          custom: amenity.custom,
+        })),
+        
+        // Policy
+        policy: {
+          parking: policyState.parking,
+          number_of_car_spots: policyState.numberOfCarSpots,
+          parking_available: policyState.parkingAvailable,
+          smoking_allowed: policyState.smokingAllowed,
+          smoking_designation: policyState.smokingDesignation,
+          custom_smoking_text: policyState.customSmokingText,
+          pets_allowed: policyState.petsAllowed,
+          pets_designation: policyState.petsDesignation,
+          custom_pets_text: policyState.customPetsText,
+        },
+        
+        // Addendum
+        addendum: {
+          show_addendum: addendumState.showAddendum,
+        },
+        
+        // Documents
+        documents: {
+          document_status: documentsState.document_status,
+          uploaded_documents: documentsState.documents.map(doc => ({
+            id: doc.id,
+            name: doc.name,
+            file_path: undefined, // File path would be set after upload
+          })),
+        },
       };
 
-      const response = await fetch('/api/people/vendor/create', {
+      const response = await fetch('/api/leases/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(leasePayload),
         credentials: 'include'
       });
 
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to create vendor');
+        throw new Error(result.message || 'Failed to create lease');
       }
 
-      toast.success('Vendor created successfully');
-      router.push('/people'); // redirect to /people
+      toast.success('Lease created successfully');
+      router.push('/leases'); // redirect to leases page
     } catch (error) {
-      console.error('Error creating vendor:', error);
-      toast.error('Failed to create vendor. Please try again.');
+      console.error('Error creating lease:', error);
+      toast.error('Failed to create lease. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -505,7 +481,8 @@ export default function AddTenantPage() {
   const [rentIncrease, setRentIncrease] = useState<RentIncreaseData>({
     date: undefined,
     type: 'dollar',
-    amount: ''
+    amount: '',
+    frequency: 'monthly'
   });
 
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
@@ -887,7 +864,7 @@ export default function AddTenantPage() {
 
     // Rule 4: Rent Increase section validation
     if (!disabled && showRentIncreaseDialog) {
-      if (!rentIncrease.date || !isValidAmount(rentIncrease.amount)) {
+      if (!rentIncrease.date || !isValidAmount(rentIncrease.amount) || !rentIncrease.frequency) {
         disabled = true;
       }
     }
@@ -2066,7 +2043,18 @@ export default function AddTenantPage() {
               <Button 
                 variant="outline" 
                 className="w-full h-[42px] border-primary hover:bg-primary/10 text-primary font-medium"
-                onClick={() => setShowRentIncreaseDialog(!showRentIncreaseDialog)}
+                onClick={() => {
+                  const newShowState = !showRentIncreaseDialog;
+                  setShowRentIncreaseDialog(newShowState);
+                  
+                  // Set default date to lease start date when opening for the first time
+                  if (newShowState && !rentIncrease.date && lease.start_date) {
+                    setRentIncrease(prev => ({
+                      ...prev,
+                      date: lease.start_date
+                    }));
+                  }
+                }}
               >
                 <CalendarRange className="-ms-1 me-2 opacity-80" size={16} strokeWidth={2} aria-hidden="true" />
                 {showRentIncreaseDialog ? "Hide Rent Increase Schedule" : "Schedule Rent Increase"}
@@ -2092,6 +2080,25 @@ export default function AddTenantPage() {
                           className=""
                         />
                       </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Frequency</Label>
+                      <Select
+                        value={rentIncrease.frequency}
+                        onValueChange={(value: 'monthly' | 'quarterly' | 'bi-annual' | 'annually') => 
+                          setRentIncrease(prev => ({...prev, frequency: value}))
+                        }
+                      >
+                        <SelectTrigger className="w-full h-[42px]">
+                          <SelectValue placeholder="Select frequency" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="quarterly">Quarterly</SelectItem>
+                          <SelectItem value="bi-annual">Bi-Annual</SelectItem>
+                          <SelectItem value="annually">Annually</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="grid gap-2">
                       <Label>Increase Type</Label>
@@ -3906,12 +3913,7 @@ export default function AddTenantPage() {
             </AlertDialogCancel>
             <AlertDialogAction onClick={async () => {
               setShowInsuranceAlert(false);
-              // Clear all insurance fields upon skipping
-              form.setValue('insuranceProvider', '');
-              form.setValue('policyNumber', '');
-              form.setValue('coverage', '');
-              form.setValue('insuranceStart', '');
-              form.setValue('insuranceEnd', '');
+              // No need to clear insurance fields since we don't have them in this form
               await handleNext({ skipInsuranceValidationOverride: true });
             }}>
               Skip & Clear Insurance Info

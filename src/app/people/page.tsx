@@ -18,12 +18,6 @@ function ErrorAlert({ error }: { error: Error }) {
 
 interface SearchParams {
   search?: string;
-  role?: string;
-  status?: string;
-  property?: string;
-  assignee?: string;
-  page?: string;
-  limit?: string;
 }
 
 async function fetchPeople(searchParams: SearchParams = {}) {
@@ -69,32 +63,12 @@ async function fetchPeople(searchParams: SearchParams = {}) {
       `)
       .eq('company_id', companyMember.company_id);
 
-    // Apply search filter (name or email)
+    // Apply search filter (name or email) if provided
     if (searchParams.search) {
       const searchTerm = searchParams.search.trim();
       query = query.or(
         `first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`
       );
-    }
-
-    // Apply role filter
-    if (searchParams.role && searchParams.role !== 'all') {
-      query = query.eq('role', searchParams.role);
-    }
-
-    // Apply status filter
-    if (searchParams.status) {
-      query = query.eq('status', searchParams.status);
-    }
-
-    // Apply property filter
-    if (searchParams.property) {
-      query = query.eq('property_id', searchParams.property);
-    }
-
-    // Apply assignee filter
-    if (searchParams.assignee) {
-      query = query.eq('assignee_id', searchParams.assignee);
     }
 
     // Execute the query

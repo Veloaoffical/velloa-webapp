@@ -17,7 +17,7 @@ interface LeaseDetails {
   start_date: string | null;
   end_date: string | null;
   rent_amount: string | null;
-  lease_term: string | null;
+  lease_type: string | null;
   deposit_amount: string | null;
   property: Property | null;
   unit: Unit | null;
@@ -173,7 +173,7 @@ export function LeaseDetailsClient({ leaseDetails }: LeaseDetailsClientProps) {
                   start_date: leaseDetails.start_date,
                   end_date: leaseDetails.end_date,
                   rent_amount: leaseDetails.rent_amount,
-                  lease_term: leaseDetails.lease_term,
+                  lease_type: leaseDetails.lease_type,
                   deposit_amount: leaseDetails.deposit_amount,
                   unit_id: leaseDetails.unit?.unit_id,
                   property: leaseDetails.property,

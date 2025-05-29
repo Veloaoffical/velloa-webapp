@@ -51,7 +51,6 @@ interface Property {
   propertyName: string;
   propertyType: string;
   propertyKind: string;
-  address: string;
   numberOfUnits: number;
   status?: string;
 }
@@ -68,7 +67,7 @@ function TableSkeleton() {
         <Table>
           <TableHeader className="bg-muted">
             <TableRow className="hover:bg-transparent border-0">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
+              {[1, 2, 3, 4, 5].map((i) => (
                 <TableHead key={i} className="font-semibold text-foreground">
                   <Skeleton className="h-6 w-full" />
                 </TableHead>
@@ -78,7 +77,7 @@ function TableSkeleton() {
           <TableBody>
             {Array(5).fill(0).map((_, rowIndex) => (
               <TableRow key={rowIndex}>
-                {Array(6).fill(0).map((_, cellIndex) => (
+                {Array(5).fill(0).map((_, cellIndex) => (
                   <TableCell key={cellIndex}>
                     <Skeleton className={`h-8 w-${cellIndex === 0 ? 'full' : '[80%]'}`} />
                   </TableCell>
@@ -142,10 +141,6 @@ function DataTable({ data, isLoading }: { data: Property[]; isLoading?: boolean 
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
-    },
-    {
-      accessorKey: "address",
-      header: "Address",
     },
     {
       accessorKey: "numberOfUnits",
@@ -301,20 +296,17 @@ export function PropertyClient({ initialProperties, isLoading = false }: Propert
   const activeProperties = propertiesWithStatus.filter(property => property.status === "active");
   const inactiveProperties = propertiesWithStatus.filter(property => property.status === "inactive");
   
-  // Filter properties by search term
+  // Filter properties by search term (only by property name now)
   const filteredActiveProperties = activeProperties.filter(property => 
-    property.propertyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    property.address.toLowerCase().includes(searchTerm.toLowerCase())
+    property.propertyName.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
   const filteredInactiveProperties = inactiveProperties.filter(property => 
-    property.propertyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    property.address.toLowerCase().includes(searchTerm.toLowerCase())
+    property.propertyName.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
   const filteredAllProperties = propertiesWithStatus.filter(property => 
-    property.propertyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    property.address.toLowerCase().includes(searchTerm.toLowerCase())
+    property.propertyName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (

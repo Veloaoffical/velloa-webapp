@@ -26,10 +26,13 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       return NextResponse.json({ error: 'Failed to get company' }, { status: 403 });
     }
 
+    // First process any rollovers
+    await supabase.rpc('auto_process_lease_rollovers');
+
     // First fetch the lease
     const { data: lease, error: leaseError } = await supabase
       .from('lease_contracts')
-      .select('*, property_id, unit_id, tenant_id')
+      .select('*, property_id, unit_id, tenant_id, lease_status')
       .eq('id', id)
       .eq('company_id', companyMember.company_id)
       .single();
@@ -43,14 +46,17 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       return NextResponse.json({ error: 'Lease not found' }, { status: 404 });
     }
 
-    // Extract tenant ID from the tenant_id object
+    // Extract tenant ID from the tenant_id array
     let tenantId = null;
     if (lease.tenant_id) {
       if (Array.isArray(lease.tenant_id)) {
-        tenantId = lease.tenant_id[0]?.id;
+        // New structure: array of UUID strings
+        tenantId = typeof lease.tenant_id[0] === 'string' ? lease.tenant_id[0] : lease.tenant_id[0]?.id;
       } else if (typeof lease.tenant_id === 'string') {
+        // Single tenant ID as string
         tenantId = lease.tenant_id;
       } else if (typeof lease.tenant_id === 'object') {
+        // Old structure: object with id field
         tenantId = lease.tenant_id.id;
       }
     }
@@ -102,6 +108,7 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       rent_amount: lease.rent_amount,
       lease_term: lease.lease_term,
       deposit_amount: lease.deposit_amount,
+      lease_status: lease.lease_status,
       property: propertyResult.data,
       unit: unitResult.data,
       tenant: tenantResult.data

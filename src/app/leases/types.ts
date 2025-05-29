@@ -32,7 +32,7 @@ export interface Lease {
   start_date: string | null;
   end_date: string | null;
   rent_amount: string | null;
-  lease_term: string | null;
+  lease_type: string | null;
   deposit_amount: string | null;
   property: Property | null;
   unit: Unit | null;

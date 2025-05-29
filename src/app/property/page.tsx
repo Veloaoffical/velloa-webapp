@@ -1,5 +1,4 @@
 import { createClient } from '@/utils/supabase/server';
-import { Suspense } from 'react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { PropertyClient } from './property-client';
@@ -26,11 +25,6 @@ interface PropertyTypeData {
 interface PropertySupabaseRecord {
   id: string;
   name: string;
-  address_line_1: string;
-  address_line_2: string | null;
-  city: string;
-  state: string;
-  zip: string;
   property_settings: {
     id: string;
     property_description: string;
@@ -65,7 +59,6 @@ async function getProperties() {
     // Get the authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      console.error('Auth error:', userError);
       throw new Error('Unauthorized');
     }
 
@@ -77,7 +70,6 @@ async function getProperties() {
       .single();
 
     if (companyError || !companyMember) {
-      console.error('Company error:', companyError);
       throw new Error('Failed to get company');
     }
 
@@ -87,11 +79,6 @@ async function getProperties() {
       .select(`
         id,
         name,
-        address_line_1,
-        address_line_2,
-        city,
-        state,
-        zip,
         property_settings(
           id,
           property_description,
@@ -103,23 +90,7 @@ async function getProperties() {
       .eq('company_id', companyMember.company_id);
 
     if (propertiesError) {
-      console.error('Error fetching properties:', propertiesError);
       throw new Error(`Failed to fetch properties: ${propertiesError.message}`);
-    }
-
-    // Debug: Log the raw properties data
-    console.log('Raw properties data:', JSON.stringify(properties, null, 2));
-
-    // Try a direct query to property_settings to see what's there
-    const { data: allSettings, error: settingsError } = await supabase
-      .from('property_settings')
-      .select('*')
-      .limit(5);
-    
-    if (settingsError) {
-      console.error('Error fetching property_settings:', settingsError);
-    } else {
-      console.log('Sample property_settings:', JSON.stringify(allSettings, null, 2));
     }
 
     // Transform the data to match the frontend interface
@@ -133,23 +104,14 @@ async function getProperties() {
         ? property.property_settings[0] 
         : null;
       
-      // Debug: Log the property settings
-      console.log(`Property ${property.id} settings:`, propertySetting);
-      
       if (propertySetting && propertySetting.property_type) {
         try {
           const propertyTypeData = propertySetting.property_type;
           
-          // Debug: Log the property type data and its type
-          console.log(`Property ${property.id} propertyTypeData:`, propertyTypeData);
-          console.log(`Property ${property.id} propertyTypeData type:`, typeof propertyTypeData);
-          
           // For object, extract values
           if (typeof propertyTypeData === 'object' && propertyTypeData !== null) {
-            // Extract values with correct case sensitivity
             const typedData = propertyTypeData as Record<string, unknown>;
             
-            // Try to find properties regardless of case
             const foundPropertyType = findPropertyCaseInsensitive(typedData, 'propertyType');
             if (foundPropertyType !== undefined) {
               propertyType = foundPropertyType;
@@ -165,7 +127,6 @@ async function getProperties() {
             try {
               const typeData = JSON.parse(propertyTypeData);
               
-              // Try to find properties regardless of case
               const foundPropertyType = findPropertyCaseInsensitive(typeData, 'propertyType');
               if (foundPropertyType !== undefined) {
                 propertyType = foundPropertyType;
@@ -175,15 +136,13 @@ async function getProperties() {
               if (foundPropertyKind !== undefined) {
                 propertyKind = foundPropertyKind;
               }
-            } catch (e) {
-              console.error(`Error parsing property_type string for property ${property.id}:`, e);
+            } catch {
+              // Silently handle JSON parse errors
             }
           }
-        } catch (error) {
-          console.error(`Error processing property_type for property ${property.id}:`, error);
+        } catch {
+          // Silently handle property type processing errors
         }
-      } else {
-        console.log(`Property ${property.id} has no property_type data`);
       }
       
       return {
@@ -191,19 +150,11 @@ async function getProperties() {
         propertyName: property.name,
         propertyType: propertyType,
         propertyKind: propertyKind,
-        address: [
-          property.address_line_1,
-          property.address_line_2,
-          property.city,
-          property.state,
-          property.zip
-        ].filter(Boolean).join(', '),
         numberOfUnits: property.units?.length || 0,
         status: propertySetting && propertySetting.status !== false ? 'active' : 'inactive'
       };
     });
   } catch (error) {
-    console.error('Unexpected error in getProperties:', error);
     throw error;
   }
 }
@@ -212,11 +163,7 @@ export default async function PropertyPage() {
   try {
     const properties = await getProperties();
     
-    return (
-      <Suspense fallback={<div className="p-6">Loading properties...</div>}>
-        <PropertyClient initialProperties={properties} />
-      </Suspense>
-    );
+    return <PropertyClient initialProperties={properties} />;
   } catch (error) {
     return (
       <div className="p-6">

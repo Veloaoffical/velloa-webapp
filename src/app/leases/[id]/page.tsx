@@ -12,7 +12,7 @@ interface LeaseDetails {
   start_date: string | null;
   end_date: string | null;
   rent_amount: string | null;
-  lease_term: string | null;
+  lease_type: string | null;
   deposit_amount: string | null;
   property: Property | null;
   unit: Unit | null;
@@ -128,7 +128,7 @@ async function fetchLeaseDetails(id: string): Promise<LeaseDetails> {
       start_date: lease.start_date,
       end_date: lease.end_date,
       rent_amount: lease.rent_amount,
-      lease_term: lease.lease_term,
+      lease_type: lease.lease_type,
       deposit_amount: lease.deposit_amount,
       property: propertyResult.data,
       unit: unitResult.data,

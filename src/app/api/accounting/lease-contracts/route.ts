@@ -56,7 +56,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to get company' }, { status: 403 });
     }
 
-    // Fetch lease contracts with related data
+    // First process any rollovers, then fetch lease contracts with related data
+    await supabase.rpc('auto_process_lease_rollovers');
+    
     const { data: leases, error: leasesError } = await supabase
       .from('lease_contracts')
       .select(`
@@ -70,6 +72,7 @@ export async function GET() {
         property_id,
         unit_id,
         tenant_id,
+        lease_status,
         property:properties(
           id,
           name,
@@ -101,14 +104,21 @@ export async function GET() {
             ? JSON.parse(lease.tenant_id) 
             : lease.tenant_id;
           
+          // Handle both new array format (UUID strings) and old object format
+          let tenantId: string | null = null;
           if (Array.isArray(tenantData)) {
-            tenantData.forEach(tenant => {
-              if (tenant.id) {
-                tenantIds.push(tenant.id);
-              }
-            });
-          } else if (tenantData.id) {
-            tenantIds.push(tenantData.id);
+            // New structure: array of UUID strings
+            tenantId = typeof tenantData[0] === 'string' ? tenantData[0] : tenantData[0]?.id;
+          } else if (typeof tenantData === 'string') {
+            // Single tenant ID as string
+            tenantId = tenantData;
+          } else if (tenantData && tenantData.id) {
+            // Old structure: object with id field
+            tenantId = tenantData.id;
+          }
+          
+          if (tenantId) {
+            tenantIds.push(tenantId);
           }
         } catch (e) {
           console.error('Error parsing tenant data:', e);
@@ -152,20 +162,29 @@ export async function GET() {
             ? JSON.parse(lease.tenant_id) 
             : lease.tenant_id;
           
-          // Handle both array and object formats
-          const tenantInfo = Array.isArray(tenantData) ? tenantData[0] : tenantData;
-          const tenantId = tenantInfo.id;
+          // Handle both new array format (UUID strings) and old object format
+          let tenantId: string | null = null;
+          if (Array.isArray(tenantData)) {
+            // New structure: array of UUID strings
+            tenantId = typeof tenantData[0] === 'string' ? tenantData[0] : tenantData[0]?.id;
+          } else if (typeof tenantData === 'string') {
+            // Single tenant ID as string
+            tenantId = tenantData;
+          } else if (tenantData && tenantData.id) {
+            // Old structure: object with id field
+            tenantId = tenantData.id;
+          }
           
           // Use tenant details from the people table if available
           if (tenantId && tenantDetailsMap[tenantId]) {
             tenant = tenantDetailsMap[tenantId];
-          } else {
+          } else if (tenantId) {
             // Fallback to the data in the lease contract
             tenant = {
               id: tenantId,
-              name: tenantInfo.name,
-              first_name: tenantInfo.first_name,
-              last_name: tenantInfo.last_name
+              name: tenantId,
+              first_name: '',
+              last_name: ''
             };
           }
         } catch (e) {

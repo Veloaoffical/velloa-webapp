@@ -18,7 +18,7 @@ interface OverviewContentProps {
     start_date: string | null;
     end_date: string | null;
     rent_amount: string | null;
-    lease_term: string | null;
+    lease_type: string | null;
     deposit_amount: string | null;
     unit_id?: string | null;
     property?: {
@@ -237,9 +237,9 @@ export function OverviewContent({ leaseDetails }: OverviewContentProps) {
         <Card>
           <CardContent className="p-6 flex flex-col items-center justify-center text-center">
             <Calendar className="h-6 w-6 mb-2 text-blue-600" />
-            <p className="text-sm text-muted-foreground">Lease Term</p>
+            <p className="text-sm text-muted-foreground">Lease Type</p>
             <p className="font-medium">
-              {leaseDetails.lease_term || 'Not Set'}
+              {leaseDetails.lease_type || 'Not Set'}
             </p>
           </CardContent>
         </Card>

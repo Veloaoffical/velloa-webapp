@@ -509,7 +509,7 @@ async function getPropertyLeases(propertyId: string) {
       start_date,
       end_date,
       rent_amount,
-      lease_term,
+      lease_type,
       deposit_amount,
       property:properties!lease_contracts_property_id_fkey (
         id,
@@ -664,7 +664,7 @@ async function getPropertyLeases(propertyId: string) {
       start_date: lease.start_date,
       end_date: lease.end_date,
       rent_amount: lease.rent_amount || '0',
-      lease_term: lease.lease_term,
+      lease_type: lease.lease_type,
       deposit_amount: lease.deposit_amount || '0'
     };
   });

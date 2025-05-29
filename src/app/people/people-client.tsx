@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react';
-import { User, ChevronRight, Users, ChevronDown, Home, /* Building2, */ Wrench, UserPlus, Mail, Phone, MoreHorizontal, Check, Copy, Share2, CalendarIcon, Send, BookOpenText, CircleCheck, Plus, ChevronLeft, Filter, X } from "lucide-react";
+import { User, ChevronRight, Users, ChevronDown, Home, /* Building2, */ Wrench, UserPlus, Mail, Phone, MoreHorizontal, Check, Copy, Share2, CalendarIcon, Send, BookOpenText, CircleCheck, Plus, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -43,13 +43,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { format } from 'date-fns';
 import {
   Pagination,
@@ -88,12 +81,6 @@ interface Person {
 
 interface SearchParams {
   search?: string;
-  role?: string;
-  status?: string;
-  property?: string;
-  assignee?: string;
-  page?: string;
-  limit?: string;
 }
 
 interface FilterOptions {
@@ -216,9 +203,18 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
           vendor: "bg-orange-50 text-orange-700 ring-orange-600/20",
           prospect: "bg-blue-50 text-blue-700 ring-blue-600/20"
         };
+
+        const roleIcons = {
+          tenant: <Home size={12} strokeWidth={2} />,
+          owner: <User size={12} strokeWidth={2} />,
+          vendor: <Wrench size={12} strokeWidth={2} />,
+          prospect: <UserPlus size={12} strokeWidth={2} />
+        };
+
         return (
           <div className="flex items-center">
-            <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset capitalize ${roleColors[role as keyof typeof roleColors]}`}>
+            <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset capitalize ${roleColors[role as keyof typeof roleColors]}`}>
+              {roleIcons[role as keyof typeof roleIcons]}
               {role}
             </span>
           </div>
@@ -377,7 +373,8 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
         if (status === 'active') {
           return (
             <div className="flex items-center">
-              <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                <Check size={12} strokeWidth={2} />
                 Active
               </span>
             </div>
@@ -393,7 +390,8 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
         } else if (status === 'sent') {
           return (
             <div className="flex items-center">
-              <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-600/20">
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-600/20">
+                <Send size={12} strokeWidth={2} />
                 Sent
               </span>
             </div>
@@ -526,7 +524,6 @@ function DataTable({ data, currentTab }: { data: Person[]; currentTab?: string }
 export function PeopleClient({ initialPeople, searchParams }: PeopleClientProps) {
   const [copied, setCopied] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState(searchParams?.search || '');
-  const [showFilters, setShowFilters] = useState(false);
   const router = useRouter();
   const urlSearchParams = useSearchParams();
 
@@ -535,20 +532,16 @@ export function PeopleClient({ initialPeople, searchParams }: PeopleClientProps)
     setSearchQuery(searchParams?.search || '');
   }, [searchParams?.search]);
 
-  // Update URL with new filters
-  const updateFilters = (newFilters: Partial<SearchParams>) => {
+  // Update URL with search
+  const updateSearch = (search: string) => {
     const params = new URLSearchParams(urlSearchParams);
     
-    // Update or remove parameters
-    Object.entries(newFilters).forEach(([key, value]) => {
-      if (value && value !== 'all') {
-        params.set(key, value);
-      } else {
-        params.delete(key);
-      }
-    });
+    if (search && search.trim()) {
+      params.set('search', search);
+    } else {
+      params.delete('search');
+    }
 
-    // Navigate to new URL
     router.push(`/people?${params.toString()}`);
   };
 
@@ -557,30 +550,28 @@ export function PeopleClient({ initialPeople, searchParams }: PeopleClientProps)
     setSearchQuery(value);
     // Debounce the search
     const timeoutId = setTimeout(() => {
-      updateFilters({ search: value });
+      updateSearch(value);
     }, 300);
     
     return () => clearTimeout(timeoutId);
   };
 
-  // Clear all filters
-  const clearFilters = () => {
-    setSearchQuery('');
-    router.push('/people');
+  // Filter people based on search query (client-side filtering)
+  const filterPeopleBySearch = (people: Person[]) => {
+    if (!searchQuery.trim()) return people;
+    
+    const searchTerm = searchQuery.toLowerCase().trim();
+    return people.filter(person => 
+      person.first_name.toLowerCase().includes(searchTerm) ||
+      person.last_name.toLowerCase().includes(searchTerm) ||
+      person.email.toLowerCase().includes(searchTerm)
+    );
   };
 
-  // Check if any filters are active
-  const hasActiveFilters = searchParams?.search || 
-    (searchParams?.role && searchParams.role !== 'all') || 
-    searchParams?.status || 
-    searchParams?.property || 
-    searchParams?.assignee;
-
-  // Since filtering is now done server-side, we use the data as-is
   const filteredPeople = {
-    tenants: initialPeople.tenants,
-    vendors: initialPeople.vendors,
-    prospects: initialPeople.prospects
+    tenants: filterPeopleBySearch(initialPeople.tenants),
+    vendors: filterPeopleBySearch(initialPeople.vendors),
+    prospects: filterPeopleBySearch(initialPeople.prospects)
   };
 
   const filteredAllPeople = [
@@ -624,40 +615,13 @@ export function PeopleClient({ initialPeople, searchParams }: PeopleClientProps)
       <Card>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="relative w-[300px]">
-                <Input
-                  placeholder="Search people..."
-                  className="w-full"
-                  value={searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                />
-              </div>
-              
-              <Button
-                variant="outline"
-                onClick={() => setShowFilters(!showFilters)}
-                className="gap-2"
-              >
-                <Filter className="h-4 w-4" />
-                Filters
-                {hasActiveFilters && (
-                  <Badge variant="secondary" className="ml-1 px-1 py-0 text-xs">
-                    Active
-                  </Badge>
-                )}
-              </Button>
-
-              {hasActiveFilters && (
-                <Button
-                  variant="ghost"
-                  onClick={clearFilters}
-                  className="gap-2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-4 w-4" />
-                  Clear filters
-                </Button>
-              )}
+            <div className="relative w-[300px]">
+              <Input
+                placeholder="Search people..."
+                className="w-full"
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+              />
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -718,97 +682,13 @@ export function PeopleClient({ initialPeople, searchParams }: PeopleClientProps)
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-                      </div>
+          </div>
 
-            {showFilters && (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/30 rounded-lg">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Status</label>
-                  <Select
-                    value={searchParams?.status || 'all'}
-                    onValueChange={(value) => updateFilters({ status: value === 'all' ? undefined : value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All statuses</SelectItem>
-                      {initialPeople.filterOptions.statuses.map((status) => (
-                        <SelectItem key={status.value} value={status.value}>
-                          {status.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Property</label>
-                  <Select
-                    value={searchParams?.property || 'all'}
-                    onValueChange={(value) => updateFilters({ property: value === 'all' ? undefined : value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All properties" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All properties</SelectItem>
-                      {initialPeople.filterOptions.properties.map((property) => (
-                        <SelectItem key={property.id} value={property.id}>
-                          {property.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Assignee</label>
-                  <Select
-                    value={searchParams?.assignee || 'all'}
-                    onValueChange={(value) => updateFilters({ assignee: value === 'all' ? undefined : value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All assignees" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All assignees</SelectItem>
-                      {initialPeople.filterOptions.assignees.map((assignee) => (
-                        <SelectItem key={assignee.id} value={assignee.id}>
-                          {assignee.first_name} {assignee.last_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Role</label>
-                  <Select
-                    value={searchParams?.role || 'all'}
-                    onValueChange={(value) => updateFilters({ role: value === 'all' ? undefined : value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All roles" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All roles</SelectItem>
-                      <SelectItem value="tenant">Tenant</SelectItem>
-                      <SelectItem value="owner">Owner</SelectItem>
-                      <SelectItem value="vendor">Vendor</SelectItem>
-                      <SelectItem value="prospect">Prospect</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-
-          <Tabs defaultValue={searchParams?.role || "all"} className="w-full">
+          <Tabs defaultValue="all" className="w-full">
             <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
               <TabsTrigger 
                 value="all" 
                 className="flex items-center gap-2"
-                onClick={() => updateFilters({ role: 'all' })}
               >
                 <Users className="h-4 w-4" />
                 All
@@ -816,7 +696,6 @@ export function PeopleClient({ initialPeople, searchParams }: PeopleClientProps)
               <TabsTrigger 
                 value="tenant" 
                 className="flex items-center gap-2"
-                onClick={() => updateFilters({ role: 'tenant' })}
               >
                 <Home className="h-4 w-4" />
                 Tenants
@@ -824,7 +703,6 @@ export function PeopleClient({ initialPeople, searchParams }: PeopleClientProps)
               <TabsTrigger 
                 value="vendor" 
                 className="flex items-center gap-2"
-                onClick={() => updateFilters({ role: 'vendor' })}
               >
                 <Wrench className="h-4 w-4" />
                 Vendors
@@ -832,7 +710,6 @@ export function PeopleClient({ initialPeople, searchParams }: PeopleClientProps)
               <TabsTrigger 
                 value="prospect" 
                 className="flex items-center gap-2"
-                onClick={() => updateFilters({ role: 'prospect' })}
               >
                 <UserPlus className="h-4 w-4" />
                 Prospects

@@ -42,7 +42,7 @@ interface Lease {
   start_date: string;
   end_date: string;
   rent_amount: string | null;
-  lease_term: string | null;
+  lease_type: string | null;
   deposit_amount: string | null;
   property: Property | null;
   unit: Unit | null;
@@ -120,7 +120,7 @@ export function PropertyLeases({ propertyId, leases }: PropertyLeasesProps) {
       <TableRow>
             <TableHead>Tenant</TableHead>
             <TableHead>Unit</TableHead>
-            <TableHead>Lease Term</TableHead>
+            <TableHead>Lease Type</TableHead>
             <TableHead>Rent</TableHead>
             <TableHead>Status</TableHead>
             <TableHead></TableHead>

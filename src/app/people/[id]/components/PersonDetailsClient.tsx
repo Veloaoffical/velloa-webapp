@@ -1,6 +1,6 @@
 'use client';
 
-import {useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -68,9 +68,14 @@ export function PersonDetailsClient({
     billingItems, // Destructure billingItems
     outstandingBalance, // Destructure outstandingBalance
 }: PersonDetailsClientProps) {
+  const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [notesDialogTrigger, setNotesDialogTrigger] = useState(0); // State to trigger notes dialog
-  const [notes, setNotes] = useState<ProcessedNote[]>(initialNotes);
+  const [notes, setNotes] = useState<ProcessedNote[]>(initialNotes || []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Function to trigger the notes dialog open
   const triggerNotesDialog = () => {
@@ -79,6 +84,11 @@ export function PersonDetailsClient({
   const addNoteToState = (newNote: ProcessedNote) => {
     setNotes((prevNotes) => [newNote, ...prevNotes]);
   };
+
+  // Don't render until mounted to prevent hydration issues
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">

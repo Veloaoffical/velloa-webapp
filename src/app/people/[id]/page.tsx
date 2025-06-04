@@ -67,15 +67,20 @@ export interface VendorServiceAddress {
 
 export interface LeaseContract {
   id: string;
-  tenant_portal: boolean;
+  tenant_portal_enabled: boolean;
   start_date?: string;
   end_date?: string;
-  insurance?: {
-    coverage: string;
-    provider: string;
-    policy_number: string;
-    effective_date: string;
-    expiration_date: string;
+  renters_insurance_required?: boolean;
+  property_id?: string;
+  unit_id?: string;
+  rent_amount?: number;
+  property?: {
+    id: string;
+    name: string;
+  };
+  unit?: {
+    id: string;
+    unit_name: string;
   };
   // Add other lease contract fields as needed
 }
@@ -837,14 +842,73 @@ async function getPersonData(personId: string): Promise<GetPersonDataResult> {
   let serviceAddress: VendorServiceAddress | null = null;
   
   // Fetch lease contract for tenants
-  if (personData.role === 'tenant') {
-    const { data: leaseContracts } = await supabase
+  if (personData.role === 'tenant' && personData.company_id) {
+    const { data: leaseContracts, error: leaseError } = await supabase
       .from('lease_contracts')
-      .select('id, tenant_portal, insurance, start_date, end_date')
-      .filter('tenant_id', 'cs', JSON.stringify([{ id: personId }]));
+      .select(`
+        id, 
+        tenant_portal_enabled, 
+        renters_insurance_required, 
+        start_date, 
+        end_date,
+        property_id,
+        unit_id,
+        rent_amount
+      `)
+      .eq('company_id', personData.company_id)
+      .contains('tenant_id', JSON.stringify([personId]));
+    
+    if (leaseError) {
+      console.error('Error fetching lease contracts:', leaseError);
+    }
     
     if (leaseContracts && leaseContracts.length > 0) {
-      personData.lease_contract = leaseContracts[0] as LeaseContract;
+      const leaseContract = leaseContracts[0];
+      
+      // Fetch property name if property_id exists
+      let propertyName = null;
+      if (leaseContract.property_id) {
+        const { data: propertyData } = await supabase
+          .from('properties')
+          .select('name')
+          .eq('id', leaseContract.property_id)
+          .single();
+        propertyName = propertyData?.name;
+      }
+      
+      // Fetch unit name if unit_id exists
+      let unitName = null;
+      if (leaseContract.unit_id) {
+        console.log('Fetching unit for unit_id:', leaseContract.unit_id);
+        const { data: unitData, error: unitError } = await supabase
+          .from('units')
+          .select('unit_name')
+          .eq('unit_id', leaseContract.unit_id)
+          .single();
+        console.log('Unit data:', unitData, 'Unit error:', unitError);
+        unitName = unitData?.unit_name;
+      } else {
+        console.log('No unit_id found in lease contract');
+      }
+      
+      personData.lease_contract = {
+        id: leaseContract.id,
+        tenant_portal_enabled: leaseContract.tenant_portal_enabled,
+        renters_insurance_required: leaseContract.renters_insurance_required,
+        start_date: leaseContract.start_date,
+        end_date: leaseContract.end_date,
+        property_id: leaseContract.property_id,
+        unit_id: leaseContract.unit_id,
+        rent_amount: leaseContract.rent_amount,
+        property: propertyName ? {
+          id: leaseContract.property_id,
+          name: propertyName
+        } : undefined,
+        unit: unitName ? {
+          id: leaseContract.unit_id,
+          unit_name: unitName
+        } : undefined
+      } as LeaseContract;
     }
   }
   

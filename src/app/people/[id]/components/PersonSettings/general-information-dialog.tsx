@@ -36,6 +36,8 @@ interface PersonDetails {
   status: string | null;
   assignee_id: string | null;
   lead_source: string | null;
+  date_of_birth?: string | null;
+  marital_status?: string | null;
 }
 
 interface GeneralInformationDialogProps {
@@ -53,9 +55,9 @@ export function GeneralInformationDialog({ open, onOpenChange, personDetails }: 
     ssn: '',
     driversLicenseState: '',
     driversLicenseNumber: '',
-    dateOfBirth: '',
+    dateOfBirth: personDetails.date_of_birth || '',
     gender: '',
-    maritalStatus: '',
+    maritalStatus: personDetails.marital_status || '',
   });
   const [isLoading, setIsLoading] = React.useState(false);
   const [showToast, setShowToast] = React.useState(false);
@@ -153,16 +155,51 @@ export function GeneralInformationDialog({ open, onOpenChange, personDetails }: 
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="company">Company</Label>
-            <Input 
-              id="company" 
-              value={formData.company}
-              onChange={(e) => setFormData({...formData, company: e.target.value})}
-              className="h-[42px] mt-2"
-            />
+          {/* Show company field only for prospects, not for tenants */}
+          {isProspect && (
+            <div>
+              <Label htmlFor="company">Company</Label>
+              <Input 
+                id="company" 
+                value={formData.company}
+                onChange={(e) => setFormData({...formData, company: e.target.value})}
+                className="h-[42px] mt-2"
+              />
+            </div>
+          )}
+
+          {/* Date of Birth and Marital Status for both tenants and prospects */}
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <Label htmlFor="dateOfBirth">Date of Birth <span className="text-red-500">*</span></Label>
+              <div className="mt-2">
+                <CustomDatePicker
+                  label=""
+                  value={formData.dateOfBirth}
+                  onChange={(value: string) => setFormData({...formData, dateOfBirth: value})}
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="maritalStatus">Marital Status</Label>
+              <Select
+                value={formData.maritalStatus}
+                onValueChange={(value) => setFormData({...formData, maritalStatus: value})}
+              >
+                <SelectTrigger className="h-[42px] mt-2">
+                  <SelectValue placeholder="Select marital status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="single">Single</SelectItem>
+                  <SelectItem value="married">Married</SelectItem>
+                  <SelectItem value="divorced">Divorced</SelectItem>
+                  <SelectItem value="widowed">Widowed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
+          {/* Prospect-only fields */}
           {isProspect && (
             <>
               <div className="grid grid-cols-2 gap-6">
@@ -176,19 +213,19 @@ export function GeneralInformationDialog({ open, onOpenChange, personDetails }: 
                   />
                 </div>
                 <div>
-                  <Label htmlFor="maritalStatus">Marital Status</Label>
+                  <Label htmlFor="gender">Gender</Label>
                   <Select
-                    value={formData.maritalStatus}
-                    onValueChange={(value) => setFormData({...formData, maritalStatus: value})}
+                    value={formData.gender}
+                    onValueChange={(value) => setFormData({...formData, gender: value})}
                   >
                     <SelectTrigger className="h-[42px] mt-2">
-                      <SelectValue placeholder="Select marital status" />
+                      <SelectValue placeholder="Select gender" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="single">Single</SelectItem>
-                      <SelectItem value="married">Married</SelectItem>
-                      <SelectItem value="divorced">Divorced</SelectItem>
-                      <SelectItem value="widowed">Widowed</SelectItem>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                      <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -212,36 +249,6 @@ export function GeneralInformationDialog({ open, onOpenChange, personDetails }: 
                     onChange={(e) => setFormData({...formData, driversLicenseNumber: e.target.value})}
                     className="h-[42px] mt-2"
                   />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <Label htmlFor="dateOfBirth">Date of Birth <span className="text-red-500">*</span></Label>
-                  <div className="mt-2">
-                    <CustomDatePicker
-                      label=""
-                      value={formData.dateOfBirth}
-                      onChange={(value: string) => setFormData({...formData, dateOfBirth: value})}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="gender">Gender</Label>
-                  <Select
-                    value={formData.gender}
-                    onValueChange={(value) => setFormData({...formData, gender: value})}
-                  >
-                    <SelectTrigger className="h-[42px] mt-2">
-                      <SelectValue placeholder="Select gender" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">Male</SelectItem>
-                      <SelectItem value="female">Female</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                      <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
             </>

@@ -1,4 +1,4 @@
-import { useState, useId, useEffect, useCallback } from "react"
+import { useState, useId } from "react"
 import { Button as ButtonUI } from "@/components/ui/button"
 import {
   Table,
@@ -50,11 +50,6 @@ import {
 interface Property {
   id: string
   name: string
-  address: string
-  city: string
-  state: string
-  zip: string
-  active: boolean
 }
 
 interface Person {
@@ -109,11 +104,15 @@ interface Transaction {
     payment_method?: string
     lines?: Array<{
       category: string
-      unit: string
+      unit?: string
       description: string
       debit_amount: number
       credit_amount: number
+      reference?: string
     }>
+    status?: string
+    unit_id?: string
+    lease_id?: string
   }
   created_at: string
   created_by: string
@@ -148,27 +147,36 @@ interface Account {
 
 interface TransactionContentProps {
   leaseId?: string;
+  initialTransactions?: Transaction[];
+  initialAccounts?: Account[];
+  initialProperties?: Property[];
+  initialPeople?: Person[];
 }
 
-export default function TransactionContent({ leaseId }: TransactionContentProps = {}) {
+export default function TransactionContent({ 
+  leaseId,
+  initialTransactions = [], 
+  initialAccounts = [], 
+  initialProperties = [], 
+  initialPeople = [] 
+}: TransactionContentProps = {}) {
   const [selectedTransactions, setSelectedTransactions] = useState<Set<string>>(new Set())
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false)
+  const [transactions] = useState<Transaction[]>(initialTransactions.filter(t => !t.data?.lease_id || t.data.lease_id === leaseId))
+  const [isLoadingTransactions] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
-  const [accountingMethod, setAccountingMethod] = useState('cash')
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [beginningBalance, setBeginningBalance] = useState<number>(0)
-  const [isLoadingAccounts, setIsLoadingAccounts] = useState(true)
+
+  const [accounts] = useState<Account[]>(initialAccounts)
+  const [beginningBalance] = useState<number>(0)
+  const [isLoadingAccounts] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<string>('all')
-  const [properties, setProperties] = useState<Property[]>([])
+  const [properties] = useState<Property[]>(initialProperties)
   const [selectedProperty] = useState<string>('all')
-  const [selectedUnit, setSelectedUnit] = useState<string>('all')
-  const [selectedLease, setSelectedLease] = useState<string>(leaseId || 'all')
-  const [people, setPeople] = useState<Person[]>([])
-  const [isLoadingPeople, setIsLoadingPeople] = useState(true)
+
+  const [people] = useState<Person[]>(initialPeople)
+  const [isLoadingPeople] = useState(false)
   const [selectedVendor, setSelectedVendor] = useState<string>('all')
-  const [accountOwner, setAccountOwner] = useState<Person | null>(null)
-  const [payees, setPayees] = useState<Map<string, Person>>(new Map())
+  const [accountOwner] = useState<Person | null>(null)
+  const [payees] = useState<Map<string, Person>>(new Map())
   const tableId = useId()
   const currentDateTime = new Date()
   
@@ -176,202 +184,9 @@ export default function TransactionContent({ leaseId }: TransactionContentProps 
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10 // Fixed value since we removed the dropdown
   
-  // Calculate beginning balance from accounts
-  const calculateBeginningBalance = useCallback((accountsToCalculate: Account[]) => {
-    if (!selectedAccount || selectedAccount === 'all') {
-      return 0
-    }
 
-    const account = accountsToCalculate.find(a => a.id === selectedAccount)
-    if (!account) return 0
 
-    if (selectedProperty && selectedProperty !== 'all') {
-      // For property-specific view, use property balance
-      const propertyBalance = account.property_balance?.find(pb => pb.property_id === selectedProperty)
-      if (!propertyBalance) return 0
-      return propertyBalance.start_balance || 0
-    }
 
-    // For all properties view, use account start balance
-    return account.start_balance || 0
-  }, [selectedAccount, selectedProperty])
-
-  // Fetch chart of accounts
-  useEffect(() => {
-    const fetchAccounts = async () => {
-      try {
-        const response = await fetch('/api/accounting/chart-of-accounts')
-        if (!response.ok) throw new Error('Failed to fetch accounts')
-        const data = await response.json()
-        setAccounts(data)
-        const calculatedBalance = calculateBeginningBalance(data)
-        setBeginningBalance(calculatedBalance)
-      } catch (error) {
-        console.error('Error fetching accounts:', error)
-      } finally {
-        setIsLoadingAccounts(false)
-      }
-    }
-    fetchAccounts()
-  }, [calculateBeginningBalance])
-
-  // Recalculate beginning balance when account or property filter changes
-  useEffect(() => {
-    if (accounts.length > 0) {
-      const calculatedBalance = calculateBeginningBalance(accounts)
-      setBeginningBalance(calculatedBalance)
-    }
-  }, [selectedAccount, selectedProperty, accounts, calculateBeginningBalance])
-
-  useEffect(() => {
-    const fetchProperties = async () => {
-      try {
-        const response = await fetch('/api/property')
-        if (!response.ok) {
-          throw new Error('Failed to fetch properties')
-        }
-        const data = await response.json()
-        setProperties(data)
-      } catch (error) {
-        console.error('Error fetching properties:', error)
-      }
-    }
-
-    fetchProperties()
-  }, [])
-
-  useEffect(() => {
-    const fetchLeases = async () => {
-      try {
-        // Don't set isLoadingTransactions here as we're not loading transactions
-        const response = await fetch('/api/accounting/lease-contracts')
-        if (!response.ok) {
-          throw new Error('Failed to fetch leases')
-        }
-        // We're not using this data, so no need to store it
-        // const data = await response.json()
-      } catch (error) {
-        console.error('Error fetching leases:', error)
-      }
-    }
-
-    fetchLeases()
-  }, [])
-
-  // Fetch units when property is selected
-  useEffect(() => {
-    const fetchUnits = async () => {
-      if (selectedProperty === 'all') {
-        // Don't reset transactions here
-        setSelectedUnit('all') // Reset unit selection when property is deselected
-        return
-      }
-
-      try {
-        // Don't set isLoadingTransactions here as we're not loading transactions
-        const response = await fetch(`/api/property/${selectedProperty}/units`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch units')
-        }
-        // We're not using this data, so no need to store it
-        // const data = await response.json()
-        setSelectedUnit('all') // Reset unit selection when property changes
-      } catch (error) {
-        console.error('Error fetching units:', error)
-      }
-    }
-
-    fetchUnits()
-  }, [selectedProperty])
-
-  // Update lease options when property or unit changes
-  useEffect(() => {
-    // Reset lease selection when property or unit changes
-    setSelectedLease('all')
-  }, [selectedProperty, selectedUnit])
-
-  // Fetch people data
-  useEffect(() => {
-    const fetchPeople = async () => {
-      try {
-        setIsLoadingPeople(true)
-        const response = await fetch('/api/people/all')
-        if (!response.ok) {
-          throw new Error('Failed to fetch people')
-        }
-        const data = await response.json()
-        setPeople(data)
-      } catch (error) {
-        console.error('Error fetching people:', error)
-      } finally {
-        setIsLoadingPeople(false)
-      }
-    }
-
-    fetchPeople()
-  }, [])
-
-  // Fetch account owner when account changes
-  useEffect(() => {
-    const fetchAccountOwner = async () => {
-      if (!selectedAccount || selectedAccount === 'all') {
-        setAccountOwner(null)
-        return
-      }
-
-      const account = accounts.find(a => a.id === selectedAccount)
-      if (!account?.owner_id) {
-        setAccountOwner(null)
-        return
-      }
-
-      try {
-        const response = await fetch(`/api/people/${account.owner_id}`)
-        if (!response.ok) throw new Error('Failed to fetch account owner')
-        const data = await response.json()
-        setAccountOwner(data)
-      } catch (error) {
-        console.error('Error fetching account owner:', error)
-        setAccountOwner(null)
-      }
-    }
-
-    fetchAccountOwner()
-  }, [selectedAccount, accounts])
-
-  // Fetch payee details for transactions
-  useEffect(() => {
-    const fetchPayeeDetails = async () => {
-      const uniquePayeeIds = new Set(
-        transactions
-          .map(t => t.payee)
-          .filter((id): id is string => id !== undefined && id !== null)
-      )
-      const newPayees = new Map<string, Person>()
-      
-      for (const payeeId of uniquePayeeIds) {
-        if (!payees.has(payeeId)) {
-          try {
-            const response = await fetch(`/api/people/${payeeId}`)
-            if (response.ok) {
-              const data = await response.json()
-              newPayees.set(payeeId, data)
-            }
-          } catch (error) {
-            console.error(`Error fetching payee ${payeeId}:`, error)
-          }
-        }
-      }
-      
-      if (newPayees.size > 0) {
-        setPayees(new Map([...payees, ...newPayees]))
-      }
-    }
-
-    if (transactions.length > 0) {
-      fetchPayeeDetails()
-    }
-  }, [transactions])
 
   const getDateRangeForPeriod = (period: string) => {
     switch (period) {
@@ -424,101 +239,7 @@ export default function TransactionContent({ leaseId }: TransactionContentProps 
     }
   }
 
-  // Fetch transactions when filters change
-  useEffect(() => {
-    fetchTransactions();
-  }, [selectedAccount, dateRange, selectedProperty, selectedUnit, selectedLease, selectedVendor, accounts]);
 
-  // Separate fetchTransactions function that can be called manually
-  const fetchTransactions = async () => {
-    try {
-      setIsLoadingTransactions(true);
-      const params = new URLSearchParams();
-      
-      if (selectedAccount && selectedAccount !== 'all') {
-        params.append('account_id', selectedAccount);
-        // Also include sub-accounts if any
-        const selectedAccountData = accounts.find(a => a.id === selectedAccount);
-        if (selectedAccountData?.sub_accounts?.length) {
-          selectedAccountData.sub_accounts.forEach(sa => {
-            params.append('sub_account_ids[]', sa.id);
-          });
-        }
-
-        // If this is a bank account, also include credit account transactions
-        if (selectedAccountData?.account_type?.toLowerCase() === 'asset' && 
-            selectedAccountData?.account_subtype?.toLowerCase() === 'bank') {
-          // Get all credit accounts
-          const creditAccountIds = accounts
-            .filter(a => a.account_type?.toLowerCase() === 'credit')
-            .map(a => a.id);
-          
-          // Add credit account IDs to params
-          creditAccountIds.forEach(id => {
-            params.append('related_account_ids[]', id);
-          });
-        }
-      }
-      
-      if (dateRange?.start) {
-        params.append('start_date', dateRange.start.toString());
-      }
-      
-      if (dateRange?.end) {
-        params.append('end_date', dateRange.end.toString());
-      }
-
-      if (selectedProperty && selectedProperty !== 'all') {
-        params.append('property_id', selectedProperty);
-      }
-
-      if (selectedUnit && selectedUnit !== 'all') {
-        params.append('unit_id', selectedUnit);
-      }
-
-      if (selectedLease && selectedLease !== 'all') {
-        params.append('lease_id', selectedLease);
-      }
-
-      if (selectedVendor && selectedVendor !== 'all') {
-        params.append('vendor_id', selectedVendor);
-      }
-
-      console.log('Fetching transactions with params:', params.toString());
-      
-      // Add a timeout to handle network issues
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
-      try {
-        const response = await fetch(`/api/accounting/transactions?${params.toString()}`, {
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Failed to fetch transactions: ${response.status} ${errorText}`);
-        }
-        
-        const data = await response.json();
-        console.log(`Fetched ${data.length} transactions`);
-        setTransactions(data);
-      } catch (fetchError: unknown) {
-        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          console.error('Request timed out after 30 seconds');
-          throw new Error('Request timed out. Please try again.');
-        }
-        throw fetchError;
-      }
-    } catch (error) {
-      console.error('Error fetching transactions:', error);
-      // You could add a toast notification here if you have a toast system
-    } finally {
-      setIsLoadingTransactions(false);
-    }
-  };
 
   const toggleTransaction = (id: string) => {
     const newSelected = new Set(selectedTransactions)
@@ -669,10 +390,7 @@ export default function TransactionContent({ leaseId }: TransactionContentProps 
     }
   }
   
-  // Reset to first page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [selectedAccount, dateRange, selectedProperty, selectedUnit, selectedLease, selectedVendor])
+
 
   return (
     <div>
@@ -754,18 +472,7 @@ export default function TransactionContent({ leaseId }: TransactionContentProps 
                   </SelectContent>
                 </Select>
 
-                <Select
-                  value={accountingMethod}
-                  onValueChange={setAccountingMethod}
-                >
-                  <SelectTrigger className="w-[180px] bg-background">
-                    <SelectValue placeholder="Accounting Method" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash basis</SelectItem>
-                    <SelectItem value="accrual">Accrual basis</SelectItem>
-                  </SelectContent>
-                </Select>
+
 
                 <TooltipProvider>
                   <Tooltip>
@@ -798,7 +505,7 @@ export default function TransactionContent({ leaseId }: TransactionContentProps 
                         <ButtonUI 
                           variant="ghost" 
                           size="icon" 
-                          onClick={() => fetchTransactions()} 
+                          onClick={() => window.location.reload()} 
                           className={cn(dateInputStyle, "w-9 h-9 p-0")}
                           disabled={isLoadingTransactions}
                         >
@@ -806,7 +513,7 @@ export default function TransactionContent({ leaseId }: TransactionContentProps 
                         </ButtonUI>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Refresh transactions</p>
+                        <p>Refresh page</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -977,9 +684,6 @@ export default function TransactionContent({ leaseId }: TransactionContentProps 
                     <TableCell colSpan={9} className="text-center py-8">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <p className="text-sm text-muted-foreground">No transactions found</p>
-                        <ButtonUI variant="outline" size="sm" onClick={fetchTransactions} className="mt-2">
-                          Refresh
-                        </ButtonUI>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1095,7 +799,7 @@ export default function TransactionContent({ leaseId }: TransactionContentProps 
               <div className="flex items-center justify-between space-x-1 py-1">
                 <div className="flex items-center space-x-2">
                   <p className="text-sm text-muted-foreground">
-                    {accountingMethod === 'cash' ? 'Cash' : 'Accrual'} Basis • {format(currentDateTime, "MMM d, yyyy h:mm a")}
+                    {format(currentDateTime, "MMM d, yyyy h:mm a")}
                   </p>
                 </div>
                 <div className="ml-auto">

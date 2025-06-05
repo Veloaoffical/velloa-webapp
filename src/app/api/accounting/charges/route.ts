@@ -88,13 +88,11 @@ export async function POST(request: NextRequest) {
     
     // The middleware has already authenticated the user
     // We can directly access the user ID from the session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    const { data: { user }, error: sessionError } = await supabase.auth.getUser();
     
-    if (sessionError || !session?.user) {
+    if (sessionError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
-    const user = session.user;
 
     // Parse the request body
     const body = await request.json();
@@ -157,13 +155,22 @@ export async function POST(request: NextRequest) {
           : leaseData.tenant_id;
         
         if (Array.isArray(tenantData) && tenantData.length > 0) {
-          people_id = tenantData[0].id;
-        } else if (tenantData.id) {
+          people_id = typeof tenantData[0] === 'string' ? tenantData[0] : tenantData[0]?.id;
+        } else if (typeof tenantData === 'string') {
+          people_id = tenantData;
+        } else if (tenantData && tenantData.id) {
           people_id = tenantData.id;
         }
       } catch (e) {
         console.error('Error parsing tenant data:', e);
       }
+    }
+
+    if (!people_id) {
+      return NextResponse.json(
+        { error: 'Tenant ID not found in lease data' }, 
+        { status: 400 }
+      );
     }
 
     // Get company default accounts settings to find the accounts receivable account

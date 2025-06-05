@@ -3,7 +3,56 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { createClient } from '@/utils/supabase/server';
 import { LeasesClient } from './leases-client';
-import { Lease } from './types';
+
+interface Property {
+  id: string;
+  name: string;
+}
+
+interface Unit {
+  unit_id: string;
+  unit_name: string;
+}
+
+interface TenantInfo {
+  id: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  email?: string;
+  phone?: string;
+  unit?: {
+    unit_number: string;
+    property_name: string;
+  };
+}
+
+interface Deposits {
+  show_key_deposit?: boolean;
+  key_deposit_amount?: string;
+  rent_discount_type?: string;
+  show_rent_discount?: boolean;
+  rent_discount_amount?: string;
+  show_security_deposit?: boolean;
+  key_deposit_description?: string;
+  security_deposit_amount?: string;
+  rent_discount_description?: string;
+}
+
+interface Lease {
+  id: string;
+  created_at: string;
+  start_date: string | null;
+  end_date: string | null;
+  rent_amount: string | null;
+  lease_type: string | null;
+  lease_status: string | null;
+  deposits: Deposits | null;
+  property: Property | null;
+  unit: Unit | null;
+  tenant_id: string[] | null;
+  tenant: TenantInfo | null;
+}
 
 function ErrorAlert({ error }: { error: Error }) {
   return (
@@ -50,7 +99,8 @@ async function fetchLeases(): Promise<Lease[]> {
         end_date,
         rent_amount,
         lease_type,
-        deposit_amount,
+        deposits,
+        lease_status,
         property_id,
         unit_id,
         tenant_id
@@ -73,12 +123,11 @@ async function fetchLeases(): Promise<Lease[]> {
     const propertyIds = leases?.map(lease => lease.property_id).filter(Boolean) || [];
     const unitIds = leases?.map(lease => lease.unit_id).filter(Boolean) || [];
 
-    // Extract tenant IDs from the tenant_id objects
+    // Extract tenant IDs from the tenant_id arrays
     const tenantIds = leases
       ?.map(lease => {
-        if (lease.tenant_id) {
-          // tenant_id is already an object (JSONB from database)
-          return lease.tenant_id[0]?.id;
+        if (lease.tenant_id && Array.isArray(lease.tenant_id)) {
+          return lease.tenant_id[0]; // Get the first tenant ID from the array
         }
         return null;
       })
@@ -89,7 +138,7 @@ async function fetchLeases(): Promise<Lease[]> {
       // Fetch properties
       propertyIds.length > 0 ? supabase
         .from('properties')
-        .select('id, name, address_line_1, address_line_2, city, state, zip')
+        .select('id, name')
         .in('id', propertyIds) : Promise.resolve({ data: [] }),
 
       // Fetch units
@@ -119,17 +168,9 @@ async function fetchLeases(): Promise<Lease[]> {
     // Combine the data
     const combinedLeases = leases?.map(lease => {
       let tenant = null;
-      if (lease.tenant_id) {
-        // tenant_id is already an object (JSONB from database)
-        const tenantId = lease.tenant_id[0]?.id;
-        if (tenantId) {
-          tenant = tenantsMap.get(tenantId) || {
-            id: tenantId,
-            first_name: lease.tenant_id[0]?.name?.split(' ')[0] || '',
-            last_name: lease.tenant_id[0]?.name?.split(' ').slice(1).join(' ') || '',
-            role: 'tenant'
-          };
-        }
+      if (lease.tenant_id && Array.isArray(lease.tenant_id) && lease.tenant_id.length > 0) {
+        const tenantId = lease.tenant_id[0];
+        tenant = tenantsMap.get(tenantId) || null;
       }
 
       return {

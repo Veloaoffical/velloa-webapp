@@ -106,15 +106,39 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       start_date: lease.start_date,
       end_date: lease.end_date,
       rent_amount: lease.rent_amount,
-      lease_term: lease.lease_term,
+      lease_type: lease.lease_type,
       deposit_amount: lease.deposit_amount,
       lease_status: lease.lease_status,
+      insurance: lease.insurance,
       property: propertyResult.data,
       unit: unitResult.data,
       tenant: tenantResult.data
     };
 
-    return NextResponse.json(leaseDetails);
+    const propertyData = propertyResult.data;
+    let formattedAddress = '';
+    if (propertyData) {
+      const addressParts = [
+        propertyData.address_line_1,
+        propertyData.address_line_2,
+        [
+          propertyData.city,
+          propertyData.state,
+          propertyData.zip
+        ].filter(Boolean).join(', ')
+      ].filter(Boolean);
+      formattedAddress = addressParts.join(', ');
+    }
+
+    const enhancedLeaseDetails = {
+      ...leaseDetails,
+      property: propertyData ? {
+        ...propertyData,
+        address: formattedAddress,
+      } : null,
+    };
+
+    return NextResponse.json(enhancedLeaseDetails);
   } catch (error) {
     console.error('Error in lease details route:', error);
     return NextResponse.json(

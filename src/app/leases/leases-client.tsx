@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
-import { Plus, ChevronLeft, ChevronRight, ShieldCheck, ShieldX, User } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, CircleCheck, CircleX, User } from 'lucide-react';
 import Link from 'next/link';
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,49 @@ import {
   PaginationLink,
 } from "@/components/ui/pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Lease } from './types';
+
+// Import Lease type from the page component
+type Lease = {
+  id: string;
+  created_at: string;
+  start_date: string | null;
+  end_date: string | null;
+  rent_amount: string | null;
+  lease_type: string | null;
+  lease_status: string | null;
+  deposits: {
+    show_key_deposit?: boolean;
+    key_deposit_amount?: string;
+    rent_discount_type?: string;
+    show_rent_discount?: boolean;
+    rent_discount_amount?: string;
+    show_security_deposit?: boolean;
+    key_deposit_description?: string;
+    security_deposit_amount?: string;
+    rent_discount_description?: string;
+  } | null;
+  property: {
+    id: string;
+    name: string;
+  } | null;
+  unit: {
+    unit_id: string;
+    unit_name: string;
+  } | null;
+  tenant_id: string[] | null;
+  tenant: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    role: string;
+    email?: string;
+    phone?: string;
+    unit?: {
+      unit_number: string;
+      property_name: string;
+    };
+  } | null;
+};
 
 interface LeasesClientProps {
   leases: Lease[];
@@ -72,7 +114,7 @@ function LeaseTable({ leases }: { leases: Lease[] }) {
         <TableHeader className="bg-muted">
           <TableRow className="hover:bg-transparent border-0">
             <TableHead className="font-semibold text-foreground">Tenant</TableHead>
-            <TableHead className="font-semibold text-foreground">Property</TableHead>
+            <TableHead className="font-semibold text-foreground">Related To</TableHead>
             <TableHead className="font-semibold text-foreground">Start Date</TableHead>
             <TableHead className="font-semibold text-foreground">End Date</TableHead>
             <TableHead className="font-semibold text-foreground">Rent</TableHead>
@@ -105,9 +147,16 @@ function LeaseTable({ leases }: { leases: Lease[] }) {
                           <User className="size-5 text-[#16B364]" strokeWidth={2} />
                         </div>
                       </div>
-                      <span className="font-bold">
-                        {lease.tenant ? `${lease.tenant.first_name} ${lease.tenant.last_name}` : 'No Tenant'}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="font-bold">
+                          {lease.tenant ? `${lease.tenant.first_name} ${lease.tenant.last_name}` : 'No Tenant'}
+                        </span>
+                        {lease.lease_status && (
+                          <span className="text-xs text-muted-foreground/75">
+                            {lease.lease_status.charAt(0).toUpperCase() + lease.lease_status.slice(1)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -124,10 +173,15 @@ function LeaseTable({ leases }: { leases: Lease[] }) {
                     }).format(parseFloat(lease.rent_amount || '0'))}
                   </TableCell>
                   <TableCell>
-                    {new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'USD',
-                    }).format(parseFloat(lease.deposit_amount || '0'))}
+                    {(() => {
+                      const securityDeposit = lease.deposits?.security_deposit_amount || '0';
+                      const keyDeposit = lease.deposits?.key_deposit_amount || '0';
+                      const totalDeposit = parseFloat(securityDeposit) + parseFloat(keyDeposit);
+                      return new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                      }).format(totalDeposit);
+                    })()}
                   </TableCell>
                   <TableCell>
                     <Link href={`/leases/${lease.id}`} onClick={(e) => e.stopPropagation()}>
@@ -192,11 +246,21 @@ export function LeasesClient({ leases }: LeasesClientProps) {
 
   // Filter active and inactive leases
   const activeLeases = filteredLeases.filter(lease => {
+    // Use lease_status if available, otherwise fall back to end_date logic
+    if (lease.lease_status) {
+      return lease.lease_status === 'active';
+    }
+    // Fallback: if no lease_status, use end_date logic
     if (!lease.end_date) return true;
     return new Date(lease.end_date) >= new Date();
   });
 
   const inactiveLeases = filteredLeases.filter(lease => {
+    // Use lease_status if available, otherwise fall back to end_date logic
+    if (lease.lease_status) {
+      return lease.lease_status !== 'active';
+    }
+    // Fallback: if no lease_status, use end_date logic
     if (!lease.end_date) return false;
     return new Date(lease.end_date) < new Date();
   });
@@ -229,11 +293,11 @@ export function LeasesClient({ leases }: LeasesClientProps) {
           <Tabs defaultValue="active" className="w-full">
             <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
               <TabsTrigger value="active" className="flex items-center">
-                <ShieldCheck className="mr-2 h-4 w-4" />
+                <CircleCheck className="mr-2 h-4 w-4" />
                 Active
               </TabsTrigger>
               <TabsTrigger value="inactive" className="flex items-center">
-                <ShieldX className="mr-2 h-4 w-4" />
+                <CircleX className="mr-2 h-4 w-4" />
                 Inactive
               </TabsTrigger>
             </TabsList>

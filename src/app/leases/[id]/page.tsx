@@ -2,9 +2,125 @@ import { Suspense } from 'react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { createClient } from '@/utils/supabase/server';
-import { notFound } from 'next/navigation';
-import { LeaseDetailsClient } from './lease-details-client';
-import { Property, Unit, TenantInfo as Tenant } from '../types';
+import { LeaseDetailsClient } from './components/lease-details-client';
+
+// Local type definitions
+interface Property {
+  id: string;
+  name: string;
+}
+
+interface Unit {
+  unit_id: string;
+  unit_name: string;
+}
+
+interface TenantInfo {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+}
+
+interface AllTenant {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  role: string;
+  unit?: {
+    unit_number: string;
+    property_name: string;
+  };
+}
+
+interface Person {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string;
+  unit_id: string | null;
+  units?: {
+    unit_name: string;
+    properties: {
+      name: string;
+    };
+  } | null;
+  company: string | null;
+}
+
+interface Transaction {
+  id: string;
+  transaction_type: string;
+  property: string;
+  start_date: string;
+  memo: {
+    type: string;
+    content: string;
+    root?: {
+      type: string;
+      format: string;
+      indent: number;
+      version: number;
+      children: Array<{
+        type: string;
+        format: string;
+        indent: number;
+        version: number;
+        children: never[];
+        direction: string | null;
+        textStyle: string;
+        textFormat: number;
+      }>;
+      direction: string | null;
+    };
+  } | null;
+  data: {
+    total_amount: number;
+    payment_method?: string;
+    lines?: Array<{
+      category: string;
+      unit: string;
+      description: string;
+      debit_amount: number;
+      credit_amount: number;
+    }>;
+  };
+  created_at: string;
+  created_by: string;
+  reference?: string;
+  payee?: string;
+}
+
+interface Account {
+  id: string;
+  account_name: string;
+  account_type: string;
+  account_subtype: string;
+  account_balance: number;
+  start_balance: number;
+  accounting_start_date: string;
+  owner_id?: string;
+  property_balance?: Array<{
+    property_id: string;
+    property_name: string;
+    balance: number;
+    start_balance: number;
+    accounting_start_date: string;
+  }>;
+  active_account: boolean;
+  sub_accounts?: Array<{
+    id: string;
+    account_name: string;
+    account_subtype: string;
+    account_balance: number;
+  }>;
+}
 
 interface LeaseDetails {
   id: string;
@@ -14,9 +130,26 @@ interface LeaseDetails {
   rent_amount: string | null;
   lease_type: string | null;
   deposit_amount: string | null;
+  tenant_portal_status: string | null;
+  rollover_to_month_to_month: boolean | null;
+  payment_frequency: string | null;
+  first_rent_due_day: number | null;
+  insurance: {
+    start_date: string;
+    expiration_date: string;
+    policy_number: string;
+    provider: string;
+    coverage_amount: number;
+  } | null;
   property: Property | null;
   unit: Unit | null;
-  tenant: Tenant | null;
+  tenant: TenantInfo | null;
+  allTenants: AllTenant[];
+  // Transaction-related data
+  transactions: Transaction[];
+  accounts: Account[];
+  properties: Property[];
+  people: Person[];
 }
 
 function ErrorAlert({ error }: { error: Error }) {
@@ -31,7 +164,112 @@ function ErrorAlert({ error }: { error: Error }) {
   );
 }
 
-async function fetchLeaseDetails(id: string): Promise<LeaseDetails> {
+async function fetchAllTenants(supabase: Awaited<ReturnType<typeof createClient>>, companyId: string): Promise<AllTenant[]> {
+  // Fetch tenants from the people table
+  const { data: tenants, error: tenantsError } = await supabase
+    .from('people')
+    .select(`
+      id,
+      first_name,
+      last_name,
+      role,
+      email,
+      phone,
+      property_id,
+      unit_id,
+      units (
+        unit_name,
+        properties (
+          name
+        )
+      )
+    `)
+    .eq('company_id', companyId)
+    .eq('role', 'tenant');
+
+  if (tenantsError) {
+    console.error('Error fetching tenants:', tenantsError);
+    throw new Error(`Failed to fetch tenants: ${tenantsError.message}`);
+  }
+
+  // Transform the data to match the frontend interface
+  return (tenants || []).map((tenant) => ({
+    id: tenant.id,
+    first_name: tenant.first_name,
+    last_name: tenant.last_name,
+    email: tenant.email || '',
+    phone: tenant.phone || '',
+    role: tenant.role,
+    unit: tenant.units && Array.isArray(tenant.units) && tenant.units.length > 0 ? {
+      unit_number: tenant.units[0].unit_name,
+      property_name: tenant.units[0].properties && Array.isArray(tenant.units[0].properties) && tenant.units[0].properties.length > 0 
+        ? tenant.units[0].properties[0].name 
+        : ''
+    } : undefined
+  }));
+}
+
+async function fetchTransactionData(supabase: Awaited<ReturnType<typeof createClient>>, companyId: string, leaseId?: string): Promise<{
+  transactions: Transaction[];
+  accounts: Account[];
+  properties: Property[];
+  people: Person[];
+}> {
+  try {
+    // Fetch all the data needed for transactions in parallel using Supabase client
+    const [accountsResult, propertiesResult, peopleResult, transactionsResult] = await Promise.all([
+      // Fetch accounts from the accounting_accounts table
+      supabase
+        .from('accounting_accounts')
+        .select('*')
+        .eq('company_id', companyId),
+      
+      // Fetch properties
+      supabase
+        .from('properties')
+        .select('id, name')
+        .eq('company_id', companyId),
+      
+      // Fetch people
+      supabase
+        .from('people')
+        .select('*')
+        .eq('company_id', companyId),
+
+      // Fetch transactions from the accounting_transactions table
+      supabase
+        .from('accounting_transactions')
+        .select('*')
+        .eq('company_id', companyId)
+        .gte('start_date', '1970-01-01')
+        .lte('start_date', new Date().toISOString().split('T')[0])
+        .order('start_date', { ascending: false }),
+    ]);
+
+    // Filter transactions by lease if leaseId is provided
+    let transactions = transactionsResult.data || [];
+    if (leaseId && leaseId !== 'all') {
+      transactions = transactions.filter(t => t.reference === leaseId);
+    }
+
+    return {
+      transactions: transactions,
+      accounts: accountsResult.data || [],
+      properties: propertiesResult.data || [],
+      people: peopleResult.data || [],
+    };
+  } catch (error) {
+    console.error('Error fetching transaction data:', error);
+    return {
+      transactions: [],
+      accounts: [],
+      properties: [],
+      people: [],
+    };
+  }
+}
+
+async function fetchLeaseData(leaseId: string) {
   const supabase = await createClient();
 
   try {
@@ -54,115 +292,114 @@ async function fetchLeaseDetails(id: string): Promise<LeaseDetails> {
       throw new Error('Failed to get company');
     }
 
-    // First fetch the lease
+    // Fetch lease details
     const { data: lease, error: leaseError } = await supabase
       .from('lease_contracts')
-      .select('*, property_id, unit_id, tenant_id')
-      .eq('id', id)
+      .select(`
+        id,
+        created_at,
+        start_date,
+        end_date,
+        rent_amount,
+        lease_type,
+        deposits,
+        lease_status,
+        property_id,
+        unit_id,
+        tenant_id
+      `)
+      .eq('id', leaseId)
       .eq('company_id', companyMember.company_id)
       .single();
 
     if (leaseError) {
-      console.error('Lease error:', leaseError);
-      throw new Error('Failed to fetch lease');
+      console.error('Error fetching lease:', leaseError);
+      throw new Error(`Failed to fetch lease: ${leaseError.message}`);
     }
 
-    if (!lease) {
-      throw new Error('Lease not found');
-    }
-
-    // Extract tenant ID from the tenant_id object
-    let tenantId = null;
-    if (lease.tenant_id) {
-      if (Array.isArray(lease.tenant_id)) {
-        tenantId = lease.tenant_id[0]?.id;
-      } else if (typeof lease.tenant_id === 'string') {
-        tenantId = lease.tenant_id;
-      } else if (typeof lease.tenant_id === 'object') {
-        tenantId = lease.tenant_id.id;
-      }
-    }
-
-    // Then fetch related data in parallel
-    const [propertyResult, unitResult, tenantResult] = await Promise.all([
+    // Fetch related data in parallel
+    const [propertyResponse, unitResponse, tenantResponse] = await Promise.all([
       // Fetch property
       lease.property_id ? supabase
         .from('properties')
-        .select('id, name, address_line_1, address_line_2, city, state, zip')
+        .select('id, name')
         .eq('id', lease.property_id)
-        .single() : { data: null, error: null },
+        .single() : Promise.resolve({ data: null }),
 
       // Fetch unit
       lease.unit_id ? supabase
         .from('units')
         .select('unit_id, unit_name')
         .eq('unit_id', lease.unit_id)
-        .single() : { data: null, error: null },
+        .single() : Promise.resolve({ data: null }),
 
       // Fetch tenant
-      tenantId ? supabase
+      lease.tenant_id && Array.isArray(lease.tenant_id) && lease.tenant_id.length > 0 ? supabase
         .from('people')
-        .select('id, first_name, last_name, email, phone, role')
-        .eq('id', tenantId)
-        .single() : { data: null, error: null }
+        .select('id, first_name, last_name, role')
+        .eq('id', lease.tenant_id[0])
+        .eq('role', 'tenant')
+        .single() : Promise.resolve({ data: null })
     ]);
 
-    // Check for errors in the parallel requests
-    if (propertyResult.error) {
-      console.error('Property error:', propertyResult.error);
-      throw new Error('Failed to fetch property details');
-    }
-    if (unitResult.error) {
-      console.error('Unit error:', unitResult.error);
-      throw new Error('Failed to fetch unit details');
-    }
-    if (tenantResult.error) {
-      console.error('Tenant error:', tenantResult.error);
-      throw new Error('Failed to fetch tenant details');
-    }
-
-    // Combine all the data
-    const leaseDetails = {
-      id: lease.id,
-      created_at: lease.created_at,
-      start_date: lease.start_date,
-      end_date: lease.end_date,
-      rent_amount: lease.rent_amount,
-      lease_type: lease.lease_type,
-      deposit_amount: lease.deposit_amount,
-      property: propertyResult.data,
-      unit: unitResult.data,
-      tenant: tenantResult.data
+    // Combine the data
+    const combinedLease = {
+      ...lease,
+      property: propertyResponse.data,
+      unit: unitResponse.data,
+      tenant: tenantResponse.data
     };
 
-    return leaseDetails;
+         // Fetch transaction data for this lease
+     const transactionData = await fetchTransactionData(supabase, companyMember.company_id, leaseId);
+
+     // Fetch all tenants
+     const allTenants = await fetchAllTenants(supabase, companyMember.company_id);
+
+     // Create the lease details object
+     const leaseDetails: LeaseDetails = {
+       id: combinedLease.id,
+       created_at: combinedLease.created_at,
+       start_date: combinedLease.start_date,
+       end_date: combinedLease.end_date,
+       rent_amount: combinedLease.rent_amount,
+       lease_type: combinedLease.lease_type,
+       deposit_amount: null, // This field might need to be added to the query
+       tenant_portal_status: null, // This field might need to be added to the query
+       rollover_to_month_to_month: null, // This field might need to be added to the query
+       payment_frequency: null, // This field might need to be added to the query
+       first_rent_due_day: null, // This field might need to be added to the query
+       insurance: null, // This field might need to be added to the query
+       property: combinedLease.property,
+       unit: combinedLease.unit,
+       tenant: combinedLease.tenant,
+       allTenants: allTenants,
+       transactions: transactionData.transactions,
+       accounts: transactionData.accounts,
+       properties: transactionData.properties,
+       people: transactionData.people,
+     };
+
+     return leaseDetails;
   } catch (error) {
-    console.error('Error in fetchLeaseDetails:', error);
+    console.error('Unexpected error in fetchLeaseData:', error);
     throw error;
   }
 }
 
-export default async function LeaseDetailsPage({ params }: { params: { id: string } }) {
+export default async function LeasePage({ params }: { params: { id: string } }) {
   try {
-    const leaseDetails = await fetchLeaseDetails(params.id);
+    const leaseDetails = await fetchLeaseData(params.id);
     
     return (
-      <Suspense fallback={<div className="flex items-center justify-center h-screen">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>}>
+      <Suspense fallback={<div className="p-6">Loading lease details...</div>}>
         <LeaseDetailsClient leaseDetails={leaseDetails} />
       </Suspense>
     );
   } catch (error) {
-    if ((error as Error).message === 'Lease not found') {
-      return notFound();
-    }
-    
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <div className="w-full max-w-md">
-          <ErrorAlert error={error instanceof Error ? error : new Error('An unknown error occurred')} />
-        </div>
+      <div className="p-6">
+        <ErrorAlert error={error instanceof Error ? error : new Error('An unknown error occurred')} />
       </div>
     );
   }

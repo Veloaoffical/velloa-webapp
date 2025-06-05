@@ -6,10 +6,127 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, User, ClipboardList, StickyNote, FolderOpen, Settings, Building2, FileSignature, DollarSign, Wallet } from "lucide-react";
 import Link from 'next/link';
 import { useState } from 'react';
-import { OverviewContent } from './components/OverviewContent';
-import { TenantContent } from './components/TenantContent';
-import { Property, Unit, TenantInfo as Tenant } from '../types';
-import TransactionContent from './components/transaction-content';
+import { OverviewContent } from './lease-overview-content';
+import { TenantContent } from './lease-tenant-content';
+import TransactionContent from './lease-transaction-content';
+
+// Local type definitions
+interface Property {
+  id: string;
+  name: string;
+}
+
+interface Unit {
+  unit_id: string;
+  unit_name: string;
+}
+
+interface TenantInfo {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+}
+
+interface AllTenant {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  role: string;
+  unit?: {
+    unit_number: string;
+    property_name: string;
+  };
+}
+
+interface Person {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string;
+  unit_id: string | null;
+  units?: {
+    unit_name: string;
+    properties: {
+      name: string;
+    };
+  } | null;
+  company: string | null;
+}
+
+interface Transaction {
+  id: string;
+  transaction_type: string;
+  property: string;
+  start_date: string;
+  memo: {
+    type: string;
+    content: string;
+    root?: {
+      type: string;
+      format: string;
+      indent: number;
+      version: number;
+      children: Array<{
+        type: string;
+        format: string;
+        indent: number;
+        version: number;
+        children: never[];
+        direction: string | null;
+        textStyle: string;
+        textFormat: number;
+      }>;
+      direction: string | null;
+    };
+  } | null;
+  data: {
+    total_amount: number;
+    payment_method?: string;
+    lines?: Array<{
+      category: string;
+      unit: string;
+      description: string;
+      debit_amount: number;
+      credit_amount: number;
+    }>;
+  };
+  created_at: string;
+  created_by: string;
+  reference?: string;
+  payee?: string;
+}
+
+interface Account {
+  id: string;
+  account_name: string;
+  account_type: string;
+  account_subtype: string;
+  account_balance: number;
+  start_balance: number;
+  accounting_start_date: string;
+  owner_id?: string;
+  property_balance?: Array<{
+    property_id: string;
+    property_name: string;
+    balance: number;
+    start_balance: number;
+    accounting_start_date: string;
+  }>;
+  active_account: boolean;
+  sub_accounts?: Array<{
+    id: string;
+    account_name: string;
+    account_subtype: string;
+    account_balance: number;
+  }>;
+}
 
 interface LeaseDetails {
   id: string;
@@ -19,13 +136,31 @@ interface LeaseDetails {
   rent_amount: string | null;
   lease_type: string | null;
   deposit_amount: string | null;
+  tenant_portal_status: string | null;
+  rollover_to_month_to_month: boolean | null;
+  payment_frequency: string | null;
+  first_rent_due_day: number | null;
+  insurance: {
+    start_date: string;
+    expiration_date: string;
+    policy_number: string;
+    provider: string;
+    coverage_amount: number;
+  } | null;
   property: Property | null;
   unit: Unit | null;
-  tenant: Tenant | null;
+  tenant: TenantInfo | null;
+  allTenants: AllTenant[];
+  // Transaction-related data
+  transactions: Transaction[];
+  accounts: Account[];
+  properties: Property[];
+  people: Person[];
 }
 
 // Type adapter for component compatibility
 interface ComponentTenant {
+  id: string;
   first_name: string;
   last_name: string;
   email: string;
@@ -33,10 +168,11 @@ interface ComponentTenant {
 }
 
 // Function to adapt TenantInfo to ComponentTenant format
-const adaptTenant = (tenant: Tenant | null): ComponentTenant | null => {
+const adaptTenant = (tenant: TenantInfo | null): ComponentTenant | null => {
   if (!tenant) return null;
   
   return {
+    id: tenant.id,
     first_name: tenant.first_name,
     last_name: tenant.last_name,
     email: tenant.email || '', // Provide empty string as fallback
@@ -175,6 +311,11 @@ export function LeaseDetailsClient({ leaseDetails }: LeaseDetailsClientProps) {
                   rent_amount: leaseDetails.rent_amount,
                   lease_type: leaseDetails.lease_type,
                   deposit_amount: leaseDetails.deposit_amount,
+                  tenant_portal_status: leaseDetails.tenant_portal_status,
+                  rollover_to_month_to_month: leaseDetails.rollover_to_month_to_month,
+                  payment_frequency: leaseDetails.payment_frequency,
+                  first_rent_due_day: leaseDetails.first_rent_due_day,
+                  insurance: leaseDetails.insurance,
                   unit_id: leaseDetails.unit?.unit_id,
                   property: leaseDetails.property,
                   unit: leaseDetails.unit,
@@ -185,10 +326,17 @@ export function LeaseDetailsClient({ leaseDetails }: LeaseDetailsClientProps) {
               <TenantContent 
                 tenant={adaptedTenant} 
                 start_date={leaseDetails.start_date}
+                allTenants={leaseDetails.allTenants}
               />
             </TabsContent>
             <TabsContent value="transactions" className="m-0">
-              <TransactionContent leaseId={leaseDetails.id} />    
+              <TransactionContent 
+                leaseId={leaseDetails.id}
+                initialTransactions={leaseDetails.transactions}
+                initialAccounts={leaseDetails.accounts}
+                initialProperties={leaseDetails.properties}
+                initialPeople={leaseDetails.people}
+              />    
             </TabsContent>
             <TabsContent value="rent" className="m-0">
               <div>Rent content coming soon</div>

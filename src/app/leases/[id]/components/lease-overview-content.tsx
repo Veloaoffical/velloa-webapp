@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { PlusCircle, DollarSign, StickyNote, Calendar, FileText, Wallet, Building2, ShieldCheck, AlertCircle } from "lucide-react";
+import { PlusCircle, DollarSign, StickyNote, Calendar, FileText, Wallet, Building2, ShieldCheck, AlertCircle, MonitorSmartphone, Users } from "lucide-react";
 import { useState } from "react";
 
 interface OverviewContentProps {
@@ -20,12 +20,23 @@ interface OverviewContentProps {
     rent_amount: string | null;
     lease_type: string | null;
     deposit_amount: string | null;
+    tenant_portal_status: string | null;
+    rollover_to_month_to_month: boolean | null;
+    payment_frequency: string | null;
+    first_rent_due_day: number | null;
     unit_id?: string | null;
     property?: {
       name: string;
     } | null;
     unit?: {
       unit_name: string;
+    } | null;
+    insurance: {
+      start_date: string;
+      expiration_date: string;
+      policy_number: string;
+      provider: string;
+      coverage_amount: number;
     } | null;
   };
 }
@@ -34,6 +45,9 @@ export function OverviewContent({ leaseDetails }: OverviewContentProps) {
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false);
   const [isChangeDialogOpen, setIsChangeDialogOpen] = useState(false);
+
+  // Debug: Log the insurance data
+  console.log('OverviewContent insurance data:', leaseDetails.insurance);
 
   const handlePaymentSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -59,6 +73,55 @@ export function OverviewContent({ leaseDetails }: OverviewContentProps) {
       style: 'currency',
       currency: 'USD',
     }).format(Number(amount));
+  };
+
+  const capitalizeFirstLetter = (text: string | null) => {
+    if (!text) return 'Not Set';
+    return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+  };
+
+  const getPortalStatusColor = (status: string | null) => {
+    if (!status) return 'text-muted-foreground';
+    switch (status.toLowerCase()) {
+      case 'active':
+        return 'text-green-600';
+      case 'pending':
+        return 'text-yellow-500';
+      case 'inactive':
+        return 'text-red-500';
+      default:
+        return 'text-muted-foreground';
+    }
+  };
+
+  const getInsuranceStatus = () => {
+    if (!leaseDetails.insurance?.start_date || !leaseDetails.insurance?.expiration_date) {
+      return { status: 'Not Set', color: 'text-muted-foreground' };
+    }
+    
+    const today = new Date();
+    const startDate = new Date(leaseDetails.insurance.start_date);
+    const expirationDate = new Date(leaseDetails.insurance.expiration_date);
+    
+    if (today < startDate) {
+      return { status: 'Pending', color: 'text-yellow-500' };
+    } else if (today > expirationDate) {
+      return { status: 'Expired', color: 'text-red-500' };
+    } else {
+      return { status: 'Active', color: 'text-green-600' };
+    }
+  };
+
+  const insuranceStatus = getInsuranceStatus();
+
+  const getOrdinalSuffix = (day: number) => {
+    if (day > 3 && day < 21) return 'th';
+    switch (day % 10) {
+      case 1:  return "st";
+      case 2:  return "nd";
+      case 3:  return "rd";
+      default: return "th";
+    }
   };
 
   return (
@@ -192,7 +255,7 @@ export function OverviewContent({ leaseDetails }: OverviewContentProps) {
       </Card>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-6 flex flex-col items-center justify-center text-center">
             <FileText className={`h-6 w-6 mb-2 ${
@@ -239,7 +302,16 @@ export function OverviewContent({ leaseDetails }: OverviewContentProps) {
             <Calendar className="h-6 w-6 mb-2 text-blue-600" />
             <p className="text-sm text-muted-foreground">Lease Type</p>
             <p className="font-medium">
-              {leaseDetails.lease_type || 'Not Set'}
+              {capitalizeFirstLetter(leaseDetails.lease_type)}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6 flex flex-col items-center justify-center text-center">
+            <MonitorSmartphone className={`h-6 w-6 mb-2 ${getPortalStatusColor(leaseDetails.tenant_portal_status)}`} />
+            <p className="text-sm text-muted-foreground">Portal Status</p>
+            <p className="font-medium">
+              {capitalizeFirstLetter(leaseDetails.tenant_portal_status)}
             </p>
           </CardContent>
         </Card>
@@ -247,61 +319,151 @@ export function OverviewContent({ leaseDetails }: OverviewContentProps) {
 
       {/* Secondary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center mb-4">
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-5 w-5 text-blue-600" />
-                <h3 className="font-semibold">Outstanding Balance</h3>
+                <CardTitle className="text-base font-semibold">Outstanding Balance</CardTitle>
               </div>
-            </div>
-            <div className="flex flex-col items-center justify-center text-center">
-              <span className="text-3xl font-semibold text-blue-600">
-                $0
-              </span>
-              <span className="text-sm text-muted-foreground">
-                outstanding
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <hr className="border-border" />
+            <CardContent className="p-6">
+              <div className="flex flex-col items-center justify-center text-center">
+                <span className="text-3xl font-semibold text-blue-600">
+                  $0
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  outstanding
+                </span>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center mb-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-blue-600" />
+                <CardTitle className="text-base font-semibold">Lease Details</CardTitle>
+              </div>
+            </CardHeader>
+            <hr className="border-border" />
+            <CardContent className="p-6">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Rollover to Month-to-Month</span>
+                  <span className="text-sm font-medium">
+                    {leaseDetails.rollover_to_month_to_month !== null 
+                      ? (leaseDetails.rollover_to_month_to_month ? 'Yes' : 'No')
+                      : 'Not Set'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Payment Frequency</span>
+                  <span className="text-sm font-medium">
+                    {capitalizeFirstLetter(leaseDetails.payment_frequency)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">First Rent Due Day</span>
+                  <span className="text-sm font-medium">
+                    {leaseDetails.first_rent_due_day 
+                      ? `${leaseDetails.first_rent_due_day}${getOrdinalSuffix(leaseDetails.first_rent_due_day)}`
+                      : 'Not Set'}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <div className="flex items-center gap-2">
                 <Building2 className="h-5 w-5 text-blue-600" />
-                <h3 className="font-semibold">Linked Units</h3>
+                <CardTitle className="text-base font-semibold">Linked Units</CardTitle>
               </div>
-            </div>
-            <div className="flex flex-col items-center justify-center text-center">
-              <span className="text-3xl font-semibold">
-                {leaseDetails.unit ? '1' : '0'}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {leaseDetails.unit ? 'unit' : 'units'}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <hr className="border-border" />
+            <CardContent className="p-6">
+              <div className="flex flex-col items-center justify-center text-center">
+                <span className="text-3xl font-semibold">
+                  {leaseDetails.unit ? '1' : '0'}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {leaseDetails.unit ? 'unit' : 'units'}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-blue-600" />
+                <CardTitle className="text-base font-semibold">Number of Tenants</CardTitle>
+              </div>
+            </CardHeader>
+            <hr className="border-border" />
+            <CardContent className="p-6">
+              <div className="flex flex-col items-center justify-center text-center h-[76px]">
+                <span className="text-3xl font-semibold">
+                  {leaseDetails.tenant ? '1' : '0'}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {leaseDetails.tenant ? 'tenant' : 'tenants'}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-blue-600" />
-                <h3 className="font-semibold">Insurance Policy</h3>
-              </div>
-              <Button variant="outline" size="sm">Update</Button>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-blue-600" />
+              <CardTitle className="text-base font-semibold">Insurance Policy</CardTitle>
             </div>
+          </CardHeader>
+          <hr className="border-border" />
+          <CardContent className="p-6">
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Status</span>
-                <span className="text-sm font-medium text-yellow-500">Not Verified</span>
+                <span className={`text-sm font-medium ${insuranceStatus.color}`}>{insuranceStatus.status}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Expiry</span>
-                <span className="text-sm font-medium">Not Set</span>
+                <span className="text-sm text-muted-foreground">Provider</span>
+                <span className="text-sm font-medium">{leaseDetails.insurance?.provider || 'Not Set'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Policy Number</span>
+                <span className="text-sm font-medium">{leaseDetails.insurance?.policy_number || 'Not Set'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Coverage Amount</span>
+                <span className="text-sm font-medium">
+                  {leaseDetails.insurance?.coverage_amount 
+                    ? formatCurrency(leaseDetails.insurance.coverage_amount.toString()) 
+                    : 'Not Set'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Start Date</span>
+                <span className="text-sm font-medium">
+                  {leaseDetails.insurance?.start_date 
+                    ? new Date(leaseDetails.insurance.start_date).toLocaleDateString() 
+                    : 'Not Set'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Expiry Date</span>
+                <span className="text-sm font-medium">
+                  {leaseDetails.insurance?.expiration_date 
+                    ? new Date(leaseDetails.insurance.expiration_date).toLocaleDateString() 
+                    : 'Not Set'}
+                </span>
               </div>
             </div>
           </CardContent>

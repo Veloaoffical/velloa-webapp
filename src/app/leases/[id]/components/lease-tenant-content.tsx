@@ -9,8 +9,11 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import CalendarWithMonthsInput from "@/components/calendarwithmonthsinput";
+import { useRouter } from "next/navigation";
 
-interface Tenant {
+// Using AllTenant interface for consistency
+
+interface AllTenant {
   id: string;
   first_name: string;
   last_name: string;
@@ -25,23 +28,24 @@ interface Tenant {
 
 interface TenantContentProps {
   tenant: {
+    id: string;
     first_name: string;
     last_name: string;
     email: string;
     phone: string;
   } | null;
   start_date: string | null;
+  allTenants: AllTenant[];
 }
 
-export function TenantContent({ tenant, start_date }: TenantContentProps) {
+export function TenantContent({ tenant, start_date, allTenants }: TenantContentProps) {
+  const router = useRouter();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
+  const [selectedTenant, setSelectedTenant] = useState<AllTenant | null>(null);
   const [moveInDate, setMoveInDate] = useState<Date | undefined>(undefined);
   const [inviteToPortal, setInviteToPortal] = useState(true);
   const [sendWelcomeMessage, setSendWelcomeMessage] = useState(false);
-  const [allTenants, setAllTenants] = useState<Tenant[]>([]);
-  const [filteredTenants, setFilteredTenants] = useState<Tenant[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [filteredTenants, setFilteredTenants] = useState<AllTenant[]>(allTenants);
   const [currentPage, setCurrentPage] = useState(1);
   const tenantsPerPage = 6;
   const shouldShowTenant = start_date && new Date() >= new Date(start_date);
@@ -63,29 +67,9 @@ export function TenantContent({ tenant, start_date }: TenantContentProps) {
   };
 
   useEffect(() => {
-    const fetchTenants = async () => {
-      if (!isDialogOpen) return;
-
-      setIsLoading(true);
-      try {
-        const response = await fetch('/api/people/tenants');
-        if (!response.ok) {
-          throw new Error('Failed to fetch tenants');
-        }
-        const data = await response.json();
-        setAllTenants(data);
-        setFilteredTenants(data);
-      } catch (error) {
-        console.error('Error fetching tenants:', error);
-        setAllTenants([]);
-        setFilteredTenants([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchTenants();
-  }, [isDialogOpen]);
+    // Initialize filtered tenants when allTenants prop changes
+    setFilteredTenants(allTenants);
+  }, [allTenants]);
 
   const handleSearch = (searchValue: string) => {
     const lowercasedSearch = searchValue.toLowerCase();
@@ -103,9 +87,13 @@ export function TenantContent({ tenant, start_date }: TenantContentProps) {
   const endIndex = startIndex + tenantsPerPage;
   const currentTenants = filteredTenants.slice(startIndex, endIndex);
 
-  const handleTenantSelect = (tenant: Tenant) => {
+  const handleTenantSelect = (tenant: AllTenant) => {
     setSelectedTenant(tenant);
     setMoveInDate(new Date()); // Set default date to today
+  };
+
+  const handleTenantRowClick = (tenantId: string) => {
+    router.push(`/people/${tenantId}`);
   };
 
   return (
@@ -137,11 +125,8 @@ export function TenantContent({ tenant, start_date }: TenantContentProps) {
                     New Tenant
                   </Button>
                 </div>
-                {isLoading ? (
-                  <div className="text-center py-8 text-muted-foreground">Loading...</div>
-                ) : (
-                  <>
-                    <Table>
+                <>
+                  <Table>
                       <TableHeader className="bg-muted">
                         <TableRow className="hover:bg-transparent">
                           <TableHead>Name</TableHead>
@@ -228,7 +213,6 @@ export function TenantContent({ tenant, start_date }: TenantContentProps) {
                       </div>
                     )}
                   </>
-                )}
               </>
             ) : (
               <div className="space-y-6">
@@ -352,12 +336,15 @@ export function TenantContent({ tenant, start_date }: TenantContentProps) {
                 <TableHead>Contact Info</TableHead>
                 <TableHead>Balance</TableHead>
                 <TableHead>Tenant Portal</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tenant && shouldShowTenant ? (
-                <TableRow>
+                <TableRow 
+                  className="cursor-pointer hover:bg-accent"
+                  onClick={() => handleTenantRowClick(tenant.id)}
+                >
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <div className="shrink-0 bg-[hsl(var(--success-light))] rounded-lg p-2">
@@ -371,23 +358,19 @@ export function TenantContent({ tenant, start_date }: TenantContentProps) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="space-y-1">
-                      {tenant.email && (
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">
-                            {tenant.email}
-                          </span>
-                        </div>
-                      )}
-                      {tenant.phone && (
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">
-                            {formatPhoneNumber(tenant.phone)}
-                          </span>
-                        </div>
-                      )}
+                    <div className="flex flex-col space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">
+                          {tenant.email || 'No email'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">
+                          {tenant.phone ? formatPhoneNumber(tenant.phone) : 'No phone'}
+                        </span>
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -400,14 +383,7 @@ export function TenantContent({ tenant, start_date }: TenantContentProps) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm">
-                        Message
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        More
-                      </Button>
-                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : (

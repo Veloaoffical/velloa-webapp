@@ -3,12 +3,18 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, User, ClipboardList, StickyNote, FolderOpen, Settings, Building2, FileSignature, DollarSign, Wallet } from "lucide-react";
+import { ArrowLeft, User, ClipboardList, StickyNote, FolderOpen, Settings, Building2, FileSignature, DollarSign, Wallet, ArrowLeftIcon } from "lucide-react";
 import Link from 'next/link';
 import { useState } from 'react';
 import { OverviewContent } from './lease-overview-content';
 import { TenantContent } from './lease-tenant-content';
 import TransactionContent from './lease-transaction-content';
+import { LeaseRentContent } from './lease-rent-content';
+import DepositsContent from './lease-deposits-content';
+import SignaturesContent from './lease-signatures-content';
+import LeaseTaskContent from './lease-task-content';
+import { LeaseNotes, ProcessedNote } from './lease-notes';
+import { LeaseFiles } from './lease-files';
 
 // Local type definitions
 interface Property {
@@ -128,6 +134,84 @@ interface Account {
   }>;
 }
 
+// Types for charges data structure
+interface ChargeAmount {
+  lines: Array<{
+    amount: number;
+    line_id: string;
+    category_id: string;
+    description: string;
+  }>;
+  total_amount: number;
+  accounts_receivable_id?: string;
+}
+
+interface Charge {
+  id: string;
+  charge_type: string;
+  charge_amount: ChargeAmount;
+  status: string;
+  due_date: string;
+  lease_id: string | null;
+  people_id: string | null;
+  created_at: string;
+  start_date?: string;
+  bill_date?: string;
+  frequency?: string;
+  memo?: Record<string, unknown> | null;
+  reference?: string;
+}
+
+// Work Order interface (matching the one from people page)
+interface WorkOrder {
+  id: string;
+  subject: string;
+  description: string;
+  task_status?: Record<string, { date: string | null; value: boolean | null }>;
+  priority: string;
+  due_date: string | null;
+  created_at: string;
+  assignees: string | null;
+  created_by: string;
+  nano_id: string | null;
+  property_id: string | null;
+  unit_id: string | null;
+  request_type: string | null;
+  task_type: string | null;
+  tenant: string | null;
+  property?: {
+    name: string;
+  } | null;
+  unit?: {
+    unit_name: string;
+  } | null;
+  assignee?: {
+    id: string;
+    profile: {
+      first_name: string;
+      last_name: string;
+    };
+  } | null;
+  role: string;
+  vendor_id: string | null;
+  vendor?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    company: string;
+  } | null;
+  active_status: string;
+}
+
+interface LeaseFile {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileType: string;
+  fileSize: number;
+  createdAt: string;
+}
+
 interface LeaseDetails {
   id: string;
   created_at: string;
@@ -156,6 +240,16 @@ interface LeaseDetails {
   accounts: Account[];
   properties: Property[];
   people: Person[];
+  // Charges data
+  charges: Charge[];
+  // Deposits data
+  deposits: Transaction[];
+  // Work orders data
+  workOrders: WorkOrder[];
+  // Notes data
+  notes: ProcessedNote[];
+  // Files data
+  files: LeaseFile[];
 }
 
 // Type adapter for component compatibility
@@ -186,9 +280,15 @@ interface LeaseDetailsClientProps {
 
 export function LeaseDetailsClient({ leaseDetails }: LeaseDetailsClientProps) {
   const [activeTab, setActiveTab] = useState('overview');
+  const [notes, setNotes] = useState<ProcessedNote[]>(leaseDetails.notes);
 
   // Adapt tenant data for components
   const adaptedTenant = adaptTenant(leaseDetails.tenant);
+
+  // Function to add a new note to the state
+  const addNoteToState = (newNote: ProcessedNote) => {
+    setNotes(prevNotes => [newNote, ...prevNotes]);
+  };
 
   return (
     <div className="h-screen flex flex-col">
@@ -197,9 +297,12 @@ export function LeaseDetailsClient({ leaseDetails }: LeaseDetailsClientProps) {
         <div className="bg-card flex-shrink-0">
           <div className="flex flex-col p-6 pb-6">
             <Link href="/leases" className="mb-12">
-              <Button variant="outline" size="sm" className="gap-2 w-fit">
-                <ArrowLeft className="w-4 h-4" />
-                Back
+            <Button variant="ghost" className="group w-fit gap-2">
+            <ArrowLeftIcon
+                  className="-ms-1 opacity-60 transition-transform group-hover:-translate-x-0.5"
+                  size={16}
+                  aria-hidden="true"
+                />                Back to Leases
               </Button>
             </Link>
             <div className="space-y-1">
@@ -258,11 +361,11 @@ export function LeaseDetailsClient({ leaseDetails }: LeaseDetailsClientProps) {
                     Deposits
                   </TabsTrigger>
                   <TabsTrigger
-                    value="sign-requests"
+                    value="signatures"
                     className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
                   >
                     <FileSignature className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Sign Requests
+                    Signatures
                   </TabsTrigger>
                   <TabsTrigger
                     value="tasks"
@@ -339,22 +442,53 @@ export function LeaseDetailsClient({ leaseDetails }: LeaseDetailsClientProps) {
               />    
             </TabsContent>
             <TabsContent value="rent" className="m-0">
-              <div>Rent content coming soon</div>
+              <LeaseRentContent 
+                leaseDetails={{
+                  id: leaseDetails.id,
+                  rent_amount: leaseDetails.rent_amount,
+                  payment_frequency: leaseDetails.payment_frequency,
+                  first_rent_due_day: leaseDetails.first_rent_due_day,
+                  start_date: leaseDetails.start_date,
+                  end_date: leaseDetails.end_date,
+                }}
+                charges={leaseDetails.charges}
+                accounts={leaseDetails.accounts}
+                people={leaseDetails.people}
+              />
             </TabsContent>
             <TabsContent value="deposits" className="m-0">
-              <div>Deposits content coming soon</div>
+              <DepositsContent 
+                leaseId={leaseDetails.id}
+                initialDeposits={leaseDetails.deposits}
+                initialAccounts={leaseDetails.accounts}
+                initialProperties={leaseDetails.properties}
+              />
             </TabsContent>
-            <TabsContent value="sign-requests" className="m-0">
-              <div>Sign Requests content coming soon</div>
+            <TabsContent value="signatures" className="m-0">
+              <SignaturesContent 
+                leaseId={leaseDetails.id}
+                initialSignatures={[]}
+                initialProperties={leaseDetails.properties}
+                initialPeople={leaseDetails.people}
+              />
             </TabsContent>
             <TabsContent value="tasks" className="m-0">
-              <div>Tasks content coming soon</div>
+              <LeaseTaskContent 
+                initialTasks={leaseDetails.workOrders}
+              />
             </TabsContent>
             <TabsContent value="notes" className="m-0">
-              <div>Notes content coming soon</div>
+              <LeaseNotes 
+                leaseId={leaseDetails.id}
+                notes={notes}
+                addNoteToState={addNoteToState}
+              />
             </TabsContent>
             <TabsContent value="files" className="m-0">
-              <div>Files content coming soon</div>
+              <LeaseFiles 
+                leaseId={leaseDetails.id}
+                initialFiles={leaseDetails.files}
+              />
             </TabsContent>
             <TabsContent value="settings" className="m-0">
               <div>Settings content coming soon</div>

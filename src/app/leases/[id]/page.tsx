@@ -122,6 +122,96 @@ interface Account {
   }>;
 }
 
+// Types for charges data structure
+interface ChargeAmount {
+  lines: Array<{
+    amount: number;
+    line_id: string;
+    category_id: string;
+    description: string;
+  }>;
+  total_amount: number;
+  accounts_receivable_id?: string;
+}
+
+interface Charge {
+  id: string;
+  charge_type: string;
+  charge_amount: ChargeAmount;
+  status: string;
+  due_date: string;
+  lease_id: string | null;
+  people_id: string | null;
+  created_at: string;
+  start_date?: string;
+  bill_date?: string;
+  frequency?: string;
+  memo?: Record<string, unknown> | null;
+  reference?: string;
+}
+
+// Work Order interface (matching the one from people page)
+interface WorkOrder {
+  id: string;
+  subject: string;
+  description: string;
+  task_status?: Record<string, { date: string | null; value: boolean | null }>;
+  priority: string;
+  due_date: string | null;
+  created_at: string;
+  assignees: string | null;
+  created_by: string;
+  nano_id: string | null;
+  property_id: string | null;
+  unit_id: string | null;
+  request_type: string | null;
+  task_type: string | null;
+  tenant: string | null;
+  property?: {
+    name: string;
+  } | null;
+  unit?: {
+    unit_name: string;
+  } | null;
+  assignee?: {
+    id: string;
+    profile: {
+      first_name: string;
+      last_name: string;
+    };
+  } | null;
+  role: string;
+  vendor_id: string | null;
+  vendor?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    company: string;
+  } | null;
+  active_status: string;
+}
+
+interface Note {
+  id: string;
+  note_title: string;
+  note: string | Record<string, unknown>;
+  created_at: string;
+  created_by: {
+    first_name: string;
+    middle_name: string;
+    last_name: string;
+  };
+}
+
+interface LeaseFile {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileType: string;
+  fileSize: number;
+  createdAt: string;
+}
+
 interface LeaseDetails {
   id: string;
   created_at: string;
@@ -150,6 +240,16 @@ interface LeaseDetails {
   accounts: Account[];
   properties: Property[];
   people: Person[];
+  // Charges data
+  charges: Charge[];
+  // Deposits data
+  deposits: Transaction[];
+  // Work orders data
+  workOrders: WorkOrder[];
+  // Notes data
+  notes: Note[];
+  // Files data
+  files: LeaseFile[];
 }
 
 function ErrorAlert({ error }: { error: Error }) {
@@ -209,18 +309,214 @@ async function fetchAllTenants(supabase: Awaited<ReturnType<typeof createClient>
   }));
 }
 
+// Function to fetch work orders for a lease (similar to getPersonWorkOrders)
+
+async function getLeaseWorkOrders(supabase: Awaited<ReturnType<typeof createClient>>, leaseId: string, tenantIds: string[], propertyId?: string, unitId?: string): Promise<WorkOrder[]> {
+  try {
+    // Build the query to find work orders related to this lease
+    // We'll look for work orders that match:
+    // 1. The tenant IDs from the lease
+    // 2. The property ID from the lease
+    // 3. The unit ID from the lease
+    let query = supabase
+      .from('maintenance_requests')
+      .select(`
+        id,
+        subject,
+        description,
+        task_status,
+        priority,
+        due_date,
+        created_at,
+        assignees,
+        created_by,
+        nano_id,
+        property_id,
+        unit_id,
+        request_type,
+        task_type,
+        tenant_id,
+        role,
+        vendor_id,
+        active_status,
+        property:properties!property_id (
+          name
+        ),
+        unit:units!unit_id (
+          unit_name
+        ),
+        assignee:company_members!maintenance_requests_assignees_fkey (
+          id,
+          profile:profiles (
+            first_name,
+            last_name
+          )
+        ),
+        vendor:people!maintenance_requests_vendor_id_fkey (
+          id,
+          first_name,
+          last_name,
+          company
+        ),
+        tenant:people!maintenance_requests_tenant_id_fkey (
+          id,
+          first_name,
+          last_name
+        )
+      `);
+
+    // Build OR conditions for lease-related work orders
+    const orConditions = [];
+    
+    // Add tenant conditions
+    if (tenantIds && tenantIds.length > 0) {
+      tenantIds.forEach(tenantId => {
+        orConditions.push(`tenant_id.eq.${tenantId}`);
+      });
+    }
+    
+    // Add property condition
+    if (propertyId) {
+      orConditions.push(`property_id.eq.${propertyId}`);
+    }
+    
+    // Add unit condition
+    if (unitId) {
+      orConditions.push(`unit_id.eq.${unitId}`);
+    }
+
+    if (orConditions.length > 0) {
+      query = query.or(orConditions.join(','));
+    } else {
+      // If no conditions, return empty array
+      return [];
+    }
+
+    const { data: workOrders, error } = await query.order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching lease work orders:', error);
+      return [];
+    }
+
+    return (workOrders || []).map(workOrder => {
+      // Process property data
+      const propertyData = Array.isArray(workOrder.property) ? 
+        (workOrder.property.length > 0 ? workOrder.property[0] : null) : 
+        workOrder.property;
+
+      // Process unit data  
+      const unitData = Array.isArray(workOrder.unit) ? 
+        (workOrder.unit.length > 0 ? workOrder.unit[0] : null) : 
+        workOrder.unit;
+
+      // Process assignee data
+      let assigneeData = null;
+      if (workOrder.assignee && Array.isArray(workOrder.assignee) && workOrder.assignee.length > 0) {
+        const assignee = workOrder.assignee[0];
+        if (assignee && assignee.profile) {
+          const profile = Array.isArray(assignee.profile) ? 
+            (assignee.profile.length > 0 ? assignee.profile[0] : { first_name: '', last_name: '' }) : 
+            assignee.profile;
+          assigneeData = {
+            id: assignee.id,
+            profile: profile,
+          };
+        }
+      }
+
+      // Process vendor data
+      const vendorData = Array.isArray(workOrder.vendor) && workOrder.vendor.length > 0 ? 
+        workOrder.vendor[0] : 
+        (workOrder.vendor && !Array.isArray(workOrder.vendor) ? workOrder.vendor : null);
+
+      return {
+        id: workOrder.id,
+        subject: workOrder.subject || '',
+        description: workOrder.description || '',
+        task_status: workOrder.task_status,
+        priority: workOrder.priority || 'medium',
+        due_date: workOrder.due_date,
+        created_at: workOrder.created_at,
+        assignees: workOrder.assignees,
+        created_by: workOrder.created_by,
+        nano_id: workOrder.nano_id,
+        property_id: workOrder.property_id,
+        unit_id: workOrder.unit_id,
+        request_type: workOrder.request_type,
+        task_type: workOrder.task_type,
+        tenant: workOrder.tenant_id,
+        property: propertyData,
+        unit: unitData,
+        assignee: assigneeData,
+        role: workOrder.role || 'work_order',
+        vendor_id: workOrder.vendor_id,
+        vendor: vendorData,
+        active_status: workOrder.active_status || 'active',
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching lease work orders:', error);
+    return [];
+  }
+}
+
+async function get_lease_transactions(supabase: Awaited<ReturnType<typeof createClient>>, companyId: string, leaseId: string) {
+  const { data, error } = await supabase
+    .from('transaction')
+    .select('*')
+    .eq('company', companyId)
+    .eq('data->>lease_id', leaseId)
+    .order('start_date', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching lease transactions:', error);
+    throw new Error(`Failed to fetch lease transactions: ${error.message}`);
+  }
+
+  return data || [];
+}
+
+async function fetchChargesData(supabase: Awaited<ReturnType<typeof createClient>>, companyId: string, leaseId?: string): Promise<Charge[]> {
+  try {
+    let query = supabase
+      .from('charges')
+      .select('*')
+      .eq('company_id', companyId);
+
+    // If leaseId is provided, filter by lease_id
+    if (leaseId && leaseId !== 'all') {
+      query = query.eq('lease_id', leaseId);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching charges:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching charges data:', error);
+    return [];
+  }
+}
+
 async function fetchTransactionData(supabase: Awaited<ReturnType<typeof createClient>>, companyId: string, leaseId?: string): Promise<{
   transactions: Transaction[];
   accounts: Account[];
   properties: Property[];
   people: Person[];
+  charges: Charge[];
+  deposits: Transaction[];
 }> {
   try {
     // Fetch all the data needed for transactions in parallel using Supabase client
-    const [accountsResult, propertiesResult, peopleResult, transactionsResult] = await Promise.all([
-      // Fetch accounts from the accounting_accounts table
+    const [accountsResult, propertiesResult, peopleResult, transactionsResult, chargesResult, depositsResult] = await Promise.all([
+      // Fetch accounts from the chart_of_accounts table
       supabase
-        .from('accounting_accounts')
+        .from('chart_of_accounts')
         .select('*')
         .eq('company_id', companyId),
       
@@ -236,27 +532,47 @@ async function fetchTransactionData(supabase: Awaited<ReturnType<typeof createCl
         .select('*')
         .eq('company_id', companyId),
 
-      // Fetch transactions from the accounting_transactions table
-      supabase
-        .from('accounting_transactions')
-        .select('*')
-        .eq('company_id', companyId)
-        .gte('start_date', '1970-01-01')
-        .lte('start_date', new Date().toISOString().split('T')[0])
-        .order('start_date', { ascending: false }),
+      // Fetch transactions based on leaseId
+      leaseId && leaseId !== 'all' ? 
+        get_lease_transactions(supabase, companyId, leaseId) :
+        supabase
+          .from('transaction')
+          .select('*')
+          .eq('company', companyId)
+          .gte('start_date', '1970-01-01')
+          .lte('start_date', new Date().toISOString().split('T')[0])
+          .order('start_date', { ascending: false })
+          .then(result => result.data || []),
+
+      // Fetch charges
+      fetchChargesData(supabase, companyId, leaseId),
+
+      // Fetch deposits linked to this lease
+      leaseId && leaseId !== 'all' ? 
+        supabase
+          .from('transaction')
+          .select('*')
+          .eq('company', companyId)
+          .eq('transaction_type', 'deposit')
+          .eq('data->>lease_id', leaseId)
+          .order('start_date', { ascending: false })
+          .then(result => result.data || []) :
+        supabase
+          .from('transaction')
+          .select('*')
+          .eq('company', companyId)
+          .eq('transaction_type', 'deposit')
+          .order('start_date', { ascending: false })
+          .then(result => result.data || []),
     ]);
 
-    // Filter transactions by lease if leaseId is provided
-    let transactions = transactionsResult.data || [];
-    if (leaseId && leaseId !== 'all') {
-      transactions = transactions.filter(t => t.reference === leaseId);
-    }
-
     return {
-      transactions: transactions,
+      transactions: transactionsResult as Transaction[],
       accounts: accountsResult.data || [],
       properties: propertiesResult.data || [],
       people: peopleResult.data || [],
+      charges: chargesResult,
+      deposits: depositsResult as Transaction[],
     };
   } catch (error) {
     console.error('Error fetching transaction data:', error);
@@ -265,7 +581,55 @@ async function fetchTransactionData(supabase: Awaited<ReturnType<typeof createCl
       accounts: [],
       properties: [],
       people: [],
+      charges: [],
+      deposits: [],
     };
+  }
+}
+
+async function fetchLeaseFiles(supabase: Awaited<ReturnType<typeof createClient>>, leaseId: string): Promise<LeaseFile[]> {
+  try {
+    // First get the lease to find the tenant (people_id)
+    const { data: lease, error: leaseError } = await supabase
+      .from('lease_contracts')
+      .select('tenant_id')
+      .eq('id', leaseId)
+      .single();
+
+    if (leaseError || !lease?.tenant_id) {
+      console.error('Error fetching lease or no tenant found:', leaseError);
+      return [];
+    }
+
+    const tenantId = Array.isArray(lease.tenant_id) ? lease.tenant_id[0] : lease.tenant_id;
+    if (!tenantId) {
+      return [];
+    }
+
+    // Get files for the tenant (people_id from lease)
+    const { data: files, error } = await supabase
+      .from('people_files')
+      .select('id, file_name, file_url, file_type, file_path, file_size, created_at')
+      .eq('people_id', tenantId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching files:', error);
+      return [];
+    }
+
+    // Map the database fields to match what the frontend expects
+    return files.map(file => ({
+      id: file.id,
+      fileName: file.file_name,
+      fileUrl: file.file_url,
+      fileType: file.file_type || '',
+      fileSize: file.file_size || 0,
+      createdAt: file.created_at
+    }));
+  } catch (error) {
+    console.error('Error in fetchLeaseFiles:', error);
+    return [];
   }
 }
 
@@ -292,69 +656,121 @@ async function fetchLeaseData(leaseId: string) {
       throw new Error('Failed to get company');
     }
 
-    // Fetch lease details
-    const { data: lease, error: leaseError } = await supabase
-      .from('lease_contracts')
-      .select(`
-        id,
-        created_at,
-        start_date,
-        end_date,
-        rent_amount,
-        lease_type,
-        deposits,
-        lease_status,
-        property_id,
-        unit_id,
-        tenant_id
-      `)
-      .eq('id', leaseId)
-      .eq('company_id', companyMember.company_id)
-      .single();
+    const [lease, allTenants, transactionData] = await Promise.all([
+      supabase
+        .from('lease_contracts')
+        .select(`
+          id,
+          created_at,
+          start_date,
+          end_date,
+          rent_amount,
+          lease_type,
+          deposits,
+          lease_status,
+          property_id,
+          unit_id,
+          tenant_id
+        `)
+        .eq('id', leaseId)
+        .eq('company_id', companyMember.company_id)
+        .single(),
+      fetchAllTenants(supabase, companyMember.company_id),
+      fetchTransactionData(supabase, companyMember.company_id, leaseId)
+    ]);
 
-    if (leaseError) {
-      console.error('Error fetching lease:', leaseError);
-      throw new Error(`Failed to fetch lease: ${leaseError.message}`);
+    if (lease.error) {
+      console.error('Error fetching lease:', lease.error);
+      throw new Error(`Failed to fetch lease: ${lease.error.message}`);
+    }
+
+    // Fetch lease notes through the tenant relationship
+    let leaseNotes: Note[] = [];
+    const tenantId = Array.isArray(lease.data.tenant_id) ? lease.data.tenant_id[0] : lease.data.tenant_id;
+    
+    if (tenantId) {
+      const { data: notesData, error: notesError } = await supabase
+        .from('people_notes')
+        .select(`
+          id,
+          note_title,
+          data,
+          created_at,
+          profiles!created_by(
+            first_name,
+            middle_name,
+            last_name
+          )
+        `)
+        .eq('people_id', tenantId)
+        .order('created_at', { ascending: false });
+
+      if (notesError) {
+        console.error('Error fetching notes:', notesError);
+      } else {
+        leaseNotes = (notesData || []).map(note => {
+          const profiles = note.profiles as { first_name: string; middle_name: string; last_name: string }[] | null;
+          const profile = Array.isArray(profiles) ? profiles[0] : profiles;
+          return {
+            id: note.id,
+            note_title: note.note_title,
+            note: note.data,
+            created_at: note.created_at,
+            created_by: {
+              first_name: profile?.first_name || '',
+              middle_name: profile?.middle_name || '',
+              last_name: profile?.last_name || '',
+            },
+          };
+        });
+      }
     }
 
     // Fetch related data in parallel
     const [propertyResponse, unitResponse, tenantResponse] = await Promise.all([
       // Fetch property
-      lease.property_id ? supabase
+      lease.data.property_id ? supabase
         .from('properties')
         .select('id, name')
-        .eq('id', lease.property_id)
+        .eq('id', lease.data.property_id)
         .single() : Promise.resolve({ data: null }),
 
       // Fetch unit
-      lease.unit_id ? supabase
+      lease.data.unit_id ? supabase
         .from('units')
         .select('unit_id, unit_name')
-        .eq('unit_id', lease.unit_id)
+        .eq('unit_id', lease.data.unit_id)
         .single() : Promise.resolve({ data: null }),
 
       // Fetch tenant
-      lease.tenant_id && Array.isArray(lease.tenant_id) && lease.tenant_id.length > 0 ? supabase
+      lease.data.tenant_id && Array.isArray(lease.data.tenant_id) && lease.data.tenant_id.length > 0 ? supabase
         .from('people')
         .select('id, first_name, last_name, role')
-        .eq('id', lease.tenant_id[0])
+        .eq('id', lease.data.tenant_id[0])
         .eq('role', 'tenant')
         .single() : Promise.resolve({ data: null })
     ]);
 
     // Combine the data
     const combinedLease = {
-      ...lease,
+      ...lease.data,
       property: propertyResponse.data,
       unit: unitResponse.data,
       tenant: tenantResponse.data
     };
 
-         // Fetch transaction data for this lease
-     const transactionData = await fetchTransactionData(supabase, companyMember.company_id, leaseId);
-
-     // Fetch all tenants
-     const allTenants = await fetchAllTenants(supabase, companyMember.company_id);
+    // Fetch work orders and files for this lease
+    const tenantIds = Array.isArray(lease.data.tenant_id) ? lease.data.tenant_id : [];
+    const [workOrders, leaseFiles] = await Promise.all([
+      getLeaseWorkOrders(
+        supabase, 
+        leaseId, 
+        tenantIds, 
+        lease.data.property_id, 
+        lease.data.unit_id
+      ),
+      fetchLeaseFiles(supabase, leaseId)
+    ]);
 
      // Create the lease details object
      const leaseDetails: LeaseDetails = {
@@ -378,6 +794,11 @@ async function fetchLeaseData(leaseId: string) {
        accounts: transactionData.accounts,
        properties: transactionData.properties,
        people: transactionData.people,
+       charges: transactionData.charges,
+       deposits: transactionData.deposits,
+       workOrders: workOrders,
+       notes: leaseNotes,
+       files: leaseFiles,
      };
 
      return leaseDetails;

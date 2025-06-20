@@ -257,8 +257,20 @@ export function OverviewContent({ leaseDetails }: OverviewContentProps) {
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
-          <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <FileText className={`h-6 w-6 mb-2 ${
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Lease Status</p>
+              <p className="font-medium">
+                {leaseDetails.start_date
+                  ? new Date() >= new Date(leaseDetails.start_date)
+                    ? leaseDetails.end_date && new Date() > new Date(leaseDetails.end_date)
+                      ? 'Inactive'
+                      : 'Active'
+                    : 'Pending'
+                  : 'Not Set'}
+              </p>
+            </div>
+            <FileText className={`h-6 w-6 ${
               leaseDetails.start_date
                 ? new Date() >= new Date(leaseDetails.start_date)
                   ? leaseDetails.end_date && new Date() > new Date(leaseDetails.end_date)
@@ -267,52 +279,50 @@ export function OverviewContent({ leaseDetails }: OverviewContentProps) {
                   : 'text-yellow-500'  // Pending
                 : 'text-muted-foreground'  // Not Set
             }`} />
-            <p className="text-sm text-muted-foreground">Lease Status</p>
-            <p className="font-medium">
-              {leaseDetails.start_date
-                ? new Date() >= new Date(leaseDetails.start_date)
-                  ? leaseDetails.end_date && new Date() > new Date(leaseDetails.end_date)
-                    ? 'Inactive'
-                    : 'Active'
-                  : 'Pending'
-                : 'Not Set'}
-            </p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <DollarSign className="h-6 w-6 mb-2 text-blue-600" />
-            <p className="text-sm text-muted-foreground">Monthly Rent</p>
-            <p className="font-medium">
-              {formatCurrency(leaseDetails.rent_amount)}
-            </p>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Monthly Rent</p>
+              <p className="font-medium">
+                {formatCurrency(leaseDetails.rent_amount)}
+              </p>
+            </div>
+            <DollarSign className="h-6 w-6 text-blue-600" />
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <Wallet className="h-6 w-6 mb-2 text-blue-600" />
-            <p className="text-sm text-muted-foreground">Deposits Held</p>
-            <p className="font-medium">
-              {formatCurrency(leaseDetails.deposit_amount)}
-            </p>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Deposits Held</p>
+              <p className="font-medium">
+                {formatCurrency(leaseDetails.deposit_amount)}
+              </p>
+            </div>
+            <Wallet className="h-6 w-6 text-blue-600" />
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <Calendar className="h-6 w-6 mb-2 text-blue-600" />
-            <p className="text-sm text-muted-foreground">Lease Type</p>
-            <p className="font-medium">
-              {capitalizeFirstLetter(leaseDetails.lease_type)}
-            </p>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Lease Type</p>
+              <p className="font-medium">
+                {capitalizeFirstLetter(leaseDetails.lease_type)}
+              </p>
+            </div>
+            <Calendar className="h-6 w-6 text-blue-600" />
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <MonitorSmartphone className={`h-6 w-6 mb-2 ${getPortalStatusColor(leaseDetails.tenant_portal_status)}`} />
-            <p className="text-sm text-muted-foreground">Portal Status</p>
-            <p className="font-medium">
-              {capitalizeFirstLetter(leaseDetails.tenant_portal_status)}
-            </p>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Portal Status</p>
+              <p className="font-medium">
+                {capitalizeFirstLetter(leaseDetails.tenant_portal_status)}
+              </p>
+            </div>
+            <MonitorSmartphone className={`h-6 w-6 ${getPortalStatusColor(leaseDetails.tenant_portal_status)}`} />
           </CardContent>
         </Card>
       </div>

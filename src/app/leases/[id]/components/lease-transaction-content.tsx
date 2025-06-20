@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import {CalendarIcon, Printer, FileSpreadsheet, SlidersHorizontal, X, RefreshCw, ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
+import {CalendarIcon, Printer, FileSpreadsheet, SlidersHorizontal, X, RefreshCw, ChevronLeftIcon, ChevronRightIcon, } from "lucide-react"
 import { format, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns"
 import { cn } from "@/lib/utils"
 import {
@@ -161,7 +161,7 @@ export default function TransactionContent({
   initialPeople = [] 
 }: TransactionContentProps = {}) {
   const [selectedTransactions, setSelectedTransactions] = useState<Set<string>>(new Set())
-  const [transactions] = useState<Transaction[]>(initialTransactions.filter(t => !t.data?.lease_id || t.data.lease_id === leaseId))
+  const [transactions] = useState<Transaction[]>(initialTransactions.filter(t => t.data?.lease_id === leaseId))
   const [isLoadingTransactions] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
 
@@ -170,12 +170,10 @@ export default function TransactionContent({
   const [isLoadingAccounts] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<string>('all')
   const [properties] = useState<Property[]>(initialProperties)
-  const [selectedProperty] = useState<string>('all')
 
   const [people] = useState<Person[]>(initialPeople)
   const [isLoadingPeople] = useState(false)
   const [selectedVendor, setSelectedVendor] = useState<string>('all')
-  const [accountOwner] = useState<Person | null>(null)
   const [payees] = useState<Map<string, Person>>(new Map())
   const tableId = useId()
   const currentDateTime = new Date()
@@ -628,48 +626,6 @@ export default function TransactionContent({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* Beginning Balance Row */}
-                <TableRow>
-                  <TableCell className="whitespace-nowrap">
-                    <Checkbox checked={false} disabled />
-                  </TableCell>
-                  <TableCell className="font-medium whitespace-nowrap">
-                    {selectedAccount !== 'all' ? (
-                      selectedProperty !== 'all' ? (
-                        // Show property-specific accounting start date
-                        format(new Date(accounts.find(a => a.id === selectedAccount)?.property_balance?.find(pb => pb.property_id === selectedProperty)?.accounting_start_date || '1970-01-01'), 'MM/dd/yyyy')
-                      ) : (
-                        // Show account's accounting start date
-                        format(new Date(accounts.find(a => a.id === selectedAccount)?.accounting_start_date || '1970-01-01'), 'MM/dd/yyyy')
-                      )
-                    ) : 'All Time'}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">Opening Balance</TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {selectedAccount !== 'all' ? (
-                      accounts.find(a => a.id === selectedAccount)?.account_name || 'N/A'
-                    ) : 'All Accounts'}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {selectedProperty !== 'all' ? (
-                      properties.find(p => p.id === selectedProperty)?.name || 'N/A'
-                    ) : 'All Properties'}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {accountOwner ? (
-                      accountOwner.company || [accountOwner.first_name, accountOwner.last_name].filter(Boolean).join(' ') || 'N/A'
-                    ) : '-'}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">-</TableCell>
-                  <TableCell className="text-right whitespace-nowrap">-</TableCell>
-                  <TableCell className="text-right whitespace-nowrap">
-                    {new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'USD'
-                    }).format(beginningBalance)}
-                  </TableCell>
-                </TableRow>
-
                 {isLoadingTransactions ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center py-8">

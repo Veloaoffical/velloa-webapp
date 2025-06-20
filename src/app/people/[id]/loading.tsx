@@ -1,34 +1,105 @@
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ArrowLeftIcon, User, BarChart3, FileText, Building2, ClipboardList, StickyNote, FolderOpen, Settings } from "lucide-react";
+import Link from 'next/link';
 
 export default function Loading() {
   return (
-    <div className="animate-pulse">
-      {/* Mimics the top section of PersonDetailsClient (bg-card flex-shrink-0) */}
-      <div className="flex-shrink-0">
-        {/* Mimics the inner div with p-6 pb-[53px] */}
-        <div className="p-6 pb-[53px]">
-          {/* Back to People Link Skeleton */}
-          <Skeleton className="h-6 w-32 mb-12" />
+    <div className="h-full flex flex-col animate-pulse">
+      <Tabs defaultValue="overview" className="flex flex-col h-full">
+        {/* Top section with white background */}
+        <div className="bg-card flex-shrink-0">
+          <div className="flex flex-col p-6 pb-[53px]">
+            <Link href="/people" className="mb-12">
+              <Button variant="ghost" className="group w-fit gap-2 opacity-50 pointer-events-none">
+                <ArrowLeftIcon
+                  className="-ms-1 opacity-60 transition-transform group-hover:-translate-x-0.5"
+                  size={16}
+                  aria-hidden="true"
+                />
+                Back to People
+              </Button>
+            </Link>
+            <Skeleton className="h-8 w-1/2 md:w-1/3 mb-2" /> {/* Person Name */}
+            <div className="flex flex-col gap-1">
+              <Skeleton className="h-5 w-1/3 md:w-1/4" />    {/* Company */}
+            </div>
+          </div>
 
-          {/* Person Name and Company Skeleton */}
-          <Skeleton className="h-8 w-1/2 md:w-1/3 mb-2" /> {/* Person Name */}
-          <Skeleton className="h-5 w-1/3 md:w-1/4" />    {/* Company */}
-        </div>
-
-        {/* Tabs Skeleton Wrapper (mimics border-b-2 div) */}
-        <div className="border-b-2 border-border">
-          {/* Mimics div with px-6 flex gap-2 py-1 for TabsList */}
-          <div className="px-6 flex gap-2 py-3">
-            {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} className="h-10 w-24 rounded-t-md" /> // Tab item
-            ))}
+          {/* Tabs navigation */}
+          <div className="border-b-2 border-border">
+            <ScrollArea>
+              <TabsList className="mb-0 h-auto rounded-none bg-transparent py-1 text-foreground">
+                <div className="px-6 flex gap-2">
+                  <TabsTrigger
+                    value="overview"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent opacity-50 pointer-events-none"
+                  >
+                    <User className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Overview
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="reports"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent opacity-50 pointer-events-none"
+                  >
+                    <BarChart3 className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Reports
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="bills"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent opacity-50 pointer-events-none"
+                  >
+                    <FileText className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Bills
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="properties"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent opacity-50 pointer-events-none"
+                  >
+                    <Building2 className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Properties
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="tasks"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent opacity-50 pointer-events-none"
+                  >
+                    <ClipboardList className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Tasks
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="notes"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent opacity-50 pointer-events-none"
+                  >
+                    <StickyNote className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Notes
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="files"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent opacity-50 pointer-events-none"
+                  >
+                    <FolderOpen className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Files
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="settings"
+                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent opacity-50 pointer-events-none"
+                  >
+                    <Settings className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
+                    Settings
+                  </TabsTrigger>
+                </div>
+              </TabsList>
+              <ScrollBar orientation="horizontal" className="invisible" />
+            </ScrollArea>
           </div>
         </div>
-      </div>
 
-      {/* Mimics the main content area (p-6 space-y-8) */}
-      <div className="p-6 space-y-8">
+        {/* Tab content area */}
+        <div className="flex-1 overflow-auto">
+          <div className="p-6 space-y-8">
         {/* Quick Actions Skeleton */}
         <Card>
           <CardContent className="p-6">
@@ -89,8 +160,10 @@ export default function Loading() {
               </div>
             </CardContent>
           </Card>
+            </div>
+          </div>
         </div>
-      </div>
+      </Tabs>
     </div>
   );
 } 

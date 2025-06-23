@@ -14,28 +14,7 @@ import {
   PaginationLink,
 } from "@/components/ui/pagination";
 import { format } from 'date-fns';
-
-interface Person {
-  id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone: string;
-  role: string;
-  property_id: string;
-  unit_id: string | null;
-  expected_move_in_date: string | null;
-  status: string | null;
-  assignee_id: string | null;
-  prospect_property?: {
-    property_id: string;
-    unit_id: string;
-  } | null;
-  unit?: {
-    unit_number: string;
-    property_name: string;
-  } | null;
-}
+import type { Person } from '../page';
 
 interface PropertyProspectsProps {
   propertyId: string;
@@ -174,7 +153,7 @@ export function PropertyProspects({ propertyId, prospects }: PropertyProspectsPr
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm text-muted-foreground">
-                            {formatDate(prospect.expected_move_in_date)}
+                            {formatDate(prospect.expected_move_in_date || null)}
                           </span>
                         </div>
                       </TableCell>

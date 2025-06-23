@@ -254,6 +254,9 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
   const [showIssueRefundDialog, setShowIssueRefundDialog] = useState(false);
   const [showAddVendorCreditDialog, setShowAddVendorCreditDialog] = useState(false);
   
+  // Dropdown state
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  
   // Destructure with defaults, will be populated when initialFinancialData arrives
   const { 
     totalExpenses = 0, 
@@ -276,7 +279,7 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
           <h1 className="text-3xl font-bold tracking-tight">Accounting</h1>
           <p className="text-muted-foreground">Manage your financial records and transactions.</p>
         </div>
-        <DropdownMenu>
+        <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
           <DropdownMenuTrigger asChild>
             <Button className="gap-2">
               <DollarSign className="w-4 h-4" />
@@ -287,23 +290,35 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
           <DropdownMenuContent align="end" className="w-[240px]">
             <DropdownMenuLabel>Tenant Transactions</DropdownMenuLabel>
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => setShowPostChargeDialog(true)}>
+              <DropdownMenuItem onClick={() => {
+                setShowPostChargeDialog(true);
+                setDropdownOpen(false);
+              }}>
                 <Banknote className="w-4 h-4 me-2 opacity-60" />
                 Post Charge
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowReceivePaymentDialog(true)}>
+              <DropdownMenuItem onClick={() => {
+                setShowReceivePaymentDialog(true);
+                setDropdownOpen(false);
+              }}>
                 <HandCoins className="w-4 h-4 me-2 opacity-60" />
                 Receive Payment
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowIssueCreditDialog(true)}>
+              <DropdownMenuItem onClick={() => {
+                setShowIssueCreditDialog(true);
+                setDropdownOpen(false);
+              }}>
                 <CreditCard className="w-4 h-4 me-2 opacity-60" />
                 Issue Credit
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowIssueRefundDialog(true)}>
+              <DropdownMenuItem onClick={() => {
+                setShowIssueRefundDialog(true);
+                setDropdownOpen(false);
+              }}>
                 <ArrowLeftRight className="w-4 h-4 me-2 opacity-60" />
                 Give Refund
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDropdownOpen(false)}>
                 <Wallet className="w-4 h-4 me-2 opacity-60" />
                 Withhold Deposit
               </DropdownMenuItem>
@@ -312,17 +327,23 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
             <DropdownMenuSeparator />
             <DropdownMenuLabel>Vendor Transactions</DropdownMenuLabel>
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => setShowBillsDialog(true)}>
+              <DropdownMenuItem onClick={() => {
+                setShowBillsDialog(true);
+                setDropdownOpen(false);
+              }}>
                 <FileText className="w-4 h-4 me-2 opacity-60" />
                 Create Bill
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/accounting/pay-bills" className="flex items-center">
+                <Link href="/accounting/pay-bills" className="flex items-center" onClick={() => setDropdownOpen(false)}>
                   <DollarSign className="w-4 h-4 me-2 opacity-60" />
                   Pay Bills
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowAddVendorCreditDialog(true)}>
+              <DropdownMenuItem onClick={() => {
+                setShowAddVendorCreditDialog(true);
+                setDropdownOpen(false);
+              }}>
                 <CreditCard className="w-4 h-4 me-2 opacity-60" />
                 Add Credit
               </DropdownMenuItem>
@@ -330,23 +351,38 @@ export default function AccountingPageClient({ initialFinancialData }: Accountin
             <DropdownMenuSeparator />
             <DropdownMenuLabel>Other Transactions</DropdownMenuLabel>
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => setShowJournalEntryDialog(true)}>
+              <DropdownMenuItem onClick={() => {
+                setShowJournalEntryDialog(true);
+                setDropdownOpen(false);
+              }}>
                 <FileText className="w-4 h-4 me-2 opacity-60" />
                 Journal Entry
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowBankTransferDialog(true)}>
+              <DropdownMenuItem onClick={() => {
+                setShowBankTransferDialog(true);
+                setDropdownOpen(false);
+              }}>
                 <ArrowLeftRight className="w-4 h-4 me-2 opacity-60" />
                 Bank Transfer
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowBankDepositDialog(true)}>
+              <DropdownMenuItem onClick={() => {
+                setShowBankDepositDialog(true);
+                setDropdownOpen(false);
+              }}>
                 <Wallet className="w-4 h-4 me-2 opacity-60" />
                 Bank Deposit
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowExpenseDialog(true)}>
+              <DropdownMenuItem onClick={() => {
+                setShowExpenseDialog(true);
+                setDropdownOpen(false);
+              }}>
                 <Receipt className="w-4 h-4 me-2 opacity-60" />
                 Expense
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowCheckDialog(true)}>
+              <DropdownMenuItem onClick={() => {
+                setShowCheckDialog(true);
+                setDropdownOpen(false);
+              }}>
                 <CreditCard className="w-4 h-4 me-2 opacity-60" />
                 Check
               </DropdownMenuItem>

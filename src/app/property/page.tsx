@@ -15,23 +15,11 @@ function ErrorAlert({ error }: { error: Error }) {
   )
 }
 
-interface PropertyTypeData {
-  propertyType: string;
-  propertyKind: string;
-  [key: string]: string | number | boolean | null | undefined; // Allow for additional properties with specific types
-}
-
-// Interface for the raw data returned from Supabase
-interface PropertySupabaseRecord {
+interface PropertyData {
   id: string;
   name: string;
-  property_settings: {
-    id: string;
-    property_description: string;
-    property_type: PropertyTypeData | string | Record<string, unknown>;
-    status?: boolean;
-  }[] | null;
-  units: { unit_id: string }[] | null;
+  property_settings: string | null;
+  units: Array<{ unit_id: string }>;
 }
 
 async function getProperties() {
@@ -73,18 +61,13 @@ async function getProperties() {
       throw new Error('Failed to get company');
     }
 
-    // Fetch properties with joined property_settings
+    // First, fetch properties with their property_settings UUID and units
     const { data: properties, error: propertiesError } = await supabase
       .from('properties')
       .select(`
         id,
         name,
-        property_settings(
-          id,
-          property_description,
-          property_type,
-          status
-        ),
+        property_settings,
         units(unit_id)
       `)
       .eq('company_id', companyMember.company_id);
@@ -93,16 +76,74 @@ async function getProperties() {
       throw new Error(`Failed to fetch properties: ${propertiesError.message}`);
     }
 
+    if (!properties || properties.length === 0) {
+      return [];
+    }
+
+    // Get all unique property_settings UUIDs
+    const propertySettingsIds = properties
+      .map(p => p.property_settings)
+      .filter(id => id !== null);
+
+    // Fetch all property_settings data
+    const { data: propertySettings, error: settingsError } = await supabase
+      .from('property_settings')
+      .select('id, property_type, property_address, status')
+      .in('id', propertySettingsIds);
+
+    if (settingsError) {
+      throw new Error(`Failed to fetch property settings: ${settingsError.message}`);
+    }
+
+    // Create a map for quick lookup
+    const settingsMap = new Map();
+    if (propertySettings) {
+      propertySettings.forEach(setting => {
+        settingsMap.set(setting.id, setting);
+      });
+    }
+
     // Transform the data to match the frontend interface
-    return properties.map((property: PropertySupabaseRecord) => {
+    return properties.map((property: PropertyData) => {
       // Extract property type data from the JSONB field
       let propertyType = 'Unknown';
       let propertyKind = 'Unknown';
+      let address = 'Unknown';
       
-      // Get the first property_settings object if it exists
-      const propertySetting = property.property_settings && property.property_settings.length > 0 
-        ? property.property_settings[0] 
-        : null;
+      // Get the property_settings data using the UUID
+      const propertySetting = property.property_settings ? settingsMap.get(property.property_settings) : null;
+      
+      // Extract address from property_address JSONB
+      if (propertySetting && propertySetting.property_address) {
+        try {
+          const addressData = propertySetting.property_address;
+          if (typeof addressData === 'object' && addressData !== null) {
+            const addr = addressData as Record<string, unknown>;
+            const streetNumber = addr.street_number || '';
+            const street = addr.street || '';
+            const city = addr.city || '';
+            const province = addr.province || '';
+            const postalCode = addr.postal_code || '';
+            
+            // Format address: "64 Tawes Trail, King City, ON L7B1B4"
+            const addressParts = [];
+            if (streetNumber && street) {
+              addressParts.push(`${streetNumber} ${street}`);
+            } else if (street) {
+              addressParts.push(street);
+            }
+            if (city) addressParts.push(city);
+            if (province) addressParts.push(province);
+            if (postalCode) addressParts.push(postalCode);
+            
+            if (addressParts.length > 0) {
+              address = addressParts.join(', ');
+            }
+          }
+        } catch {
+          // Handle address processing errors silently
+        }
+      }
       
       if (propertySetting && propertySetting.property_type) {
         try {
@@ -137,22 +178,25 @@ async function getProperties() {
                 propertyKind = foundPropertyKind;
               }
             } catch {
-              // Silently handle JSON parse errors
+              // Handle JSON parse errors silently
             }
           }
         } catch {
-          // Silently handle property type processing errors
+          // Handle property type processing errors silently
         }
       }
       
-      return {
+      const result = {
         id: property.id,
         propertyName: property.name,
         propertyType: propertyType,
         propertyKind: propertyKind,
         numberOfUnits: property.units?.length || 0,
-        status: propertySetting && propertySetting.status !== false ? 'active' : 'inactive'
+        status: propertySetting && propertySetting.status !== false ? 'active' : 'inactive',
+        address: address
       };
+      
+      return result;
     });
   } catch (error) {
     throw error;

@@ -53,6 +53,7 @@ interface Property {
   propertyKind: string;
   numberOfUnits: number;
   status?: string;
+  address: string;
 }
 
 interface PropertyClientProps {
@@ -117,6 +118,18 @@ function DataTable({ data, isLoading }: { data: Property[]; isLoading?: boolean 
       ),
     },
     {
+      accessorKey: "address",
+      header: "Address",
+      cell: ({ row }: { row: Row<Property> }) => {
+        const value = row.getValue("address") as string;
+        return (
+          <div className="text-sm text-muted-foreground">
+            {value || 'Unknown'}
+          </div>
+        );
+      },
+    },
+    {
       accessorKey: "propertyType",
       header: ({ column }) => (
         <Button
@@ -128,6 +141,14 @@ function DataTable({ data, isLoading }: { data: Property[]; isLoading?: boolean 
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
+      cell: ({ row }: { row: Row<Property> }) => {
+        const value = row.getValue("propertyType") as string;
+        return (
+          <div className="capitalize">
+            {value || 'Unknown'}
+          </div>
+        );
+      },
     },
     {
       accessorKey: "propertyKind",
@@ -141,6 +162,14 @@ function DataTable({ data, isLoading }: { data: Property[]; isLoading?: boolean 
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
+      cell: ({ row }: { row: Row<Property> }) => {
+        const value = row.getValue("propertyKind") as string;
+        return (
+          <div className="capitalize">
+            {value || 'Unknown'}
+          </div>
+        );
+      },
     },
     {
       accessorKey: "numberOfUnits",
@@ -236,11 +265,8 @@ function DataTable({ data, isLoading }: { data: Property[]; isLoading?: boolean 
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-52 text-center">
-                  <div className="flex flex-col items-center justify-center text-muted-foreground">
-                    <Building className="h-8 w-8 mb-2" />
-                    <p>No properties found</p>
-                  </div>
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  No results.
                 </TableCell>
               </TableRow>
             )}
@@ -284,8 +310,9 @@ function DataTable({ data, isLoading }: { data: Property[]; isLoading?: boolean 
 }
 
 export function PropertyClient({ initialProperties, isLoading = false }: PropertyClientProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
   // Add status to properties if not present
   const propertiesWithStatus = initialProperties.map(property => ({
     ...property,
@@ -325,7 +352,7 @@ export function PropertyClient({ initialProperties, isLoading = false }: Propert
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <DropdownMenu>
+          <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
             <DropdownMenuTrigger asChild>
               <Button className="flex items-center gap-2">
                 <Plus className="w-4 h-4" />
@@ -334,7 +361,7 @@ export function PropertyClient({ initialProperties, isLoading = false }: Propert
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
-                <Link href="/property/add" className="flex items-center">
+                <Link href="/property/add" className="flex items-center" onClick={() => setDropdownOpen(false)}>
                   <Building className="opacity-60 mr-2" size={16} strokeWidth={2} aria-hidden="true" />
                   New Property
                 </Link>
@@ -372,4 +399,4 @@ export function PropertyClient({ initialProperties, isLoading = false }: Propert
       </Card>
     </div>
   );
-} 
+}

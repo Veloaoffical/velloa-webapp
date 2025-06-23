@@ -27,6 +27,15 @@ interface PropertySetting {
   id: string;
   type: string;
   value: string | null;
+  property_type?: {
+    propertyType: string;
+    propertyKind: string;
+  };
+  status?: boolean;
+  amenities?: string[];
+  pet_policy?: Record<string, unknown>;
+  owners?: Record<string, unknown>;
+  bank_accounts?: Record<string, unknown>;
 }
 
 interface PropertyDetails {
@@ -61,9 +70,13 @@ interface PropertyOverviewProps {
 }
 
 export function PropertyOverview({ propertyDetails, photos, owners }: PropertyOverviewProps) {
-  // Extract property type and category from settings
-  const propertyType = propertyDetails.property_settings?.find(setting => setting.type === 'propertyType')?.value || 'N/A';
-  const propertyCategory = propertyDetails.property_settings?.find(setting => setting.type === 'category')?.value || 'N/A';
+  // Extract property type and status from settings
+  const propertySetting = propertyDetails.property_settings?.find(setting => setting.type === 'property_settings');
+  const rawPropertyType = propertySetting?.property_type?.propertyType || 'N/A';
+  const rawPropertyKind = propertySetting?.property_type?.propertyKind || 'N/A';
+  const propertyType = rawPropertyType !== 'N/A' ? rawPropertyType.charAt(0).toUpperCase() + rawPropertyType.slice(1).toLowerCase() : 'N/A';
+  const propertyKind = rawPropertyKind !== 'N/A' ? rawPropertyKind.charAt(0).toUpperCase() + rawPropertyKind.slice(1).toLowerCase() : 'N/A';
+  const propertyStatus = propertySetting?.status ? 'Active' : 'Inactive';
 
   return (
     <div className="space-y-6">
@@ -90,33 +103,50 @@ export function PropertyOverview({ propertyDetails, photos, owners }: PropertyOv
       </Card>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
-          <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <Building2 className="h-6 w-6 mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Property Type</p>
-            <p className="font-medium">{propertyCategory === 'residential' ? propertyType : `${propertyCategory} - ${propertyType}`}</p>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex flex-col">
+              <p className="text-sm text-muted-foreground">Property Type</p>
+              <p className="font-medium">{propertyType}</p>
+            </div>
+            <Building2 className="h-6 w-6 text-muted-foreground" />
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <Key className="h-6 w-6 mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Active Units</p>
-            <p className="font-medium">{propertyDetails.units?.length || 0}</p>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex flex-col">
+              <p className="text-sm text-muted-foreground">Property Kind</p>
+              <p className="font-medium">{propertyKind}</p>
+            </div>
+            <Building2 className="h-6 w-6 text-muted-foreground" />
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <Users2 className="h-6 w-6 mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Pending Applications</p>
-            <p className="font-medium">0</p>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex flex-col">
+              <p className="text-sm text-muted-foreground">Active Units</p>
+              <p className="font-medium">{propertyDetails.units?.length || 0}</p>
+            </div>
+            <Key className="h-6 w-6 text-muted-foreground" />
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-            <Settings2 className="h-6 w-6 mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Status</p>
-            <p className="font-medium">N/A</p>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex flex-col">
+              <p className="text-sm text-muted-foreground">Pending Applications</p>
+              <p className="font-medium">0</p>
+            </div>
+            <Users2 className="h-6 w-6 text-muted-foreground" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex flex-col">
+              <p className="text-sm text-muted-foreground">Status</p>
+              <p className="font-medium">{propertyStatus}</p>
+            </div>
+            <Settings2 className="h-6 w-6 text-muted-foreground" />
           </CardContent>
         </Card>
       </div>
@@ -209,62 +239,81 @@ export function PropertyOverview({ propertyDetails, photos, owners }: PropertyOv
           </CardContent>
         </Card>
 
-        {/* Owners Card */}
-        <Card>
-          <CardContent className="p-0">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="font-medium">Owners</h2>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/people/add-owner" className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Owner
-                </Link>
-              </Button>
-            </div>
-            {owners.length === 0 ? (
-              <p className="p-4 text-muted-foreground">No owners found</p>
-            ) : (
-              <div className="p-4">
-                <div className="max-w-[200px]">
-                  {owners.map((owner) => (
-                    <div key={owner?.id || Math.random()} className="flex flex-col items-center p-4 border rounded-lg mb-2">
-                      {/* Avatar Circle */}
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-2">
-                        <span className="text-sm font-medium">
-                          {owner?.first_name && owner?.last_name 
-                            ? `${owner.first_name[0]}${owner.last_name[0]}`.toUpperCase()
-                            : '??'}
-                        </span>
-                      </div>
-                      
-                      {/* Name */}
-                      <h3 className="text-sm font-medium">
+        {/* Individual Owner Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {owners.length === 0 ? (
+            // Show empty state cards when no owners
+            Array.from({ length: 4 }).map((_, index) => (
+              <Card key={index}>
+                <CardContent className="p-4 flex flex-col items-center text-center">
+                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                    <Users className="w-6 h-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">No Owner</p>
+                  <Button variant="outline" size="sm" className="mt-2 gap-2" asChild>
+                    <Link href="/people/add-owner">
+                      <Plus className="h-4 w-4" />
+                      Add Owner
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            // Show actual owners and fill remaining slots
+            <>
+              {owners.slice(0, 4).map((owner) => (
+                <Card key={owner?.id || Math.random()}>
+                  <CardContent className="p-4 flex flex-col items-center text-center">
+                    {/* Avatar Circle */}
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                      <span className="text-sm font-medium">
                         {owner?.first_name && owner?.last_name 
-                          ? `${owner.first_name} ${owner.last_name}`
-                          : owner?.name || 'Unnamed Owner'}
-                      </h3>
-                      
-                      {/* Company */}
-                      {owner?.company && (
-                        <p className="text-xs text-muted-foreground">{owner.company}</p>
-                      )}
-                      
-                      {/* Email */}
-                      {owner?.email && (
-                        <p className="text-xs text-muted-foreground">{owner.email}</p>
-                      )}
-                      
-                      {/* Ownership Percentage */}
-                      <p className="text-xs text-muted-foreground">
-                        {owner?.ownership_percentage || 0}% Ownership
-                      </p>
+                          ? `${owner.first_name[0]}${owner.last_name[0]}`.toUpperCase()
+                          : '??'}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    
+                    {/* Name */}
+                    <h3 className="text-sm font-medium mb-1">
+                      {owner?.first_name && owner?.last_name 
+                        ? `${owner.first_name} ${owner.last_name}`
+                        : owner?.name || 'Unnamed Owner'}
+                    </h3>
+                    
+                    {/* Company */}
+                    {owner?.company && (
+                      <p className="text-xs text-muted-foreground mb-1">{owner.company}</p>
+                    )}
+                    
+                    {/* Ownership Percentage */}
+                    <p className="text-xs text-muted-foreground">
+                      {owner?.ownership_percentage || 0}% Ownership
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+              
+              {/* Fill remaining slots with empty cards */}
+              {Array.from({ length: Math.max(0, 4 - owners.length) }).map((_, index) => (
+                <Card key={`empty-${index}`}>
+                  <CardContent className="p-4 flex flex-col items-center text-center">
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                      <Users className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">No Owner</p>
+                    <Button variant="outline" size="sm" className="mt-2 gap-2" asChild>
+                      <Link href="/people/add-owner">
+                        <Plus className="h-4 w-4" />
+                        Add Owner
+                      </Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

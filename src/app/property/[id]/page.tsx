@@ -1,37 +1,28 @@
-import { Button } from "@/components/ui/button";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Building2,DoorOpen, Users, FileText, Inbox, StickyNote, Settings, ListTodo } from "lucide-react";
-import Link from 'next/link';
-import { PropertyOverview } from './components/PropertyOverview';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { notFound } from 'next/navigation';
-import { PropertySettings } from "./components/PropertySettings";
-import { PropertyTasks } from "./components/PropertyTasks";
-import { PropertyTenants } from "./components/PropertyTenants";
-import { PropertyProspects } from "./components/PropertyProspects";
-import { PropertyLeases } from "./components/PropertyLeases";
-import { PropertyUnits } from "./components/PropertyUnits";
-import { PropertyListings } from "./components/PropertyListings";
+import { PropertyDetailsClient } from './components/PropertyDetailsClient';
 
-interface PropertyTypeData {
+// --- Define and Export necessary types ---
+
+export interface PropertyTypeData {
   propertyType: string;
   propertyKind: string;
 }
 
-interface PropertySetting {
+export interface PropertySetting {
   id: string;
   type: string;
   value: string | null;
   property_type?: PropertyTypeData;
+  status?: boolean;
   amenities?: string[];
   pet_policy?: Record<string, unknown>;
   owners?: Record<string, unknown>;
   bank_accounts?: Record<string, unknown>;
 }
 
-interface PropertyDetails {
+export interface PropertyDetails {
   id: number;
   name: string;
   address_line_1: string;
@@ -45,8 +36,7 @@ interface PropertyDetails {
   company_id: number;
 }
 
-// Interface for the PropertyUnits component - matches the Unit interface in PropertyUnits.tsx
-interface Unit {
+export interface Unit {
   id: string;
   unit_name: string;
   unit_type?: string;
@@ -71,8 +61,7 @@ interface Unit {
   }[] | null;
 }
 
-// Interface for the PropertyTenants component
-interface Person {
+export interface Person {
   id: string;
   first_name: string;
   last_name: string;
@@ -85,7 +74,130 @@ interface Person {
     unit_number: string;
     property_name: string;
   } | null;
+  expected_move_in_date?: string | null;
+  status?: string | null;
+  assignee_id?: string | null;
+  prospect_property?: {
+    property_id: string;
+    unit_id: string;
+  } | null;
 }
+
+export interface Photo {
+  id: string;
+  fileUrl: string;
+  fileName: string;
+  createdAt: string;
+  favorite: boolean;
+  isFavorite: boolean;
+}
+
+export interface Owner {
+  id: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  ownership_percentage?: number;
+  first_name?: string;
+  last_name?: string;
+  company?: string;
+}
+
+export interface Lease {
+  id: string;
+  tenant_name: string;
+  created_at: string;
+  property: {
+    id: string;
+    name: string;
+    address: string;
+  };
+  unit: {
+    unit_id: string;
+    unit_name: string;
+  };
+  tenant: {
+    id: string;
+    first_name?: string;
+    last_name?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+  } | null;
+  start_date: string;
+  end_date: string;
+  rent_amount: string;
+  lease_type: string;
+  deposit_amount: string;
+}
+
+export interface UnitListing {
+  listingid: string;
+  created_at: string;
+  property_title: string | null;
+  listing_description: string | null;
+  amenities: Record<string, unknown> | null;
+  available_date: string | null;
+  status: string | null;
+  unitid: string | null;
+  propertyId: string | null;
+  unit?: {
+    unit_name: string;
+  } | null;
+}
+
+export interface Task {
+  id: string;
+  subject: string;
+  description: string;
+  task_status?: Record<string, { date: string | null; value: boolean | null }>;
+  priority: string;
+  due_date: string | null;
+  created_at: string;
+  assignees: string | null;
+  created_by: string;
+  nano_id: string | null;
+  property_id: string | null;
+  unit_id: string | null;
+  request_type: string | null;
+  task_type: string | null;
+  tenant: string | null;
+  tenant_id: string | null;
+  property?: {
+    name: string;
+  } | null;
+  unit?: {
+    unit_name: string;
+  } | null;
+  assignee?: {
+    id: string;
+    profile: {
+      first_name: string;
+      last_name: string;
+    };
+  } | null;
+  role: 'task' | 'tenant_request' | 'work_order' | 'owner_request';
+  vendor_id: string | null;
+  vendor?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    company: string;
+  } | null;
+}
+
+// Result type for the comprehensive property data
+type GetPropertyDataResult = {
+  propertyDetails: PropertyDetails;
+  propertyProspects: Person[];
+  propertyTenants: Person[];
+  propertyPhotos: Photo[];
+  propertyOwners: Owner[];
+  propertyLeases: Lease[];
+  propertyUnits: Unit[];
+  propertyListings: UnitListing[];
+  propertyTasks: Task[];
+};
 
 async function getPropertyDetails(propertyId: string): Promise<PropertyDetails> {
   const supabase = await createClient();
@@ -126,11 +238,6 @@ async function getPropertyDetails(propertyId: string): Promise<PropertyDetails> 
     .select(`
       id,
       name,
-      address_line_1,
-      address_line_2,
-      city,
-      state,
-      zip,
       units (
         unit_id
       ),
@@ -152,8 +259,17 @@ async function getPropertyDetails(propertyId: string): Promise<PropertyDetails> 
     notFound();
   }
 
-  // Fetch property settings separately
+  // Fetch property settings separately and extract address information
   let propertySettings: PropertySetting[] = [];
+  const defaultAddressInfo = {
+    address_line_1: '',
+    address_line_2: null as string | null,
+    city: '',
+    state: '',
+    zip: ''
+  };
+  let addressInfo = defaultAddressInfo;
+
   if (property.property_settings) {
     const { data: settings, error: settingsError } = await supabase
       .from('property_settings')
@@ -167,11 +283,45 @@ async function getPropertyDetails(propertyId: string): Promise<PropertyDetails> 
         type: 'property_settings',
         value: settings.property_description,
         property_type: settings.property_type,
+        status: settings.status,
         amenities: settings.amenities || [],
         pet_policy: settings.pet_policy || {},
         owners: settings.owners || {},
         bank_accounts: settings.bank_accounts || {}
       }];
+
+      // Extract address from property_address JSONB
+      if (settings.property_address) {
+        try {
+          const addressData = settings.property_address;
+          if (typeof addressData === 'object' && addressData !== null) {
+            const addr = addressData as Record<string, unknown>;
+            const streetNumber = addr.street_number || '';
+            const street = addr.street || '';
+            const city = addr.city || '';
+            const province = addr.province || '';
+            const postalCode = addr.postal_code || '';
+            
+            // Format address_line_1: "64 Tawes Trail"
+            let address_line_1 = '';
+            if (streetNumber && street) {
+              address_line_1 = `${streetNumber} ${street}`;
+            } else if (street) {
+              address_line_1 = street as string;
+            }
+            
+            addressInfo = {
+              address_line_1,
+              address_line_2: null,
+              city: city as string,
+              state: province as string,
+              zip: postalCode as string
+            };
+          }
+        } catch (error) {
+          console.error('Error parsing address data:', error);
+        }
+      }
     }
   }
 
@@ -179,11 +329,11 @@ async function getPropertyDetails(propertyId: string): Promise<PropertyDetails> 
   const transformedProperty: PropertyDetails = {
     id: property.id,
     name: property.name,
-    address_line_1: property.address_line_1 || '',
-    address_line_2: property.address_line_2,
-    city: property.city || '',
-    state: property.state || '',
-    zip: property.zip || '',
+    address_line_1: addressInfo.address_line_1,
+    address_line_2: addressInfo.address_line_2,
+    city: addressInfo.city,
+    state: addressInfo.state,
+    zip: addressInfo.zip,
     property_settings: propertySettings,
     units: property.units?.map(unit => ({ id: unit.unit_id })) || [],
     created_at: property.created_at,
@@ -193,7 +343,7 @@ async function getPropertyDetails(propertyId: string): Promise<PropertyDetails> 
   return transformedProperty;
 }
 
-async function getPropertyProspects(propertyId: string) {
+async function getPropertyProspects(propertyId: string): Promise<Person[]> {
   const supabase = await createClient();
   
   // Get the authenticated user
@@ -357,7 +507,7 @@ async function getPropertyTenants(propertyId: string): Promise<Person[]> {
   });
 }
 
-async function getPropertyPhotos(propertyId: string) {
+async function getPropertyPhotos(propertyId: string): Promise<Photo[]> {
   const supabase = await createClient();
   
   // Get the authenticated user
@@ -400,7 +550,7 @@ async function getPropertyPhotos(propertyId: string) {
   }));
 }
 
-async function getPropertyOwners(propertyId: string) {
+async function getPropertyOwners(propertyId: string): Promise<Owner[]> {
   const supabase = await createClient();
   
   // Get the authenticated user
@@ -409,7 +559,7 @@ async function getPropertyOwners(propertyId: string) {
     redirect('/login');
   }
 
-  interface Owner {
+  interface OwnerData {
     id: string;
     name?: string;
     email?: string;
@@ -438,13 +588,13 @@ async function getPropertyOwners(propertyId: string) {
   }
 
   // Get the owners from the settings
-  const propertyOwners = property.property_settings.owners as Owner[] || [];
+  const propertyOwners = property.property_settings.owners as OwnerData[] || [];
   if (propertyOwners.length === 0) {
     return [];
   }
 
   // Get owner details from the people table
-  const ownerIds = propertyOwners.map((owner: Owner) => owner.id);
+  const ownerIds = propertyOwners.map((owner: OwnerData) => owner.id);
   const { data: ownerDetails, error: ownersError } = await supabase
     .from('people')
     .select('id, first_name, last_name, email, company')
@@ -456,7 +606,7 @@ async function getPropertyOwners(propertyId: string) {
   }
 
   // Combine the data
-  return propertyOwners.map((propertyOwner: Owner) => {
+  return propertyOwners.map((propertyOwner: OwnerData) => {
     const ownerDetail = ownerDetails?.find(o => o.id === propertyOwner.id) as OwnerDetails | undefined;
     return {
       ...propertyOwner,
@@ -467,7 +617,7 @@ async function getPropertyOwners(propertyId: string) {
   });
 }
 
-async function getPropertyLeases(propertyId: string) {
+async function getPropertyLeases(propertyId: string): Promise<Lease[]> {
   const supabase = await createClient();
   
   // Get the authenticated user
@@ -514,11 +664,9 @@ async function getPropertyLeases(propertyId: string) {
       property:properties!lease_contracts_property_id_fkey (
         id,
         name,
-        address_line_1,
-        address_line_2,
-        city,
-        state,
-        zip
+        property_settings (
+          property_address
+        )
       ),
       unit:units!lease_contracts_unit_id_fkey (
         unit_id,
@@ -636,12 +784,44 @@ async function getPropertyLeases(propertyId: string) {
     const propertyData = Array.isArray(lease.property) 
       ? lease.property[0] 
       : lease.property || {};
-      
-    const formattedAddress = [
-      propertyData.address_line_1,
-      propertyData.address_line_2,
-      [propertyData.city, propertyData.state, propertyData.zip].filter(Boolean).join(', ')
-    ].filter(Boolean).join(', ');
+    
+    // Extract address from property_settings property_address JSONB
+    let formattedAddress = '';
+    if (propertyData.property_settings && propertyData.property_settings.length > 0) {
+      const propertySettings = propertyData.property_settings[0];
+      if (propertySettings.property_address) {
+        try {
+          const addressData = propertySettings.property_address;
+          if (typeof addressData === 'object' && addressData !== null) {
+            const addr = addressData as Record<string, unknown>;
+            const streetNumber = addr.street_number || '';
+            const street = addr.street || '';
+            const city = addr.city || '';
+            const province = addr.province || '';
+            const postalCode = addr.postal_code || '';
+            
+            // Format address: "64 Tawes Trail, City, Province PostalCode"
+            const addressParts: string[] = [];
+            
+            if (streetNumber && street) {
+              addressParts.push(`${streetNumber} ${street}`);
+            } else if (street) {
+              addressParts.push(street as string);
+            }
+            
+            const cityStateZip = [city, province, postalCode].filter(Boolean).join(' ');
+            if (cityStateZip) {
+              addressParts.push(cityStateZip);
+            }
+            
+            formattedAddress = addressParts.join(', ');
+          }
+        } catch (error) {
+          console.error('Error parsing address data:', error);
+          formattedAddress = 'Address not available';
+        }
+      }
+    }
 
     const unitData = Array.isArray(lease.unit) 
       ? lease.unit[0] 
@@ -670,7 +850,6 @@ async function getPropertyLeases(propertyId: string) {
   });
 }
 
-// Add a function to get property units
 async function getPropertyUnits(propertyId: string): Promise<Unit[]> {
   const supabase = await createClient();
   
@@ -747,8 +926,7 @@ async function getPropertyUnits(propertyId: string): Promise<Unit[]> {
   });
 }
 
-// Add a function to get property listings
-async function getPropertyListings(propertyId: string) {
+async function getPropertyListings(propertyId: string): Promise<UnitListing[]> {
   const supabase = await createClient();
   
   // Get the authenticated user
@@ -808,146 +986,179 @@ async function getPropertyListings(propertyId: string) {
   return listings || [];
 }
 
-export default async function PropertyDetails(
+async function getPropertyTasks(propertyId: string): Promise<Task[]> {
+  const supabase = await createClient();
+  
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    console.error('Auth error:', userError);
+    return [];
+  }
+
+  // Get the user's profile
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', user.id)
+    .single();
+
+  if (profileError || !profile) {
+    console.error('Error fetching profile:', profileError);
+    return [];
+  }
+
+  // Get the company membership
+  const { data: companyMember, error: companyError } = await supabase
+    .from('company_members')
+    .select('company_id')
+    .eq('id', profile.id)
+    .single();
+
+  if (companyError || !companyMember) {
+    console.error('Error fetching company member:', companyError);
+    return [];
+  }
+
+  try {
+    // First, let's verify if the property exists and if the user has access to it
+    const { data: property, error: propertyError } = await supabase
+      .from('properties')
+      .select('id')
+      .eq('id', propertyId)
+      .single();
+
+    if (propertyError || !property) {
+      console.error('Error verifying property access:', propertyError);
+      return [];
+    }
+
+    // Now fetch the tasks with a simpler query first
+    const { data: tasks, error: tasksError } = await supabase
+      .from('maintenance_requests')
+      .select(`
+        id,
+        subject,
+        description,
+        task_status,
+        priority,
+        due_date,
+        created_at,
+        assignees,
+        created_by,
+        property_id,
+        unit_id,
+        request_type,
+        task_type,
+        tenant_id,
+        tenant:tenant_id,
+        role,
+        nano_id,
+        vendor_id,
+        property:properties!property_id (
+          name
+        ),
+        unit:units!maintenance_requests_unit_id_fkey (
+          unit_name
+        ),
+        assignee:company_members!maintenance_requests_assignees_fkey (
+          id,
+          profile:profiles (
+            first_name,
+            last_name
+          )
+        ),
+        vendor:people!maintenance_requests_vendor_id_fkey (
+          id,
+          first_name,
+          last_name,
+          company
+        )
+      `)
+      .eq('property_id', propertyId)
+      .returns<Task[]>();
+
+    if (tasksError) {
+      console.error('Error fetching tasks:', tasksError);
+      return [];
+    }
+
+    return tasks || [];
+  } catch (error) {
+    console.error('Unexpected error in getPropertyTasks:', error);
+    return [];
+  }
+}
+
+// Function to fetch all property data
+async function getPropertyData(propertyId: string): Promise<GetPropertyDataResult> {
+  const [
+    propertyDetails,
+    propertyProspects,
+    propertyTenants,
+    propertyPhotos,
+    propertyOwners,
+    propertyLeases,
+    propertyUnits,
+    propertyListings,
+    propertyTasks
+  ] = await Promise.all([
+    getPropertyDetails(propertyId),
+    getPropertyProspects(propertyId),
+    getPropertyTenants(propertyId),
+    getPropertyPhotos(propertyId),
+    getPropertyOwners(propertyId),
+    getPropertyLeases(propertyId),
+    getPropertyUnits(propertyId),
+    getPropertyListings(propertyId),
+    getPropertyTasks(propertyId)
+  ]);
+
+  return {
+    propertyDetails,
+    propertyProspects,
+    propertyTenants,
+    propertyPhotos,
+    propertyOwners,
+    propertyLeases,
+    propertyUnits,
+    propertyListings,
+    propertyTasks
+  };
+}
+
+// Main Page Component
+export default async function PropertyDetailsPage(
   props: {
     params: Promise<{ id: string }>
   }
 ) {
   const params = await props.params;
-  const propertyDetails = await getPropertyDetails(params.id);
-  const propertyProspects = await getPropertyProspects(params.id);
-  const propertyTenants = await getPropertyTenants(params.id);
-  const propertyPhotos = await getPropertyPhotos(params.id);
-  const propertyOwners = await getPropertyOwners(params.id);
-  const propertyLeases = await getPropertyLeases(params.id);
-  const propertyUnits = await getPropertyUnits(params.id);
-  const propertyListings = await getPropertyListings(params.id);
+  
+  // Fetch comprehensive property data
+  const {
+    propertyDetails,
+    propertyProspects,
+    propertyTenants,
+    propertyPhotos,
+    propertyOwners,
+    propertyLeases,
+    propertyUnits,
+    propertyListings,
+    propertyTasks
+  } = await getPropertyData(params.id);
 
   return (
-    <div className="h-screen flex flex-col">
-      <Tabs defaultValue="overview" className="flex flex-col h-full">
-        {/* Top section with white background */}
-        <div className="bg-card flex-shrink-0">
-          <div className="flex flex-col p-6 pb-6">
-            <Link href="/property" className="mb-12">
-              <Button variant="outline" size="sm" className="gap-2 w-fit">
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </Button>
-            </Link>
-            <h1 className="text-2xl font-bold">{propertyDetails.name}</h1>
-          </div>
-
-          {/* Tabs navigation */}
-          <div className="border-b-2 border-border">
-            <ScrollArea>
-              <TabsList className="mb-0 h-auto rounded-none bg-transparent py-1 text-foreground">
-                <div className="px-6 flex gap-2">
-                  <TabsTrigger
-                    value="overview"
-                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                  >
-                    <Building2 className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Overview
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="units"
-                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                  >
-                    <DoorOpen className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Units
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="leases"
-                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                  >
-                    <FileText className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Leases
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="tenants"
-                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                  >
-                    <Users className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Tenants
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="rental-applications"
-                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                  >
-                    <Inbox className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Rental Applications
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="listings"
-                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                  >
-                    <Building2 className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Listings
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="tasks"
-                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                  >
-                    <ListTodo className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Tasks
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="notes"
-                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                  >
-                    <StickyNote className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Notes
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="settings"
-                    className="relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 hover:bg-accent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent"
-                  >
-                    <Settings className="-ms-0.5 me-1.5 opacity-60" size={16} strokeWidth={2} />
-                    Settings
-                  </TabsTrigger>
-                </div>
-              </TabsList>
-              <ScrollBar orientation="horizontal" />
-            </ScrollArea>
-          </div>
-        </div>
-
-        {/* Scrollable content section */}
-        <div className="flex-1 overflow-y-auto bg-transparent px-6 pt-6">
-          <TabsContent value="overview" className="mt-0">
-            <PropertyOverview 
-              propertyDetails={propertyDetails} 
-              photos={propertyPhotos}
-              owners={propertyOwners}
-            />
-          </TabsContent>
-          <TabsContent value="units" className="mt-0">
-            <PropertyUnits propertyId={params.id} units={propertyUnits} />
-          </TabsContent>
-          <TabsContent value="leases" className="mt-0">
-            <PropertyLeases propertyId={params.id} leases={propertyLeases} />
-          </TabsContent>
-          <TabsContent value="tenants" className="mt-0">
-            <PropertyTenants propertyId={params.id} tenants={propertyTenants} />
-          </TabsContent>
-          <TabsContent value="rental-applications" className="mt-0">
-            <PropertyProspects propertyId={params.id} prospects={propertyProspects} />
-          </TabsContent>
-          <TabsContent value="listings" className="mt-0">
-            <PropertyListings propertyId={params.id} listings={propertyListings} />
-          </TabsContent>
-          <TabsContent value="tasks" className="mt-0">
-            <PropertyTasks propertyId={params.id} />
-          </TabsContent>
-          <TabsContent value="notes" className="mt-0">
-            Notes content
-          </TabsContent>
-          <TabsContent value="settings" className="mt-0">
-            <PropertySettings params={{ id: params.id }} />
-          </TabsContent>
-        </div>
-      </Tabs>
-    </div>
+    <PropertyDetailsClient
+      propertyId={params.id}
+      propertyDetails={propertyDetails}
+      propertyProspects={propertyProspects}
+      propertyTenants={propertyTenants}
+      propertyPhotos={propertyPhotos}
+      propertyOwners={propertyOwners}
+      propertyLeases={propertyLeases}
+      propertyUnits={propertyUnits}
+      propertyListings={propertyListings}
+      propertyTasks={propertyTasks}
+    />
   );
 } 
